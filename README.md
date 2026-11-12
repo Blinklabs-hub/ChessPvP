@@ -3,8 +3,8 @@
 A chess addon for WoW Forever (interface 16001). You can play other players who have the addon, and there is a realm ladder, rank titles, badges, and board and piece unlocks.
 
 ## Install
-1. Click the green **Code** button on this page, then **Download ZIP**.
-2. Open the ZIP and copy the `ChessPvP` folder (the one with `ChessPvP.toc` inside) to `World of Warcraft\_forever_\Interface\AddOns\`.
+1. Download `ChessPvP-1.0.0.zip` from the [latest release](https://github.com/Blinklabs-hub/ChessPvP/releases/latest).
+2. Unzip it and copy the `ChessPvP` folder (the one with `ChessPvP.toc` inside) to `World of Warcraft\_forever_\Interface\AddOns\`.
 3. Start the game and type `/chess`, or click the knight button.
 
 You can only play people who also have the addon installed.
