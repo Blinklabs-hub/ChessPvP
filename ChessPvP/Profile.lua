@@ -19,7 +19,7 @@ local PROFILE_DEFAULTS = {
     games = 0, -- all finished games against players
     streak = 0, bestStreak = 0,
     rivalCount = 0,
-    theme = "oak", pieces = "classic",
+    theme = "warfront", pieces = "warcraft",
 }
 
 function P.Get()
@@ -35,6 +35,12 @@ local function InitProfile()
     end
     for k, v in pairs(PROFILE_DEFAULTS) do
         if p[k] == nil then p[k] = v end
+    end
+    -- 1.1: switch existing players to the new Warcraft look once (they can switch back).
+    if (p.style or 0) < 1 then
+        p.style = 1
+        if p.pieces == "classic" then p.pieces = "warcraft" end
+        if p.theme == "oak" then p.theme = "warfront" end
     end
     p.badges = p.badges or {}
     p.rivals = p.rivals or {}

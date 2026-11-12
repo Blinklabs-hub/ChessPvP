@@ -50,9 +50,11 @@ D.STAT_TEXT = {
     points = "Earn %d badge points",
 }
 
+-- `texture`: a game texture laid over the squares for a stone/marble grain (optional).
 D.THEMES = {
+    { id = "warfront", name = "Warfront Stone", light = { 0.80, 0.74, 0.62 }, dark = { 0.42, 0.36, 0.30 }, texture = "rock" },
     { id = "oak", name = "Tavern Oak", light = { 0.93, 0.85, 0.71 }, dark = { 0.62, 0.43, 0.27 } },
-    { id = "frost", name = "Froststeel", light = { 0.87, 0.91, 0.95 }, dark = { 0.40, 0.53, 0.66 } },
+    { id = "frost", name = "Froststeel", light = { 0.87, 0.91, 0.95 }, dark = { 0.40, 0.53, 0.66 }, texture = "marble" },
     { id = "grove", name = "Emerald Grove", light = { 0.93, 0.93, 0.82 }, dark = { 0.42, 0.58, 0.32 }, req = { "games", 5 } },
     { id = "dusk", name = "Dusk Marble", light = { 0.80, 0.78, 0.84 }, dark = { 0.38, 0.33, 0.48 }, req = { "wins", 5 } },
     { id = "forge", name = "Molten Forge", light = { 0.96, 0.78, 0.52 }, dark = { 0.55, 0.20, 0.10 }, req = { "peak", 1350 } },
@@ -65,6 +67,8 @@ D.THEMES = {
 
 -- Piece sets are two tints (fill and outline) per side applied to the same artwork.
 D.PIECES = {
+    { id = "warcraft", name = "Horde vs Alliance", warcraft = true,
+        wFill = { 0.97, 0.95, 0.90 }, wLine = { 0.08, 0.07, 0.06 }, bFill = { 0.20, 0.19, 0.18 }, bLine = { 0.92, 0.90, 0.85 } },
     { id = "classic", name = "Ivory & Ebony",
         wFill = { 0.97, 0.95, 0.90 }, wLine = { 0.08, 0.07, 0.06 }, bFill = { 0.20, 0.19, 0.18 }, bLine = { 0.92, 0.90, 0.85 } },
     { id = "letters", name = "Letters", letters = true,

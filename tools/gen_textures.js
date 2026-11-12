@@ -198,6 +198,73 @@ function radial(fn, size) {
 writeTGA(path.join(OUT, "dot.tga"), 64, 64, alphaToRGBA(radial((r) => (r <= 0.92 ? 1 : 0), 64), 64));
 writeTGA(path.join(OUT, "ring.tga"), 64, 64, alphaToRGBA(radial((r) => (r <= 1 && r >= 0.82 ? 1 : 0), 64), 64));
 
+// ---------------------------------------------------------------- token parts (128x128)
+// Grayscale + alpha so the addon can tint them per faction.
+function field(size, fn) {
+  const rgba = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    let r = 0, g = 0, b = 0, a = 0;
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+      const u = ((x + (i + 0.5) / 4) / size) * 2 - 1, v = ((y + (j + 0.5) / 4) / size) * 2 - 1;
+      const [cr, cg, cb, ca] = fn(u, v);
+      r += cr * ca; g += cg * ca; b += cb * ca; a += ca;
+    }
+    const k = (y * size + x) * 4;
+    rgba[k] = a ? Math.round((r / a) * 255) : 255;
+    rgba[k + 1] = a ? Math.round((g / a) * 255) : 255;
+    rgba[k + 2] = a ? Math.round((b / a) * 255) : 255;
+    rgba[k + 3] = Math.round((a / 16) * 255);
+  }
+  return rgba;
+}
+const clamp01 = (t) => Math.max(0, Math.min(1, t));
+const smooth = (e0, e1, x) => { const t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+const tokenParts = {
+  // Circular mask for the portrait.
+  mask: (u, v) => [1, 1, 1, Math.hypot(u, v) <= 0.90 ? 1 : 0],
+  // Bevelled metal ring: light from the top-left, darker bottom-right, engraved centre line.
+  token_ring: (u, v) => {
+    const r = Math.hypot(u, v);
+    if (r < 0.84 || r > 0.995) return [0, 0, 0, 0];
+    const t = (r - 0.84) / (0.995 - 0.84); // 0 inner .. 1 outer
+    const light = 0.5 + 0.5 * (-(u + v) / Math.SQRT2) / Math.max(r, 1e-6) * Math.cos((t - 0.5) * Math.PI);
+    let shade = 0.55 + 0.45 * light;
+    if (Math.abs(t - 0.5) < 0.08) shade *= 0.7; // engraved groove
+    if (t < 0.12 || t > 0.9) shade *= 0.6; // dark edges
+    return [shade, shade, shade, 1];
+  },
+  // Thin dark band just inside the ring for depth.
+  token_rim: (u, v) => {
+    const r = Math.hypot(u, v);
+    return [1, 1, 1, r > 0.78 && r < 0.86 ? 0.9 : 0];
+  },
+  // Glassy highlight over the top of the portrait.
+  token_shine: (u, v) => {
+    const r = Math.hypot(u, v);
+    if (r > 0.84) return [1, 1, 1, 0];
+    const d = Math.hypot(u + 0.15, v + 0.55) / 0.55;
+    return [1, 1, 1, 0.55 * (1 - smooth(0.4, 1, d))];
+  },
+  shadow: (u, v) => [0, 0, 0, 1 - smooth(0.2, 1, Math.hypot(u, v))],
+  burst: (u, v) => {
+    const r = Math.hypot(u, v);
+    const rays = 0.5 + 0.5 * Math.cos(Math.atan2(v, u) * 8);
+    return [1, 1, 1, clamp01((1 - smooth(0, 1, r)) * (0.75 + 0.25 * rays))];
+  },
+  // Diagonal sword-slash streak, tapered at both ends.
+  slash: (u, v) => {
+    const along = (u - v) / Math.SQRT2; // -1.4 .. 1.4 along the diagonal
+    const across = Math.abs(u + v) / Math.SQRT2;
+    const taper = clamp01(1 - Math.abs(along) / 1.2);
+    const width = 0.12 * taper;
+    return [1, 1, 1, width > 0 ? clamp01(1 - across / width) * taper : 0];
+  },
+};
+for (const [name, fn] of Object.entries(tokenParts)) {
+  const rgba = field(SIZE, fn);
+  writeTGA(path.join(OUT, name + ".tga"), SIZE, SIZE, rgba);
+}
+
 // ---------------------------------------------------------------- logo (knight on a gold-rimmed tile)
 {
   const S = SIZE, rgba = Buffer.alloc(S * S * 4);

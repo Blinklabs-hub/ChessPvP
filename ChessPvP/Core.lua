@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "1.0.3"
+ns.VERSION = "1.1.0"
 ns.PROTO = 1 -- network protocol version; bump when messages change incompatibly
 ChessPvP = ns -- exposed for debugging and the addon compartment
 
@@ -185,28 +185,9 @@ function ns.NewId()
     return table.concat(t)
 end
 
-local SOUNDS = {
-    move = { "IG_ABILITY_ICON_DROP", "IG_CHARACTER_INFO_TAB" },
-    capture = { "IG_BACKPACK_CLOSE", "IG_ABILITY_ICON_DROP" },
-    check = { "ALARM_CLOCK_WARNING_3", "RAID_WARNING" },
-    invite = { "READY_CHECK", "IG_PLAYER_INVITE" },
-    win = { "UI_GARRISON_MISSION_COMPLETE_MISSION_SUCCESS", "IG_QUEST_LIST_COMPLETE" },
-    lose = { "IG_QUEST_FAILED", "IG_MAINMENU_CLOSE" },
-    unlock = { "UI_EPICLOOT_TOAST", "IG_QUEST_LIST_COMPLETE" },
-    click = { "IG_MAINMENU_OPTION_CHECKBOX_ON" },
-}
-
+-- Sounds live in Assets.lua (loaded later); this is just a shortcut.
 function ns.Sound(key)
-    if not (ns.db and ns.db.settings.sound) then return end
-    local names = SOUNDS[key]
-    if not names or not SOUNDKIT or not PlaySound then return end
-    for i = 1, #names do
-        local id = SOUNDKIT[names[i]]
-        if id then
-            pcall(PlaySound, id, "SFX")
-            return
-        end
-    end
+    if ns.Assets then ns.Assets.Play(key) end
 end
 
 ------------------------------------------------------------------------
@@ -218,6 +199,7 @@ local SETTING_DEFAULTS = {
     dnd = false, -- auto-decline challenges
     showLauncher = true,
     showLegal = true,
+    animations = true,
     scale = 1,
 }
 
@@ -353,6 +335,15 @@ SlashCmdList["CHESSPVP"] = function(msg)
         if UnitExists("target") then
             ns.Print("target UnitName: " .. S(UnitName("target")) .. " -> " .. tostring(ns.UnitPlayerName("target")))
         end
+        local A = ns.Assets
+        for _, army in ipairs({ "Alliance", "Horde" }) do
+            local found = {}
+            for t = 1, 6 do
+                found[t] = A.ARMIES[army].units[t].name .. (A.Portrait(army, t) and "" or " (missing)")
+            end
+            ns.Print(army .. " art: " .. table.concat(found, ", "))
+        end
+        ns.Print("faction: " .. A.MyFaction() .. ", title font: " .. tostring(A.HasFile(A.FONT_TITLE)))
         local senders = ns.Comm.recentSenders
         for i = 1, #senders do
             ns.Print("heard from: '" .. senders[i][1] .. "' -> " .. senders[i][2])

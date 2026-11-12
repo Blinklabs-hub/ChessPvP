@@ -1,5 +1,5 @@
 -- Test harness: loads the addon into mocked WoW environments and simulates several clients.
-local FILES = { "Core.lua", "Data.lua", "Engine.lua", "AI.lua", "Profile.lua", "Comm.lua", "Game.lua", "UI_Board.lua", "UI_Main.lua" }
+local FILES = { "Core.lua", "Data.lua", "Assets.lua", "Engine.lua", "AI.lua", "Profile.lua", "Comm.lua", "Game.lua", "UI_Board.lua", "UI_Main.lua" }
 local REALM = "TestRealm"
 
 T = 1000 -- virtual clock (seconds)
@@ -115,6 +115,22 @@ function NewClient(name, savedDB, surname)
     env.RaidWarningFrame = {}
     env.RaidNotice_AddMessage = function(_, text) table.insert(client.warnings, text) end
     env.FlashClientIcon = function() client.flashes = client.flashes + 1 end
+    -- Sound files played (by FileDataID); net.missingSounds makes them fail to play.
+    client.soundFiles = {}
+    env.PlaySoundFile = function(id)
+        if net.missingSounds then return false end
+        table.insert(client.soundFiles, id)
+        return true, 1
+    end
+    -- Game art lookups: net.missingArt simulates a client without the Warcraft art.
+    env.GetFileIDFromPath = function(path)
+        if net.missingArt and not path:find("AddOns", 1, true) then return nil end
+        return 100000 + #path
+    end
+    env.UnitFactionGroup = function() return client.faction or "Alliance" end
+    -- Lua errors (including ones reported by the animation engine) fail the test run.
+    client.errors = {}
+    env.geterrorhandler = function() return function(msg) table.insert(client.errors, msg); print("LUA ERROR (" .. name .. "): " .. tostring(msg)) end end
     env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) table.insert(client.chat, msg); if net.log then print("[" .. name .. "] " .. msg) end end }
     env.CreateFrame = function(kind) return NewObj(client, kind) end
     env.GetTime = function() return T end

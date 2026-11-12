@@ -91,9 +91,23 @@ local function Apply(g, uci)
     local mover = pos.turn
     local from, to, promo = E.MFrom(m), E.MTo(m), E.MPromo(m)
     local piece = abs(pos.b[from])
-    local capture = pos.b[to] ~= 0 or E.MFlag(m) == 1
+    local flag = E.MFlag(m)
+    local victim = (flag == 1) and -mover or pos.b[to] -- en passant takes a pawn
+    local capture = victim ~= 0
     local san = E.ToSAN(pos, m, legal)
     E.Play(pos, m)
+    -- What happened, for animations and the captured-pieces tray.
+    g.last = {
+        from = from, to = to, mover = mover, piece = piece * mover,
+        victim = capture and victim or 0,
+        victimSq = (flag == 1) and (to - 10 * mover) or to,
+        castle = (flag == 2 or flag == 3) and flag or nil,
+        promo = promo ~= 0 and promo or nil,
+    }
+    if capture then
+        g.captures = g.captures or { [1] = {}, [-1] = {} }
+        table.insert(g.captures[mover], abs(victim))
+    end
     g.moves[#g.moves + 1] = uci
     g.san[#g.san + 1] = san
     g.lastFrom, g.lastTo = from, to

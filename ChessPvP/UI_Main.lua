@@ -44,6 +44,48 @@ local function AddBackground(frame, r, g, b, a, border)
     end
 end
 
+local A = ns.Assets
+
+-- Warcraft-style frame border (game art), drawn just outside `frame`. No-op if missing.
+local function Chrome(frame, art, pad, edgeSize)
+    local file = A.ART[art]
+    if not A.HasFile(file) then return nil end
+    local ok, border = pcall(CreateFrame, "Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    if not ok or not border or not border.SetBackdrop then return nil end
+    pad = pad or 6
+    border:SetPoint("TOPLEFT", -pad, pad)
+    border:SetPoint("BOTTOMRIGHT", pad, -pad)
+    border:SetFrameLevel(frame:GetFrameLevel() + 1)
+    border:EnableMouse(false)
+    border:SetBackdrop({ edgeFile = file, edgeSize = edgeSize or 24, insets = { left = 0, right = 0, top = 0, bottom = 0 } })
+    return border
+end
+
+-- Tiled game background (dark dialog stone) over a flat colour fallback.
+local function Backdrop(frame, art, alpha)
+    local file = A.ART[art]
+    if not A.HasFile(file) then return end
+    local t = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
+    t:SetAllPoints()
+    t:SetTexture(file, "REPEAT", "REPEAT")
+    if t.SetHorizTile then t:SetHorizTile(true); t:SetVertTile(true) end
+    t:SetAlpha(alpha or 1)
+end
+
+local function TitleText(parent, size, text)
+    local fs = parent:CreateFontString(nil, "OVERLAY")
+    fs:SetFont(A.TitleFont(), size, "")
+    fs:SetTextColor(1, 0.82, 0)
+    fs:SetShadowColor(0, 0, 0, 1)
+    fs:SetShadowOffset(1, -1)
+    if text then fs:SetText(text) end
+    return fs
+end
+
+local function ColorHex(c)
+    return string.format("ff%02x%02x%02x", floor(c[1] * 255), floor(c[2] * 255), floor(c[3] * 255))
+end
+
 local function Label(parent, font, text)
     local fs = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlight")
     fs:SetJustifyH("LEFT")
@@ -151,20 +193,62 @@ local function KnownGames(name)
     return e and (e.w + e.l + e.d) or D.PLACEMENT_GAMES
 end
 
+local PIECE_VALUE = { 1, 3, 3, 5, 9, 0 }
+
 local function UpdatePlate(plate, g, color)
     local name = (color == 1) and g.white or g.black
     local rating = (color == 1) and g.wr or g.br
     local title = (color == 1) and g.wt or g.bt
-    local text = "|cffffffff" .. ns.ShortName(name) .. "|r"
-    plate.name:SetText(text)
+    local army = A.ArmyFor(color, g)
+    local info = A.ARMIES[army]
+    plate.name:SetText("|c" .. ColorHex(info.color) .. ns.ShortName(name) .. "|r")
     if rating and rating > 0 then
         plate.sub:SetText(P.TitleText(title, rating, KnownGames(name)) .. "  |cffaaaaaa" .. rating .. "|r")
     else
-        plate.sub:SetText((color == 1) and "|cffaaaaaaWhite|r" or "|cffaaaaaaBlack|r")
+        plate.sub:SetText("|cffaaaaaa" .. army .. ((color == 1) and " (White)" or " (Black)") .. "|r")
+    end
+    -- Faction crest
+    local crest = A.ART.crest[army]
+    if A.HasFile(crest) then
+        plate.crest:SetTexture(crest)
+        plate.crest:SetTexCoord(0, 0.62, 0, 0.62)
+        plate.crest:Show()
+    else
+        local banner = A.ART.banner[army]
+        if A.HasFile(banner) then
+            plate.crest:SetTexture(banner)
+            plate.crest:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            plate.crest:Show()
+        else
+            plate.crest:Hide()
+        end
     end
     plate.color = color
     local toMove = g.state == "active" and g.pos.turn == color
-    plate.bg:SetColorTexture(toMove and 0.20 or 0.10, toMove and 0.26 or 0.10, toMove and 0.14 or 0.12, 0.9)
+    local c = info.color
+    local k = toMove and 0.32 or 0.14
+    plate.bg:SetColorTexture(c[1] * k, c[2] * k, c[3] * k, 0.92)
+    if toMove then plate.turnGlow:Show() else plate.turnGlow:Hide() end
+
+    -- Captured enemy pieces and material lead.
+    local caps = g.captures and g.captures[color] or {}
+    local sorted = {}
+    for i = 1, #caps do sorted[i] = caps[i] end
+    table.sort(sorted, function(a, b) return a > b end)
+    local mine, theirs = 0, 0
+    for i = 1, #caps do mine = mine + PIECE_VALUE[caps[i]] end
+    local other = g.captures and g.captures[-color] or {}
+    for i = 1, #other do theirs = theirs + PIECE_VALUE[other[i]] end
+    for i = 1, #plate.tray do
+        local t = sorted[i]
+        if t then
+            plate.tray[i]:SetPiece(t * -color, g)
+        else
+            plate.tray[i]:Hide()
+        end
+    end
+    local lead = mine - theirs
+    plate.lead:SetText(lead > 0 and ("+" .. lead) or "")
     if g.timed then
         plate.clock:Show()
     else
@@ -354,6 +438,35 @@ local function BuildPlay(page)
     local board = Board.Create(page, SQUARE)
     board:SetPoint("TOPLEFT", page, "TOPLEFT", 0, 0)
     play.board = board
+    -- Dark wooden surround with a gold edge.
+    local surround = board:CreateTexture(nil, "BACKGROUND", nil, -8)
+    surround:SetPoint("TOPLEFT", -5, 5)
+    surround:SetPoint("BOTTOMRIGHT", 5, -5)
+    surround:SetColorTexture(0.16, 0.10, 0.05, 1)
+    Chrome(board, "goldBorder", 9, 26)
+
+    -- Victory / defeat banner over the board.
+    local banner = CreateFrame("Button", nil, board)
+    banner:SetSize(BOARD - 60, 132)
+    banner:SetPoint("CENTER")
+    banner:SetFrameLevel(board:GetFrameLevel() + 40)
+    AddBackground(banner, 0.04, 0.03, 0.02, 0.92)
+    Backdrop(banner, "dialogBg", 0.9)
+    Chrome(banner, "goldBorder", 4, 24)
+    banner.crest = banner:CreateTexture(nil, "ARTWORK")
+    banner.crest:SetSize(72, 72)
+    banner.crest:SetPoint("LEFT", 18, 0)
+    banner.title = TitleText(banner, 40)
+    banner.title:SetPoint("TOP", 30, -18)
+    banner.sub = Label(banner, "GameFontHighlight")
+    banner.sub:SetPoint("TOP", banner.title, "BOTTOM", 0, -8)
+    banner.sub:SetJustifyH("CENTER")
+    banner.sub:SetWidth(BOARD - 200)
+    banner.hint = Label(banner, "GameFontDisableSmall", "Click to close")
+    banner.hint:SetPoint("BOTTOM", 30, 10)
+    banner:SetScript("OnClick", function(self) self:Hide() end)
+    banner:Hide()
+    play.banner = banner
 
     local side = CreateFrame("Frame", nil, page)
     side:SetPoint("TOPLEFT", board, "TOPRIGHT", PAD, 0)
@@ -367,22 +480,42 @@ local function BuildPlay(page)
     play.plates = {}
     for i = 1, 2 do
         local plate = CreateFrame("Frame", nil, gp)
-        plate:SetSize(SIDE, 46)
+        plate:SetSize(SIDE, 62)
         if i == 1 then
             plate:SetPoint("TOPLEFT", gp, "TOPLEFT", 0, 0)
         else
-            plate:SetPoint("BOTTOMLEFT", gp, "BOTTOMLEFT", 0, 30)
+            plate:SetPoint("BOTTOMLEFT", gp, "BOTTOMLEFT", 0, 32)
         end
-        AddBackground(plate, 0.10, 0.10, 0.12, 0.9, { 0.3, 0.3, 0.35, 1 })
-        plate.name = Label(plate, "GameFontNormal")
-        plate.name:SetPoint("TOPLEFT", 8, -7)
-        plate.name:SetWidth(SIDE - 100)
+        AddBackground(plate, 0.10, 0.10, 0.12, 0.9, { 0.55, 0.45, 0.2, 1 })
+        plate.turnGlow = plate:CreateTexture(nil, "BORDER")
+        plate.turnGlow:SetAllPoints()
+        plate.turnGlow:SetTexture(TEX .. "burst")
+        plate.turnGlow:SetBlendMode("ADD")
+        plate.turnGlow:SetVertexColor(1, 0.8, 0.3, 0.25)
+        plate.turnGlow:Hide()
+        plate.crest = plate:CreateTexture(nil, "ARTWORK")
+        plate.crest:SetSize(44, 44)
+        plate.crest:SetPoint("LEFT", 4, 3)
+        plate.name = TitleText(plate, 16)
+        plate.name:SetPoint("TOPLEFT", 52, -6)
+        plate.name:SetWidth(SIDE - 130)
+        plate.name:SetJustifyH("LEFT")
         plate.name:SetWordWrap(false)
         plate.sub = Label(plate, "GameFontHighlightSmall")
-        plate.sub:SetPoint("BOTTOMLEFT", 8, 7)
-        plate.clock = Label(plate, "GameFontHighlightLarge")
-        plate.clock:SetPoint("RIGHT", -10, 0)
+        plate.sub:SetPoint("TOPLEFT", plate.name, "BOTTOMLEFT", 0, -2)
+        plate.clock = TitleText(plate, 22)
+        plate.clock:SetPoint("TOPRIGHT", -10, -8)
         plate.clock:SetJustifyH("RIGHT")
+        -- Captured enemy pieces, shown as small tokens.
+        plate.tray = {}
+        for k = 1, 15 do
+            local v = Board.CreatePieceView(plate, 16)
+            v:SetPoint("BOTTOMLEFT", plate, "BOTTOMLEFT", 52 + (k - 1) * 12, 3)
+            v:SetFrameLevel(plate:GetFrameLevel() + 2 + k)
+            plate.tray[k] = v
+        end
+        plate.lead = Label(plate, "GameFontNormalSmall")
+        plate.lead:SetPoint("BOTTOMRIGHT", -10, 6)
         play.plates[i] = plate
     end
 
@@ -391,7 +524,7 @@ local function BuildPlay(page)
 
     local movesBox = CreateFrame("Frame", nil, gp)
     movesBox:SetPoint("TOPLEFT", play.header, "BOTTOMLEFT", -2, -6)
-    movesBox:SetSize(SIDE, 176)
+    movesBox:SetSize(SIDE, 146)
     AddBackground(movesBox, 0, 0, 0, 0.35, { 0.25, 0.25, 0.3, 1 })
     play.moves = Label(movesBox, "GameFontHighlightSmall")
     play.moves:SetPoint("TOPLEFT", 8, -6)
@@ -896,6 +1029,7 @@ local function BuildSettings(page)
     end
     Add("Play sounds", "sound")
     Add("Show legal moves when a piece is selected", "showLegal")
+    Add("Animations (moving pieces, captures, banners)", "animations")
     Add("Let other players watch my games", "allowSpectators")
     Add("Do not disturb (automatically decline challenges)", "dnd", function() G.Announce() end)
     Add("Show the launcher button on screen", "showLauncher", function() UI.UpdateLauncher() end)
@@ -963,12 +1097,32 @@ local function Build()
         main:SetPoint("CENTER")
     end
     AddBackground(main, 0.05, 0.05, 0.07, 0.96, { 0.45, 0.38, 0.20, 1 })
+    Backdrop(main, "dialogBg", 0.95)
+    Chrome(main, "goldBorder", 6, 28)
     table.insert(UISpecialFrames, "ChessPvPFrame") -- closes with Escape
 
-    local title = Label(main, "GameFontNormalLarge", "|cffffd100Chess|r|cffffffffPvP|r")
-    title:SetPoint("TOPLEFT", PAD, -10)
+    -- Title: Alliance crest - ChessPvP - Horde crest
+    local crestL = main:CreateTexture(nil, "ARTWORK")
+    crestL:SetSize(30, 30)
+    crestL:SetPoint("TOPLEFT", PAD - 4, -4)
+    local title = TitleText(main, 22, "ChessPvP")
+    title:SetPoint("LEFT", crestL, "RIGHT", 2, -2)
+    local crestR = main:CreateTexture(nil, "ARTWORK")
+    crestR:SetSize(30, 30)
+    crestR:SetPoint("LEFT", title, "RIGHT", 2, 2)
+    for army, tex in pairs({ Alliance = crestL, Horde = crestR }) do
+        local file = A.ART.crest[army]
+        if A.HasFile(file) then
+            tex:SetTexture(file)
+            tex:SetTexCoord(0, 0.62, 0, 0.62)
+        else
+            tex:Hide()
+        end
+    end
+    local tagline = Label(main, "GameFontDisableSmall", "Horde vs Alliance")
+    tagline:SetPoint("LEFT", crestR, "RIGHT", 4, -1)
     main.me = Label(main, "GameFontHighlightSmall", "")
-    main.me:SetPoint("LEFT", title, "RIGHT", 14, -1)
+    main.me:SetPoint("LEFT", tagline, "RIGHT", 18, 0)
 
     local close = CreateFrame("Button", nil, main, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
@@ -1067,7 +1221,9 @@ local function RefreshInvite()
         f:SetFrameStrata("DIALOG")
         f:EnableMouse(true)
         AddBackground(f, 0.05, 0.05, 0.07, 0.96, { 0.9, 0.75, 0.2, 1 })
-        f.title = Label(f, "GameFontNormalLarge", "Chess challenge")
+        Backdrop(f, "dialogBg", 0.95)
+        Chrome(f, "goldBorder", 5, 24)
+        f.title = TitleText(f, 18, "Chess challenge")
         f.title:SetPoint("TOP", 0, -8)
         f.text = Label(f, "GameFontHighlight", "")
         f.text:SetPoint("TOP", f.title, "BOTTOM", 0, -6)
@@ -1236,27 +1392,90 @@ ns.On("CHESS_GAME_STARTED", function(g)
             pcall(RaidNotice_AddMessage, RaidWarningFrame, "Chess game vs " .. ns.ShortName(g.opp) .. " has started!", { r = 1, g = 0.82, b = 0 })
         end
         if FlashClientIcon then pcall(FlashClientIcon) end
-        ns.Sound("invite")
         UI.ShowTab("play")
+    end
+    if play.banner then play.banner:Hide() end
+    if play.board then play.board:ClearFx() end
+    -- War drums and your faction's battle cry.
+    ns.Sound("start")
+    ns.Sound("cry" .. A.MyFaction())
+    if built and main:IsShown() and currentTab == "play" and play.board then
+        local army = A.ArmyFor(g.myColor or 1, g)
+        local foe = army == "Horde" and "Alliance" or "Horde"
+        play.board:FloatText(nil, army .. " vs " .. foe, 1, 0.82, 0, true)
     end
 end)
 
 ns.On("CHESS_GAME_MOVED", function(g, capture, check)
-    if check then
-        ns.Sound("check")
-    elseif capture then
-        ns.Sound("capture")
+    if built and main:IsShown() and currentTab == "play" and play.board then
+        play.board:AnimateLast(g, check)
     else
-        ns.Sound("move")
+        Board.MoveSounds(g, check)
     end
 end)
 
+-- For the test suite.
+function UI.Debug()
+    return { board = play.board, banner = play.banner }
+end
+
+local function ShowBanner(g)
+    local banner = play.banner
+    if not banner then return end
+    local reason = D.REASON_TEXT[g.reason] or g.reason or ""
+    local title, sub, army
+    if g.result == "*" then
+        title, sub = "Battle Abandoned", reason
+    elseif g.result == "1/2" then
+        title, sub = "Stalemate", "Draw by " .. reason
+    elseif g.outcome then
+        title = g.outcome == "win" and "Victory!" or "Defeat"
+        sub = (g.outcome == "win" and "You won by " or "You lost by ") .. reason
+    else
+        local winner = g.result == "1-0" and 1 or -1
+        army = A.ArmyFor(winner, g)
+        title, sub = "The " .. army .. " Triumphs!", "Won by " .. reason
+    end
+    if not army then
+        local winner = (g.result == "1-0" and 1) or (g.result == "0-1" and -1) or (g.myColor or 1)
+        army = A.ArmyFor(winner, g)
+    end
+    if g.rated and g.delta and g.outcome then
+        sub = sub .. string.format("\nRating %s%d (now %d)", g.delta >= 0 and "+" or "", g.delta, P.me.rating)
+    end
+    banner.title:SetText(title)
+    if g.outcome == "loss" then banner.title:SetTextColor(0.9, 0.2, 0.15) else banner.title:SetTextColor(1, 0.82, 0) end
+    banner.sub:SetText(sub)
+    local crest = A.ART.crest[army]
+    if A.HasFile(crest) then
+        banner.crest:SetTexture(crest)
+        banner.crest:SetTexCoord(0, 0.62, 0, 0.62)
+        banner.crest:Show()
+    else
+        banner.crest:Hide()
+    end
+    banner:Show()
+    banner:SetAlpha(0)
+    A.Tween(0.45, function(p)
+        banner:SetAlpha(math.min(1, p * 1.5))
+        banner:SetScale(0.7 + 0.3 * p)
+    end, nil, A.Ease.outBack)
+end
+
 ns.On("CHESS_GAME_OVER", function(g)
     if g.outcome == "win" then
-        ns.Sound("win")
+        ns.Sound("win" .. A.MyFaction())
     elseif g.outcome == "loss" then
         ns.Sound("lose")
+    elseif g.result == "1/2" then
+        ns.Sound("draw")
+    elseif g.result == "1-0" or g.result == "0-1" then
+        ns.Sound("win" .. A.ArmyFor(g.result == "1-0" and 1 or -1, g))
     end
+    -- Let the final move's animation land before the banner.
+    ns.After(ns.db.settings.animations and 0.6 or 0, function()
+        if G.current == g and built and main:IsShown() then ShowBanner(g) end
+    end)
     if g.mode == "online" and g.outcome then
         local text = (g.outcome == "win" and "you won") or (g.outcome == "loss" and "you lost") or "the game was drawn"
         local msg = text .. " against " .. ns.ShortName(g.opp) .. " (" .. (D.REASON_TEXT[g.reason] or g.reason) .. ")."

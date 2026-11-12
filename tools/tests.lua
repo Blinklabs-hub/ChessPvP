@@ -457,6 +457,123 @@ if want("forever") then
 end
 
 ------------------------------------------------------------------------
+if want("visual") then
+    -- Plays a full game with the board on screen and animations on, through every special
+    -- move, and checks sounds, effects and that the board ends up consistent.
+    local function Played(cl, id)
+        for _, x in ipairs(cl.soundFiles) do if x == id then return true end end
+        for _, x in ipairs(cl.sounds) do if x == id then return true end end
+        return false
+    end
+    local function BoardMatches(cl)
+        local board = cl.ns.UI.Debug and cl.ns.UI.Debug().board
+        local g = cl.ns.Game.current
+        for _, cell in ipairs(board.cells) do
+            local piece = g.pos.b[cell.sq]
+            local shown = cell.view:IsShown()
+            if (piece ~= 0) ~= shown then return false, cell.sq end
+            if piece ~= 0 and cell.view.piece ~= piece then return false, cell.sq end
+        end
+        for _, m in ipairs(board.movers) do
+            if m:IsShown() then return false, "mover still visible" end
+        end
+        return true
+    end
+
+    for _, variant in ipairs({ "art", "no-art" }) do
+        section("visual: full game with animations (" .. variant .. ")")
+        net.forever = true
+        net.missingArt = variant == "no-art"
+        local a = NewClient("Canga", nil, "Prime")
+        local b = NewClient("Just", nil, "Keepingcalm")
+        a.faction, b.faction = "Horde", "Alliance"
+        Advance(20)
+        a.ns.UI.ShowTab("play")
+        b.ns.UI.ShowTab("play")
+        a.ns.db.settings.color = "w"
+        a.ns.Game.Invite("Just Keepingcalm"); Advance(1)
+        b.ns.Game.AnswerLatest(true); Advance(1)
+        check(Played(a, 567275) and Played(b, 567275), "war drum at game start")
+        check(Played(a, 541389) or Played(a, 541391) or Played(a, 541400), "Horde player hears an orc battle cry")
+        check(Played(b, 540696) or Played(b, 540717), "Alliance player hears a human battle cry")
+        local A = a.ns.Assets
+        eq(A.ArmyFor(1, a.ns.Game.current), "Horde", "Horde player's white army is the Horde")
+        eq(A.ArmyFor(1, b.ns.Game.current), "Alliance", "same pieces are the Alliance on the Alliance player's screen")
+
+        -- A game with captures, en passant, castling, check, promotion and mate.
+        local moves = {
+            "e2e4", "d7d5", "e4d5", "g8f6", -- capture
+            "g1f3", "c7c5", "d5c6", "b8c6", -- en passant, recapture
+            "f1b5", "e7e6", "e1g1", "f8e7", -- castling
+            "b5c6", "b7c6", "f1e1", "e8g8",
+            "d2d4", "d8d5", "c1g5", "c8a6",
+            "b1c3", "d5d4", "f3d4", "a8d8",
+            "g5f6", "e7f6", "c3e4", "f6d4",
+            "d1d4", "d8d4", "e4f6", "g7f6", -- e4f6 check
+        }
+        for i, mv in ipairs(moves) do
+            local who = (i % 2 == 1) and a or b
+            a.soundFiles, b.soundFiles, a.sounds, b.sounds = {}, {}, {}, {}
+            check(who.ns.Game.Move(mv), "move " .. i .. " " .. mv)
+            Advance(1.5) -- let both boards finish animating
+            local ok1, where1 = BoardMatches(a)
+            local ok2, where2 = BoardMatches(b)
+            check(ok1, "Canga's board correct after " .. mv .. " (" .. tostring(where1) .. ")")
+            check(ok2, "Keepingcalm's board correct after " .. mv .. " (" .. tostring(where2) .. ")")
+            if mv == "e4d5" then
+                check(Played(a, 567880) or Played(a, 567881) or Played(a, 567883), "sword hit on capture")
+                check(Played(a, 540722) or Played(a, 540838), "Alliance death cry when an Alliance piece falls (on Horde screen)")
+                -- Black is Keepingcalm's own Alliance army on his screen too, so both agree.
+                check(Played(b, 540722) or Played(b, 540838), "Keepingcalm hears his Alliance footman fall")
+                check(not (Played(b, 541234) or Played(b, 541308)), "no orc death cry for an Alliance piece")
+            elseif mv == "e1g1" then
+                check(Played(a, 567863) or Played(a, 567864), "shield sound on castling")
+            elseif mv == "e4f6" then
+                check(Played(b, 8959), "raid warning sound on check")
+            end
+        end
+        eq(#a.ns.Game.current.captures[1] > 0 and "yes" or "no", "yes", "captures recorded for the tray")
+
+        section("visual: promotion and checkmate banners (" .. variant .. ")")
+        a.ns.Game.Resign(); Advance(2)
+        a.ns.Game.Invite("Just Keepingcalm"); Advance(1)
+        b.ns.Game.AnswerLatest(true); Advance(1)
+        local promo = { "a2a4", "h7h6", "a4a5", "h6h5", "a5a6", "h5h4", "a6b7", "h4h3", "b7a8q", "h3g2", "a8b8", "g2h1q", "b8c8", "d8c8" }
+        for i, mv in ipairs(promo) do
+            local who = (i % 2 == 1) and a or b
+            a.soundFiles, a.sounds = {}, {}
+            check(who.ns.Game.Move(mv), "promo game move " .. mv)
+            Advance(1.5)
+            if mv == "b7a8q" then check(Played(a, 888) or Played(a, 1440) or Played(a, 567431), "level-up sound on promotion") end
+            check((BoardMatches(a)), "board correct after " .. mv)
+        end
+        -- Scholar's-style finish: resign leads to the banner
+        a.sounds, a.soundFiles = {}, {}
+        b.ns.Game.Resign(); Advance(2)
+        local banner = a.ns.UI.Debug().banner
+        check(banner:IsShown(), "victory banner shown")
+        eq(banner.title:GetText(), "Victory!", "banner title")
+        check(Played(a, 8454) or Played(a, 568480), "Horde victory fanfare for the Horde winner")
+        eq(#a.errors + #b.errors, 0, "no Lua errors during animations")
+        RemoveClient(a); RemoveClient(b)
+        net.forever, net.missingArt = false, nil
+    end
+
+    section("visual: animations off")
+    local c = NewClient("Solo")
+    c.ns.db.settings.animations = false
+    c.ns.UI.ShowTab("play")
+    c.ns.Game.StartLocal()
+    for _, mv in ipairs({ "e2e4", "d7d5", "e4d5" }) do
+        c.ns.Game.Move(mv)
+        Advance(0.1)
+        check((BoardMatches(c)), "instant board update with animations off (" .. mv .. ")")
+    end
+    eq(#c.errors, 0, "no errors with animations off")
+    RemoveClient(c)
+end
+
+------------------------------------------------------------------------
 if want("cheat") then
     section("validation")
     local c = NewClient("Val")
