@@ -20,7 +20,7 @@ end
 
 local function StatBox(parent, title)
     local b = W.Card(parent)
-    b:SetSize(124, 78)
+    b:SetSize(94, 78)
     b.title = W.Label(b, "GameFontNormalSmall", title)
     b.title:SetPoint("TOP", 0, -6)
     b.big = W.Title(b, 20, nil, { 1, 1, 1 })
@@ -78,9 +78,11 @@ local function Build()
     f.rated = StatBox(f, "Rated")
     f.rated:SetPoint("TOPLEFT", 14, -114)
     f.casual = StatBox(f, "Casual")
-    f.casual:SetPoint("LEFT", f.rated, "RIGHT", 8, 0)
+    f.casual:SetPoint("LEFT", f.rated, "RIGHT", 6, 0)
+    f.bs = StatBox(f, "Battleship")
+    f.bs:SetPoint("LEFT", f.casual, "RIGHT", 6, 0)
     f.h2h = StatBox(f, "Against you")
-    f.h2h:SetPoint("LEFT", f.casual, "RIGHT", 8, 0)
+    f.h2h:SetPoint("LEFT", f.bs, "RIGHT", 6, 0)
     f.warn = W.Label(f, "GameFontHighlightSmall")
     f.warn:SetPoint("TOPLEFT", 16, -198)
     f.warn:SetWidth(390)
@@ -231,14 +233,25 @@ local function Refresh()
         f.casual.line1:SetText("|cffaaaaaaNo casual battles|r")
         f.casual.line2:SetText("")
     end
+    local bs = L.Battleship(name)
+    if bs then
+        f.bs.big:SetText(bs.bw + bs.bl)
+        f.bs.line1:SetText(string.format("|cff40ff40%d|r - |cffff5040%d|r", bs.bw, bs.bl))
+        f.bs.line2:SetText(WinRate(bs.bw, bs.bl, 0))
+    else
+        f.bs.big:SetText("|cff808080-|r")
+        f.bs.line1:SetText("|cffaaaaaaNo battles|r")
+        f.bs.line2:SetText("")
+    end
     if me then
         f.h2h:Hide()
     else
-        local h = L.HeadToHead(ns.me, name)
+        local h = L.HeadToHead(ns.me, name, "chess")
         f.h2h:Show()
         f.h2h.big:SetText(h.w + h.l + h.d)
         f.h2h.line1:SetText(Record(h.w, h.l, h.d))
-        f.h2h.line2:SetText("|cffaaaaaayour wins first|r")
+        local hb = L.HeadToHead(ns.me, name, "b")
+        f.h2h.line2:SetText(string.format("|cffaaaaaachess · ships %d-%d|r", hb.w, hb.l))
     end
     if v and v.disputed > 0 then
         f.warn:SetText(v.disputed .. " disputed result(s): the players reported different outcomes.")
@@ -254,7 +267,9 @@ local function Refresh()
             local res = (e.s == 1 and "|cff40ff40Victory|r") or (e.s == 0 and "|cffff5040Defeat|r") or "|cffaaaaaaDraw|r"
             row.result:SetText(res)
             row.opp:SetText("vs " .. ns.ShortName(e.opp))
-            if e.rated then
+            if e.game == "b" then
+                row.kind:SetText("|cff9ac8ffBattleship|r")
+            elseif e.rated then
                 local d = e.d or 0
                 row.kind:SetText(string.format("rated %s%d|r", d >= 0 and "|cff40ff40+" or "|cffff5040", d))
             else

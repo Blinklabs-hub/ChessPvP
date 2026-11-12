@@ -23,9 +23,9 @@ BS.ROWS = "ABCDEFGHIJ"
 BS.FLEET = {
     { name = "Carrier", len = 5, art = "carrier" },
     { name = "Dreadnaught", len = 4, art = "dreadnaught" },
-    { name = "Galleon", len = 3, art = "galleon" },
+    { name = "Cargo Galleon", len = 3, art = "galleon" },
     { name = "Submarine", len = 3, art = "submarine" },
-    { name = "Troop Transport", len = 2, art = "transport" },
+    { name = "Destroyer", len = 2, art = "destroyer" },
 }
 BS.TOTAL = 17
 

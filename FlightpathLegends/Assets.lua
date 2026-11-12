@@ -54,6 +54,8 @@ A.ART = {
     marble = "Interface\\FrameGeneral\\UI-Background-Marble",
     rock = "Interface\\FrameGeneral\\UI-Background-Rock",
     glow = "Interface\\Buttons\\UI-ActionButton-Border",
+    sea = "Interface\\Garrison\\ShipyardNavalMap01",
+    sea2 = "Interface\\Garrison\\ShipyardNavalMap02",
     crest = {
         Alliance = "Interface\\TargetingFrame\\UI-PVP-Alliance",
         Horde = "Interface\\TargetingFrame\\UI-PVP-Horde",
@@ -63,6 +65,24 @@ A.ART = {
         Horde = Icon("inv_bannerpvp_01"),
     },
 }
+
+-- Battleship: Garrison Shipyard icons per ship (Alliance / Horde versions where they exist).
+local SHIP_ICONS = {
+    { "inv_garrison_carrier" },
+    { "inv_garrison_dreadnaught" },
+    { Alliance = "inv_garrison_alliancecargo", Horde = "inv_garrison_hordecargo", "inv_garrison_cargoship" },
+    { Alliance = "inv_garrison_alliancesub", Horde = "inv_garrison_hordesub" },
+    { Alliance = "inv_garrison_alliancedestroyer", Horde = "inv_garrison_hordedestroyer" },
+}
+function A.ShipIcon(i, faction)
+    local set = SHIP_ICONS[i]
+    if not set then return nil end
+    local name = (faction and set[faction]) or set.Alliance or set[1]
+    local path = Icon(name)
+    if A.HasFile(path) then return path end
+    if set[1] and A.HasFile(Icon(set[1])) then return Icon(set[1]) end
+    return nil
+end
 
 -- Circular mask used by the game's own unit portraits.
 function A.PortraitMask()
@@ -393,6 +413,13 @@ A.SOUNDS = {
     draw = { kits = { 878, "IG_QUEST_LIST_COMPLETE" } },
     unlock = { kits = { 31578, "UI_EPICLOOT_TOAST" } },
     click = { kits = { 856, "IG_MAINMENU_OPTION_CHECKBOX_ON" } },
+    -- Battleship
+    bsFire = { files = { 566101, 566317 }, random = true, kits = { 838 } }, -- cannon blast
+    bsSplash = { files = { 540233, 540231 }, random = true }, -- shot lands in the water
+    bsHit = { files = { 565499, 565642 }, random = true }, -- barrel explosion
+    bsBoom = { files = { 565570 } }, -- large explosion (ship sunk)
+    bsSunk = { files = { 540232 } }, -- giant splash (ship goes down)
+    bsBell = { files = { 537384 }, kits = { 8960 } }, -- ship's bell: battle stations
 }
 
 A.RegisterArmySounds()

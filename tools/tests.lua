@@ -1232,6 +1232,115 @@ if want("battleship") then
 end
 
 ------------------------------------------------------------------------
+if want("bsui") then
+    section("battleship ui: the game switcher")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    local w = NewClient("Wit", nil, "Ness")
+    a.faction, b.faction = "Horde", "Alliance"
+    Advance(25)
+    local UI = a.ns.UI
+    UI.Show()
+    UI.SetGame("bs")
+    local d = UI.Debug()
+    local v = a.ns.BattleView.view
+    check(UI.IsVisibleTab("bsplay"), "Battleship opens on its Battle tab")
+    eq(UI.Game(), "bs", "game is Battleship")
+    UI.SetGame("chess")
+    check(UI.IsVisibleTab("play"), "switching back shows the chess board")
+    UI.ShowTab("admirals")
+    eq(UI.Game(), "bs", "opening the Admirals tab switches to Battleship")
+    UI.ShowTab("ladder")
+    eq(UI.Game(), "chess", "opening the Ladder switches to chess")
+    UI.SetGame("bs")
+
+    section("battleship ui: placing the fleet with the mouse")
+    local BS = a.ns.Battleship
+    local s = BS.StartAI(3)
+    Advance(1)
+    check(UI.IsVisibleTab("bsplay"), "the Battleship tab is shown for a new battle")
+    local left, right = v.left, v.right
+    local function Click(g, cell, button)
+        local btn = g.cells[cell]
+        btn.__scripts.OnEnter(btn)
+        btn.__scripts.OnClick(btn, button or "LeftButton")
+    end
+    -- find the carrier and move it
+    local sh = s.myLayout[1]
+    local carrierCell = BS.Cell(sh.r, sh.c)
+    Click(left, carrierCell)
+    check(v.carry and v.carry.i == 1, "clicking a ship picks it up")
+    -- find a free spot for a horizontal carrier
+    local target
+    for cell = 0, 99 do
+        local r, c = BS.RC(cell)
+        local cells = BS.ShipCells(1, r, c, false)
+        local free = cells ~= nil
+        if cells then for _, x in ipairs(cells) do if s.occ[x] and s.occ[x] ~= 1 then free = false end end end
+        if free and cell ~= carrierCell then target = cell break end
+    end
+    if v.carry.v then Click(left, target, "RightButton") end
+    Click(left, target)
+    local r, c = BS.RC(target)
+    check(s.myLayout[1].r == r and s.myLayout[1].c == c and not s.myLayout[1].v, "clicking the sea drops it there")
+    check(v.carry == nil, "the ship is no longer carried")
+    v.shuffle.__scripts.OnClick(v.shuffle)
+    check(a.ns.Battleship.Occupancy(s.myLayout) ~= nil, "Shuffle gives a legal fleet")
+    v.ready.__scripts.OnClick(v.ready)
+    eq(s.phase, "battle", "Ready! starts the battle")
+
+    section("battleship ui: firing by clicking enemy waters")
+    for _ = 1, 600 do
+        if s.phase ~= "battle" then break end
+        if s.myTurn and not s.awaiting then
+            for cell = 0, 99 do
+                if not s.myShots[cell] then Click(right, cell) break end
+            end
+        end
+        Advance(0.5)
+    end
+    eq(s.phase, "over", "the battle against the Admiral finishes")
+    Advance(2)
+    check(v.banner:IsShown(), "a result banner is shown")
+    a.ns.BattleView.Refresh()
+
+    section("battleship ui: resizing")
+    for _, sz in ipairs({ { 1600, 900 }, { 600, 400 }, { 1000, 1200 } }) do
+        UI.DebugResize(sz[1], sz[2])
+        check(true, "resized to " .. sz[1] .. "x" .. sz[2])
+    end
+    check(a.ns.db.settings.bsCell >= 20 and a.ns.db.settings.bsCell <= 48, "square size within limits (" .. a.ns.db.settings.bsCell .. ")")
+
+    section("battleship ui: an online battle from the challenge popup")
+    b.ns.UI.Show()
+    a.ns.Game.Invite("Just Keepingcalm", { game = "bs" }); Advance(1)
+    local popup = b.ns.UI.invitePopup
+    check(popup and popup:IsShown() and popup.text:GetText():find("Battleship"), "the popup says Battleship")
+    popup.accept:Click(); Advance(2)
+    check(b.ns.UI.IsVisibleTab("bsplay"), "accepting opens the Battleship view")
+    check(a.ns.UI.IsVisibleTab("bsplay"), "for the challenger too")
+    a.ns.Battleship.Ready(); b.ns.Battleship.Ready(); Advance(3)
+    w.ns.UI.ShowTab("live")
+    local rows = w.ns.Tabs.live.list.data
+    check(rows[1] and rows[1].battle and rows[1].battle.game == "bs", "Live Battles lists the Battleship battle")
+    w.ns.Tabs.live.list.rows[1].watch:Click(); Advance(3)
+    check(w.ns.Battleship.current and w.ns.Battleship.current.mode == "spectate", "watching from Live Battles")
+    check(w.ns.UI.IsVisibleTab("bsplay"), "the spectator sees the Battleship view")
+    a.ns.Battleship.Resign(); Advance(1)
+    a.ns.Battleship.Resign(); Advance(3)
+    eq(b.ns.Battleship.current.outcome, "win", "resigning gives the opponent the win")
+    Advance(10)
+    a.ns.UI.ShowTab("admirals")
+    a.ns.UI.Refresh()
+    check(#a.ns.Tabs.admirals.list.data >= 1, "the Admirals board lists the battle")
+    a.ns.UI.ShowProfile("Just Keepingcalm"); Advance(3)
+    check(a.ns.UI.profileCard.bs.line1:GetText():find("1"), "the profile card shows the Battleship record")
+    for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
 if want("cheat") then
     section("validation")
     local c = NewClient("Val")

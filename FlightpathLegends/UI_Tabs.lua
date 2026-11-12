@@ -5,6 +5,7 @@ local T = {}
 ns.Tabs = T
 
 local G, P, C, D, A, W, Board = ns.Game, ns.Profile, ns.Comm, ns.Data, ns.Assets, ns.W, ns.Board
+local L = ns.Ledger
 local floor, max, min = math.floor, math.max, math.min
 local LOCK = "Interface\\LFGFrame\\UI-LFG-ICON-LOCK"
 
@@ -40,12 +41,13 @@ local STATUS_TEXT = {
     i = "|cff40ff40Ready for battle|r",
     r = "|cffffd100In the rated queue|r",
     c = "|cff80c0ffIn the casual queue|r",
+    b = "|cff9ac8ffLooking for a Battleship battle|r",
     s = "|cffffd100Seeking a match|r",
     d = "|cff808080Do not disturb|r",
 }
 
 -- Lobby order: looking for a battle first, then ready, then busy.
-local STATUS_ORDER = { r = 1, c = 1, s = 1, i = 2, g = 3, d = 4 }
+local STATUS_ORDER = { r = 1, c = 1, b = 1, s = 1, i = 2, g = 3, d = 4 }
 
 local function RecordText(rec, prefix)
     if not rec then return "" end
@@ -135,7 +137,7 @@ function T.BuildLobby(page)
         local rating = item.verified and ("|cffffffff" .. item.r .. "|r") or ("|cff808080~" .. item.r .. "?|r")
         local casual = item.casual and RecordText(item.casual, "   |cff80c0ffcasual|r ") or ""
         row.sub:SetText(P.TitleText(item.t, item.r, item.g) .. "   " .. rating .. casual)
-        W.SetStatusIcon(row.statusIcon, (item.status == "r" or item.status == "c") and "s" or item.status)
+        W.SetStatusIcon(row.statusIcon, (item.status == "r" or item.status == "c" or item.status == "b") and "s" or item.status)
         if item.status == "g" then
             row.status:SetText("|cffff9040In battle vs " .. (item.opp and ns.ShortName(item.opp) or "?") .. "|r")
             row.watch:Show()
@@ -263,7 +265,7 @@ function T.BuildLive(page)
         row.watch = W.Button(row, "Watch", 80, 22, function()
             if row.item then
                 G.Watch(row.item.host)
-                ns.UI.ShowTab("play")
+                if not (row.item.battle and row.item.battle.game == "bs") then ns.UI.ShowTab("play") end
             end
         end)
         row.watch:SetPoint("BOTTOM", 0, 6)
@@ -278,8 +280,10 @@ function T.BuildLive(page)
         FillSide(row.a, item.a)
         FillSide(row.b, item.b)
         local bt = item.battle
-        if bt then
-            row.kind:SetText(string.format("%s  ·  %s  ·  move %d", bt.rated and "|cffffd100Rated|r" or "|cff80c0ffCasual|r",
+        if bt and bt.game == "bs" then
+            row.kind:SetText(string.format("|cff9ac8ffBattleship|r  ·  shot %d", (bt.moves or 0) + 1))
+        elseif bt then
+            row.kind:SetText(string.format("Chess  ·  %s  ·  %s  ·  move %d", bt.rated and "|cffffd100Rated|r" or "|cff80c0ffCasual|r",
                 ns.PlayView.TimeControlName(bt.base, bt.inc), math.floor((bt.moves or 0) / 2) + 1))
         else
             row.kind:SetText("")
@@ -321,7 +325,7 @@ function T.RefreshLive()
         if b < a then a, b = b, a end
         if not seen[a .. "|" .. b] then
             rows[#rows + 1] = { a = a, b = b, host = ns.me,
-                battle = { rated = g.rated, base = g.base, inc = g.inc, moves = #g.moves } }
+                battle = { rated = g.rated, base = g.base, inc = g.inc, moves = #g.moves, game = "chess" } }
         end
     end
     table.sort(rows, function(x, y) return x.a < y.a end)
@@ -558,6 +562,130 @@ function T.RefreshLadder()
         end
     end
     if #rows == 0 then ladder.empty:Show() else ladder.empty:Hide() end
+end
+
+------------------------------------------------------------------------
+-- Admirals: the Battleship leaderboard (wins and losses, best ratio first)
+------------------------------------------------------------------------
+local adm = {}
+T.admirals = adm
+
+function T.BuildAdmirals(page)
+    adm.page = page
+    local card = W.Card(page)
+    card:SetHeight(52)
+    card:SetPoint("TOPLEFT", 0, 0)
+    card:SetPoint("TOPRIGHT", 0, 0)
+    adm.me = card
+    card.portrait = W.Portrait(card, 44)
+    card.portrait:SetPoint("LEFT", 4, 0)
+    card.title = W.Title(card, 17)
+    card.title:SetPoint("TOPLEFT", 54, -7)
+    card.line = W.Label(card, "GameFontHighlightSmall")
+    card.line:SetPoint("BOTTOMLEFT", 54, 9)
+    card.icon = card:CreateTexture(nil, "ARTWORK")
+    card.icon:SetSize(40, 40)
+    card.icon:SetPoint("RIGHT", -8, 0)
+    W.SetIcon(card.icon, A.ShipIcon(2, A.MyFaction()))
+
+    adm.head = CreateFrame("Frame", nil, page)
+    adm.head:SetHeight(18)
+    adm.head:SetPoint("TOPLEFT", 0, -60)
+    W.Background(adm.head, 1, 1, 1, 0.06)
+    adm.cols = {}
+    for _, key in ipairs({ "#", "Admiral", "Won", "Lost", "Win %", "Best streak" }) do
+        adm.cols[#adm.cols + 1] = W.Label(adm.head, "GameFontNormalSmall", key)
+    end
+
+    adm.list = W.List(page, 34, function(row)
+        row.stripe = row:CreateTexture(nil, "BACKGROUND")
+        row.stripe:SetAllPoints()
+        row.mine = row:CreateTexture(nil, "BORDER")
+        row.mine:SetAllPoints()
+        row.mine:SetColorTexture(1, 0.82, 0, 0.14)
+        row.num = W.Title(row, 15)
+        row.portrait = W.Portrait(row, 30)
+        row.name = W.Label(row, "GameFontHighlight")
+        row.name:SetWordWrap(false)
+        row.title = W.Label(row, "GameFontHighlightSmall")
+        row.title:SetWordWrap(false)
+        row.w = W.Title(row, 15, nil, { 0.25, 1, 0.25 })
+        row.l = W.Title(row, 15, nil, { 1, 0.35, 0.3 })
+        row.ratio = W.Title(row, 15)
+        row.best = W.Label(row, "GameFontHighlight")
+        row:SetScript("OnClick", function(self) if self.item then ns.UI.ShowProfile(self.item.name) end end)
+        W.Tooltip(row, function(self, tip)
+            if not self.item then return false end
+            tip:SetText(ns.ShortName(self.item.name), 1, 0.82, 0)
+            tip:AddLine("Click to see their profile", 0.7, 0.7, 0.7)
+        end)
+        function row:OnResize(w)
+            local x = { 8, 36, 72, w * 0.48, w * 0.58, w * 0.68, w * 0.82 }
+            self.num:SetPoint("LEFT", x[1], 0)
+            self.portrait:SetPoint("LEFT", x[2], 0)
+            self.name:SetPoint("TOPLEFT", x[3], -3)
+            self.name:SetWidth(x[4] - x[3] - 6)
+            self.title:SetPoint("BOTTOMLEFT", x[3], 3)
+            self.title:SetWidth(x[4] - x[3] - 6)
+            self.w:SetPoint("LEFT", x[4], 0)
+            self.l:SetPoint("LEFT", x[5], 0)
+            self.ratio:SetPoint("LEFT", x[6], 0)
+            self.best:SetPoint("LEFT", x[7], 0)
+        end
+    end, function(row, it, index)
+        row.stripe:SetColorTexture(1, 1, 1, index % 2 == 0 and 0.04 or 0)
+        if it.me then row.mine:Show() else row.mine:Hide() end
+        local mc = W.MEDAL[index]
+        row.num:SetText(mc and ("|c" .. W.Hex(mc) .. index .. "|r") or index)
+        local info = W.CharInfo(it.name)
+        row.portrait:SetPlayer(it.name, info, it.f)
+        local fc = it.f and A.ARMIES[it.f] and A.ARMIES[it.f].color
+        row.name:SetText(W.ClassName(it.name, info, fc))
+        row.title:SetText(P.TitleText(it.t, 1200, 0) .. "  |cffaaaaaa" .. A.CharLine(info) .. "|r")
+        row.w:SetText(it.w)
+        row.l:SetText(it.l)
+        row.ratio:SetText(string.format("%d%%", floor(it.ratio * 100 + 0.5)))
+        row.best:SetText(it.best .. (it.streak > 1 and ("  |cffaaaaaa(now " .. it.streak .. ")|r") or ""))
+    end, 0)
+    adm.list:SetPoint("TOPLEFT", 0, -80)
+
+    adm.empty = W.Label(page, "GameFontHighlight",
+        "No Battleship battles have been fought yet.\nWin or lose a battle against another player and it appears here.")
+    adm.empty:SetPoint("CENTER", 0, -20)
+    adm.empty:SetJustifyH("CENTER")
+    adm.empty:SetSpacing(4)
+end
+
+function T.LayoutAdmirals(w, h)
+    adm.head:SetWidth(w)
+    local x = { 8, 72, w * 0.48, w * 0.58, w * 0.68, w * 0.82 }
+    for i, fs in ipairs(adm.cols) do
+        fs:ClearAllPoints()
+        fs:SetPoint("LEFT", adm.head, "LEFT", x[i], 0)
+    end
+    adm.list:Resize(w, h - 80)
+end
+
+function T.RefreshAdmirals()
+    local rows = P.AdmiralBoard()
+    adm.list:SetData(rows)
+    local myRank
+    for i, r in ipairs(rows) do if r.me then myRank = i end end
+    local card, info = adm.me, A.MyCharInfo()
+    card.portrait:SetPlayer(ns.me, info, A.MyFaction())
+    card.title:SetText(W.ClassName(ns.me, info) .. "  " .. P.TitleText(P.MyTitleId(), P.me.rating, P.RatedGames()))
+    local rec = L.Battleship(ns.me)
+    local line
+    if rec then
+        local n = rec.bw + rec.bl
+        line = string.format("|cff40ff40%d|r won  |cffff5040%d|r lost  ·  %d%% won  ·  best streak %d", rec.bw, rec.bl,
+            floor(rec.bw / n * 100 + 0.5), rec.bbest)
+        if myRank then line = line .. string.format("  ·  |cffffd100#%d|r of %d", myRank, #rows) end
+    else
+        line = "|cffaaaaaaFight a Battleship battle against another player to join the Admirals.|r"
+    end
+    card.line:SetText(line)
+    if #rows == 0 then adm.empty:Show() else adm.empty:Hide() end
 end
 
 ------------------------------------------------------------------------
@@ -1000,11 +1128,13 @@ function T.BuildSettings(page)
     local about = Section(page, "About Flightpath Legends " .. ns.VERSION, 392, 0, 300, 332)
     settings.about = about
     local text = W.Label(about, "GameFontHighlightSmall",
-        "Ratings use the Elo system and start at " .. D.START_RATING .. ". Rated battles always use a clock.\n\n"
-        .. "|cffffd100Witnessed ladder:|r every rated battle is confirmed by both players, and each player's addon "
-        .. "recalculates the ladder from those confirmations. Nobody can raise their own rating, results that the "
-        .. "players disagree on do not count, and only 2 rated battles per pair of players per day count.\n\n"
-        .. "|cffffd100Commands|r\n/chess  -  open or close\n/chess challenge <name>\n/chess accept  /  decline\n/chess resign\n/chess reset\n/chess debug")
+        "Board games with other players while you fly.\n\n"
+        .. "|cffffd100Chess:|r rated (Elo, starting at " .. D.START_RATING .. ", leagues) or casual.\n"
+        .. "|cffffd100Battleship:|r wins and losses. Fleets are sealed before the battle and checked afterwards, "
+        .. "so nobody can move ships or lie about hits.\n\n"
+        .. "|cffffd100Witnessed results:|r every battle is confirmed by both players and each player's addon "
+        .. "rebuilds the records from those confirmations. Disagreements do not count.\n\n"
+        .. "|cffffd100Commands|r\n/fpl  -  open or close\n/chess  /  /battleship\n/fpl accept  /  decline\n/fpl dnd  /  online\n/fpl reset  /  debug")
     text:SetPoint("TOPLEFT", 12, -32)
     text:SetPoint("BOTTOMRIGHT", -12, 10)
     text:SetJustifyV("TOP")

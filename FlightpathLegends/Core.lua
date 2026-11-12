@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "1.3.1"
+ns.VERSION = "2.0.0"
 ns.PROTO = 3 -- network protocol version; bump when messages change incompatibly
 FlightpathLegends = ns -- exposed for debugging and the addon compartment
 
@@ -289,21 +289,36 @@ end)
 ------------------------------------------------------------------------
 local function Help()
     ns.Print("commands:")
-    ns.Print("  /chess - open or close the chess window")
-    ns.Print("  /chess challenge <name> - challenge a player (or your target)")
-    ns.Print("  /chess accept | decline - answer the latest challenge")
-    ns.Print("  /chess resign - resign the current game")
-    ns.Print("  /chess dnd | online - decline or accept challenges")
-    ns.Print("  /chess reset - move the window back to the middle of the screen")
-    ns.Print("  /chess debug - show name and connection details (for bug reports)")
+    ns.Print("  /fpl - open or close Flightpath Legends  (/chess, /battleship open a game)")
+    ns.Print("  /fpl challenge <name> - challenge a player (or your target)")
+    ns.Print("  /fpl accept | decline - answer the latest challenge")
+    ns.Print("  /fpl resign - resign the current game")
+    ns.Print("  /fpl dnd | online - decline or accept challenges")
+    ns.Print("  /fpl reset - move the window back to the middle of the screen")
+    ns.Print("  /fpl debug - show name and connection details (for bug reports)")
 end
 
 SLASH_FLIGHTPATHLEGENDS1 = "/fpl"
 SLASH_FLIGHTPATHLEGENDS2 = "/flightpath"
 SLASH_FLIGHTPATHLEGENDS3 = "/legends"
-SLASH_FLIGHTPATHLEGENDS4 = "/chess"
-SLASH_FLIGHTPATHLEGENDS5 = "/checkmate"
-SLASH_FLIGHTPATHLEGENDS6 = "/battleship"
+SLASH_FPLCHESS1 = "/chess"
+SLASH_FPLCHESS2 = "/checkmate"
+SLASH_FPLBATTLESHIP1 = "/battleship"
+SLASH_FPLBATTLESHIP2 = "/bs"
+
+-- /chess and /battleship open that game; anything after them works like /fpl.
+local function OpenGame(game, msg)
+    if (msg or ""):match("^%s*$") then
+        ns.UI.Show()
+        ns.UI.SetGame(game)
+    else
+        if ns.db then ns.db.settings.game = game end
+        SlashCmdList["FLIGHTPATHLEGENDS"](msg)
+    end
+end
+SlashCmdList["FPLCHESS"] = function(msg) OpenGame("chess", msg) end
+SlashCmdList["FPLBATTLESHIP"] = function(msg) OpenGame("bs", msg) end
+
 SlashCmdList["FLIGHTPATHLEGENDS"] = function(msg)
     msg = msg or ""
     local cmd, rest = string.match(msg, "^%s*(%S*)%s*(.-)%s*$")
@@ -316,16 +331,16 @@ SlashCmdList["FLIGHTPATHLEGENDS"] = function(msg)
             target = ns.UnitPlayerName("target") or ""
         end
         if not target or target == "" then
-            ns.Print("usage: /chess challenge <name>")
+            ns.Print("usage: /fpl challenge <name>  (the game selected in the window is used)")
         else
-            ns.Game.Invite(target)
+            ns.Game.Invite(target, { game = ns.db.settings.game == "bs" and "bs" or "chess" })
         end
     elseif cmd == "accept" then
         ns.Game.AnswerLatest(true)
     elseif cmd == "decline" then
         ns.Game.AnswerLatest(false)
     elseif cmd == "resign" then
-        ns.Game.Resign()
+        if ns.Battleship.Active() then ns.Battleship.Resign() else ns.Game.Resign() end
     elseif cmd == "dnd" then
         ns.UI.SetDND(true)
     elseif cmd == "online" then

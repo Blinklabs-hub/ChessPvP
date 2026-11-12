@@ -265,6 +265,48 @@ for (const [name, fn] of Object.entries(tokenParts)) {
   writeTGA(path.join(OUT, name + ".tga"), SIZE, SIZE, rgba);
 }
 
+// ---------------------------------------------------------------- Battleship
+// Ship hull seen from above: pointed bow on the right, rounded stern, deck planks and a
+// darker gunwale. Grayscale so the addon can tint it. Written horizontal and vertical.
+function hullPixel(u, v) { // u 0..1 along the ship (bow at 1), v 0..1 across
+  const y = Math.abs(v - 0.5) * 2; // 0 centre .. 1 edge
+  let halfWidth = 0.86;
+  if (u > 0.78) halfWidth *= Math.max(0, 1 - Math.pow((u - 0.78) / 0.22, 1.6)); // bow taper
+  if (u < 0.08) halfWidth *= Math.sqrt(Math.max(0, 1 - Math.pow((0.08 - u) / 0.08, 2))); // round stern
+  if (y > halfWidth) return [0, 0, 0, 0];
+  const edge = halfWidth - y;
+  let shade = 0.78;
+  if (edge < 0.16) shade = 0.42 + edge * 1.2; // gunwale
+  const plank = Math.floor(v * 7) % 2 === 0 ? 0.04 : -0.03; // deck planks
+  shade += plank + 0.06 * Math.sin(u * 40) * 0.2;
+  if (Math.abs(u - 0.5) < 0.012 || Math.abs(u - 0.3) < 0.01 || Math.abs(u - 0.7) < 0.01) shade -= 0.08; // seams
+  return [shade, shade, shade, 1];
+}
+function writeHull(name, w, h, vertical) {
+  const rgba = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let r = 0, a = 0;
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+      const px = (x + (i + 0.5) / 4) / w, py = (y + (j + 0.5) / 4) / h;
+      const [s, , , al] = vertical ? hullPixel(1 - py, px) : hullPixel(px, py);
+      r += s * al; a += al;
+    }
+    const k = (y * w + x) * 4, val = a ? Math.round((r / a) * 255) : 255;
+    rgba[k] = rgba[k + 1] = rgba[k + 2] = val;
+    rgba[k + 3] = Math.round((a / 16) * 255);
+  }
+  writeTGA(path.join(OUT, name + ".tga"), w, h, rgba);
+}
+writeHull("hull_h", 256, 64, false);
+writeHull("hull_v", 64, 256, true);
+// Water splash: a ring of droplets around a pale centre.
+writeTGA(path.join(OUT, "splash.tga"), 128, 128, field(128, (u, v) => {
+  const r = Math.hypot(u, v), ang = Math.atan2(v, u);
+  const ring = Math.exp(-Math.pow((r - 0.62) / 0.1, 2)) * (0.55 + 0.45 * Math.abs(Math.cos(ang * 6)));
+  const centre = Math.exp(-Math.pow(r / 0.28, 2)) * 0.7;
+  return [1, 1, 1, Math.min(1, ring + centre)];
+}));
+
 // ---------------------------------------------------------------- logo (knight on a gold-rimmed tile)
 {
   const S = SIZE, rgba = Buffer.alloc(S * S * 4);

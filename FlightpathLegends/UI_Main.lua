@@ -6,6 +6,7 @@ local UI = {}
 ns.UI = UI
 
 local G, P, C, D, A, W, Board, PV, T = ns.Game, ns.Profile, ns.Comm, ns.Data, ns.Assets, ns.W, ns.Board, ns.PlayView, ns.Tabs
+local BV, BS = ns.BattleView, ns.Battleship
 local floor, max, min = math.floor, math.max, math.min
 
 local PAD = 12
@@ -19,20 +20,36 @@ local currentTab = "play"
 local collapsed = false
 local size = { w = 0, h = 0 } -- current window size (tracked here, not read back from frames)
 
+-- game: tab only shown for that game ("chess" / "bs"); shared tabs have none.
 local TABS = {
-    { id = "play", text = "Battle", build = PV.Build, refresh = PV.Refresh },
+    { id = "play", game = "chess", text = "Battle", build = PV.Build, refresh = PV.Refresh },
+    { id = "bsplay", game = "bs", text = "Battle", build = BV.Build, refresh = BV.Refresh },
     { id = "lobby", text = "Lobby", build = T.BuildLobby, refresh = T.RefreshLobby, layout = T.LayoutLobby },
     { id = "live", text = "Live Battles", build = T.BuildLive, refresh = T.RefreshLive, layout = T.LayoutLive },
-    { id = "ladder", text = "Ladder", build = T.BuildLadder, refresh = T.RefreshLadder, layout = T.LayoutLadder },
+    { id = "ladder", game = "chess", text = "Ladder", build = T.BuildLadder, refresh = T.RefreshLadder, layout = T.LayoutLadder },
+    { id = "admirals", game = "bs", text = "Admirals", build = T.BuildAdmirals, refresh = T.RefreshAdmirals, layout = T.LayoutAdmirals },
     { id = "collection", text = "Collection", build = T.BuildCollection, refresh = T.RefreshCollection, layout = T.LayoutCollection },
     { id = "settings", text = "Settings", build = T.BuildSettings, refresh = T.RefreshSettings, layout = T.LayoutSettings },
 }
+-- The same tab in the other game.
+local SWAP = { play = "bsplay", bsplay = "play", ladder = "admirals", admirals = "ladder" }
+
+local function Game()
+    return (ns.db and ns.db.settings.game == "bs") and "bs" or "chess"
+end
+UI.Game = Game
+
+local function IsPlayTab(id) return id == "play" or id == "bsplay" end
+
+local function TabVisible(tab)
+    return tab.game == nil or tab.game == Game()
+end
 
 ------------------------------------------------------------------------
 -- Layout
 ------------------------------------------------------------------------
 local function TabsVisible()
-    return not (currentTab == "play" and collapsed)
+    return not (IsPlayTab(currentTab) and collapsed)
 end
 
 local function ContentTop()
@@ -62,9 +79,20 @@ local function BoardFor(w, h)
     return max(MIN_BOARD, min(MAX_BOARD, floor(min(availW, availH))))
 end
 
+-- Battleship page: window size for a square size, and the square size that fits.
+local function BsSizeFor(cellPx)
+    local w, h = BV.SizeFor(cellPx, ShowSide())
+    return w + PAD * 2, h + ContentTop() + PAD
+end
+local function BsCellFor(w, h)
+    return BV.CellFor(w - PAD * 2, h - ContentTop() - PAD, ShowSide())
+end
+
 local function SetMinSize()
     local minW, minH
-    if currentTab == "play" then
+    if currentTab == "bsplay" then
+        minW, minH = BsSizeFor(20)
+    elseif currentTab == "play" then
         minW, minH = PlaySizeFor(MIN_BOARD)
     else
         minW, minH = 620, 460
@@ -92,15 +120,26 @@ function UI.Layout()
     else
         main.me:Hide()
     end
+    local x = PAD
     for i = 1, #TABS do
         local tab = TABS[i]
         local page = main.pages[tab.id]
         page:ClearAllPoints()
         page:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -top)
         page:SetSize(max(10, w - PAD * 2), max(10, h - top - PAD))
-        if TabsVisible() then main.tabs[tab.id]:Show() else main.tabs[tab.id]:Hide() end
+        local b = main.tabs[tab.id]
+        if TabsVisible() and TabVisible(tab) then
+            b:ClearAllPoints()
+            b:SetPoint("TOPLEFT", main, "TOPLEFT", x, -HEAD)
+            x = x + 101
+            b:Show()
+        else
+            b:Hide()
+        end
     end
-    if currentTab == "play" then
+    if currentTab == "bsplay" then
+        BV.Layout(BsCellFor(w, h), ShowSide())
+    elseif currentTab == "play" then
         PV.Layout(BoardFor(w, h), ShowSide())
     else
         local tab
@@ -120,6 +159,11 @@ end
 
 -- In the play tab the window hugs the board exactly.
 local function SnapToBoard()
+    if currentTab == "bsplay" then
+        local w, h = BsSizeFor(BsCellFor(size.w, size.h))
+        ApplySize(w, h)
+        return
+    end
     if currentTab ~= "play" then return end
     local w, h = PlaySizeFor(BoardFor(size.w, size.h))
     ApplySize(w, h)
@@ -129,7 +173,9 @@ local function SaveGeometry()
     local s = ns.db.settings
     local left, top = main:GetLeft(), main:GetTop()
     if left and top then s.pos = { "TOPLEFT", "BOTTOMLEFT", left, top } end
-    if currentTab == "play" then
+    if currentTab == "bsplay" then
+        s.bsCell = BsCellFor(size.w, size.h)
+    elseif currentTab == "play" then
         s.boardPx = BoardFor(size.w, size.h)
     else
         s.tabSize = { size.w, size.h }
@@ -139,7 +185,10 @@ end
 -- Resizes the window for the current tab and mode.
 local function FitForTab()
     local s = ns.db.settings
-    if currentTab == "play" then
+    if currentTab == "bsplay" then
+        local w, h = BsSizeFor(s.bsCell or 34)
+        ApplySize(w, h)
+    elseif currentTab == "play" then
         local w, h = PlaySizeFor(s.boardPx or 448)
         ApplySize(w, h)
     else
@@ -195,7 +244,34 @@ local function Build()
     table.insert(UISpecialFrames, "FlightpathLegendsFrame") -- closes with Escape
 
     local title = W.Title(main, 24, "Flightpath Legends")
-    title:SetPoint("TOPLEFT", PAD, -14)
+    title:SetPoint("TOPLEFT", PAD, -6)
+    -- Game switcher: Chess / Battleship
+    main.games = {}
+    local games = {
+        { id = "chess", text = "Chess", icon = "Interface\\Icons\\achievement_leader_king_varian_wrynn" },
+        { id = "bs", text = "Battleship", icon = "Interface\\Icons\\inv_garrison_dreadnaught" },
+    }
+    for i, gdef in ipairs(games) do
+        local b = CreateFrame("Button", nil, main)
+        b:SetSize(112, 22)
+        b:SetPoint("TOPLEFT", PAD + (i - 1) * 116, -32)
+        b.bg = W.Background(b, 0.1, 0.08, 0.05, 0.9, { 0.55, 0.43, 0.18, 0.9 })
+        b.icon = b:CreateTexture(nil, "ARTWORK")
+        b.icon:SetSize(18, 18)
+        b.icon:SetPoint("LEFT", 3, 0)
+        W.SetIcon(b.icon, gdef.icon)
+        b.text = W.Title(b, 13, gdef.text)
+        b.text:SetPoint("LEFT", 25, 0)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 0.85, 0.4, 0.12)
+        b:SetScript("OnClick", function()
+            ns.Sound("click")
+            UI.SetGame(gdef.id)
+        end)
+        b.id = gdef.id
+        main.games[gdef.id] = b
+    end
 
     -- Your character card (armory style), top right. Click for your full profile.
     local card = CreateFrame("Button", nil, main)
@@ -246,7 +322,6 @@ local function Build()
         local tab = TABS[i]
         local b = W.Button(main, tab.text, 98, 24, function() UI.ShowTab(tab.id) end)
         b:SetPoint("TOPLEFT", x, -HEAD)
-        x = x + 101
         main.tabs[tab.id] = b
         local page = CreateFrame("Frame", nil, main)
         page:Hide()
@@ -288,12 +363,16 @@ local function Build()
         UI.Layout()
     end)
 
-    local accum = 0
+    local accum, bsAccum = 0, 0
     main:SetScript("OnUpdate", function(_, elapsed)
         accum = accum + elapsed
         if accum >= 0.1 then
             accum = 0
             if currentTab == "play" then PV.UpdateClocks() end
+            if currentTab == "bsplay" and BS.current and BS.current.phase ~= "over" then
+                bsAccum = (bsAccum or 0) + 1
+                if bsAccum >= 3 then bsAccum = 0; BV.Refresh() end
+            end
         end
     end)
     main:SetScript("OnShow", function()
@@ -308,6 +387,15 @@ end
 function UI.Refresh()
     if not built or not main:IsShown() or not P.me then return end
     local p = P.me
+    for id, b in pairs(main.games) do
+        if id == Game() then
+            b.bg:SetColorTexture(0.45, 0.32, 0.08, 0.95)
+            b.text:SetTextColor(1, 0.92, 0.6)
+        else
+            b.bg:SetColorTexture(0.1, 0.08, 0.05, 0.9)
+            b.text:SetTextColor(0.75, 0.62, 0.3)
+        end
+    end
     local card, info = main.me, A.MyCharInfo()
     card.portrait:SetPlayer(ns.me, info, A.MyFaction())
     card.name:SetText(W.ClassName(ns.me, info) .. "  |cffaaaaaa" .. P.TitleText(P.MyTitleId(), p.rating, P.RatedGames()) .. "|r")
@@ -336,8 +424,34 @@ function UI.Refresh()
     end
 end
 
-function UI.ShowTab(id)
-    local changed = id ~= currentTab
+-- Switches between Chess and Battleship (the tab stays the same kind where possible).
+function UI.SetGame(game)
+    if not ns.db then return end
+    game = game == "bs" and "bs" or "chess"
+    local s = ns.db.settings
+    if s.game == game and built then
+        UI.ShowTab(game == "bs" and "bsplay" or "play")
+        return
+    end
+    s.game = game
+    local target = currentTab
+    if SWAP[target] and ((game == "bs") == (target == "play" or target == "ladder")) then target = SWAP[target] end
+    if built then
+        collapsed = false
+        UI.ShowTab(target, true)
+    end
+end
+
+function UI.IsVisibleTab(id)
+    return built and main:IsShown() and currentTab == id
+end
+
+function UI.ShowTab(id, force)
+    -- a game-specific tab switches the game too
+    for i = 1, #TABS do
+        if TABS[i].id == id and TABS[i].game and TABS[i].game ~= Game() then ns.db.settings.game = TABS[i].game end
+    end
+    local changed = id ~= currentTab or force
     currentTab = id
     UI.Show()
     if changed then
@@ -408,15 +522,16 @@ local function RefreshInvite()
         f.crest = f:CreateTexture(nil, "ARTWORK")
         f.crest:SetSize(52, 52)
         f.crest:SetPoint("LEFT", 12, 8)
-        f.title = W.Title(f, 18, "Chess challenge")
+        f.title = W.Title(f, 18, "Challenge")
         f.title:SetPoint("TOP", 26, -10)
         f.text = W.Label(f, "GameFontHighlight", "")
         f.text:SetPoint("TOP", f.title, "BOTTOM", 0, -6)
         f.text:SetWidth(300)
         f.text:SetJustifyH("CENTER")
         f.accept = W.Button(f, "Accept", 110, 24, function()
+            local inv = f.id and G.incoming[f.id]
             if f.id then G.AnswerInvite(f.id, true) end
-            UI.ShowTab("play")
+            if not (inv and inv.game == "bs") then UI.ShowTab("play") end
         end)
         f.accept:SetPoint("BOTTOMRIGHT", f, "BOTTOM", 20, 10)
         f.decline = W.Button(f, "Decline", 110, 24, function()
@@ -430,7 +545,8 @@ local function RefreshInvite()
             accum = 0
             local cur = self.id and G.incoming[self.id]
             if cur then
-                self.title:SetText(string.format("Chess challenge  |cffaaaaaa(%ds)|r", max(0, math.ceil(cur.expires - ns.Now()))))
+                self.title:SetText(string.format("%s challenge  |cffaaaaaa(%ds)|r", cur.game == "bs" and "Battleship" or "Chess",
+                    max(0, math.ceil(cur.expires - ns.Now()))))
             end
         end)
         invitePopup = f
@@ -444,10 +560,12 @@ local function RefreshInvite()
     local games = v and v.games or 0
     local rating = v and v.r or inv.rating
     local color = faction and W.Hex(A.ARMIES[faction].color) or "ffffffff"
-    invitePopup.text:SetText(string.format("|c%s%s|r  %s |cffaaaaaa%d%s|r\n%s, %s - you play %s",
+    invitePopup.text:SetText(string.format("|c%s%s|r  %s |cffaaaaaa%d%s|r\n%s, %s - %s",
         color, ns.ShortName(inv.from), P.TitleText(inv.title, rating, games), rating, v and "" or "?",
-        PV.TimeControlName(inv.base, inv.inc), inv.rated and "|cffffd100rated|r" or "casual",
-        (inv.theirColor == "w") and "Black" or "White"))
+        inv.game == "bs" and "Battleship" or PV.TimeControlName(inv.base, inv.inc),
+        inv.game == "bs" and "win/loss" or (inv.rated and "|cffffd100rated|r" or "casual"),
+        inv.game == "bs" and ((inv.theirColor == "w") and "you fire second" or "you fire first")
+            or ((inv.theirColor == "w") and "you play Black" or "you play White")))
     invitePopup:Show()
 end
 
@@ -529,6 +647,7 @@ local STATUS = {
 function UI.Status()
     local g = G.current
     if g and g.state == "active" and g.mode == "online" then return "battle" end
+    if BS.Busy() then return "battle" end
     if G.seek then return "seeking" end
     if ns.db and ns.db.settings.dnd then return "dnd" end
     return "online"
@@ -711,6 +830,8 @@ function UI.UpdateAlert()
     if not launcher then return end
     local g = G.current
     local myTurn = g and g.state == "active" and g.myColor and g.pos.turn == g.myColor
+    local s = BS.current
+    if s and s.mode ~= "spectate" and ((s.phase == "battle" and s.myTurn) or (s.phase == "place" and not s.ready)) then myTurn = true end
     if myTurn and not (built and main:IsShown()) then launcher.alert:Show() else launcher.alert:Hide() end
 end
 
@@ -735,6 +856,25 @@ ns.On("CHESS_GAME_CHANGED", function()
     UI.Refresh()
     UI.UpdateAlert()
     UI.UpdateStatus()
+end)
+
+ns.On("BS_STARTED", function(s)
+    if s.mode == "online" then
+        ns.Print("Battleship battle started against " .. ns.ShortName(s.opp) .. ". Deploy your fleet!")
+        if RaidNotice_AddMessage and RaidWarningFrame then
+            pcall(RaidNotice_AddMessage, RaidWarningFrame, "Battleship vs " .. ns.ShortName(s.opp) .. ": deploy your fleet!", { r = 1, g = 0.82, b = 0 })
+        end
+        if FlashClientIcon then pcall(FlashClientIcon) end
+    end
+    collapsed = false
+    UI.SetGame("bs")
+    UI.ShowTab("bsplay")
+end)
+
+ns.On("BS_CHANGED", function()
+    if built and main:IsShown() and currentTab == "bsplay" then BV.Refresh() end
+    UI.UpdateStatus()
+    UI.UpdateAlert()
 end)
 
 ns.On("CHESS_GAME_STARTED", function(g)
@@ -794,10 +934,11 @@ end)
 
 ns.On("CHESS_INVITE", function(inv)
     local who = ns.ShortName(inv.from)
-    ns.Print(string.format("|cffffd100%s challenges you|r to %s (%s). Click Accept on the popup or type /chess accept.",
-        who, PV.TimeControlName(inv.base, inv.inc), inv.rated and "rated" or "casual"))
+    ns.Print(string.format("|cffffd100%s challenges you|r to %s (%s). Click Accept on the popup or type /fpl accept.",
+        who, inv.game == "bs" and "Battleship" or ("chess, " .. PV.TimeControlName(inv.base, inv.inc)),
+        inv.game == "bs" and "win/loss" or (inv.rated and "rated" or "casual")))
     if RaidNotice_AddMessage and RaidWarningFrame then
-        pcall(RaidNotice_AddMessage, RaidWarningFrame, "Chess challenge from " .. who .. "!", { r = 1, g = 0.82, b = 0 })
+        pcall(RaidNotice_AddMessage, RaidWarningFrame, (inv.game == "bs" and "Battleship" or "Chess") .. " challenge from " .. who .. "!", { r = 1, g = 0.82, b = 0 })
     end
     if FlashClientIcon then pcall(FlashClientIcon) end
 end)
