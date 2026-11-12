@@ -9,6 +9,7 @@ local CHANNEL = "ChessPvPNet"
 C.PREFIX, C.CHANNEL = PREFIX, CHANNEL
 
 C.handlers = {} -- [command] = function(sender, dist, parts)
+C.recentSenders = {} -- { rawName, normalizedName } pairs, for /chess debug
 
 local queue = {}
 local tokens = 8
@@ -37,11 +38,12 @@ local function TrySend(q)
     if q.dist == "CHANNEL" then
         target = C.ChannelId()
         if target == 0 then return "drop" end
-    end
-    if q.dist == "WHISPER" then
+    else
+        -- Same-realm players are whispered by their plain first name, which works on every
+        -- client (Forever shows surnames, but whispers go to the first name).
+        target = ns.ShortName(q.target)
         -- Recorded before sending: the "player not found" reply can arrive at any moment.
-        recentWhispers[q.target] = ns.Now()
-        recentWhispers[ns.ShortName(q.target)] = ns.Now()
+        recentWhispers[string.lower(target)] = ns.Now()
     end
     local ok, result = pcall(C_ChatInfo.SendAddonMessage, PREFIX, q.text, q.dist, target)
     if not ok then return "drop" end
@@ -116,8 +118,19 @@ ns.RegisterEvent("CHAT_MSG_ADDON", function(prefix, text, dist, sender)
     if ns.IsSecret(text) or ns.IsSecret(sender) or ns.IsSecret(dist) then return end
     if type(text) ~= "string" or type(sender) ~= "string" then return end
     if dist ~= "WHISPER" and dist ~= "CHANNEL" then return end
+    local raw = sender
     sender = ns.FullName(sender)
-    if not sender or sender == ns.me then return end
+    if not sender or ns.SameName(sender, ns.me) then return end
+    -- Keep the last few distinct raw sender names for /chess debug.
+    local list = C.recentSenders
+    local known = false
+    for i = 1, #list do
+        if list[i][1] == raw then known = true end
+    end
+    if not known then
+        table.insert(list, 1, { raw, sender })
+        if #list > 5 then table.remove(list) end
+    end
     local parts = ns.Split(text, ";")
     local handler = C.handlers[parts[1]]
     if handler then handler(sender, dist, parts) end
@@ -174,9 +187,11 @@ local function SystemFilter(_, _, msg)
     if not notFoundPattern or ns.IsSecret(msg) or type(msg) ~= "string" then return false end
     local name = string.match(msg, notFoundPattern)
     if name then
-        local at = recentWhispers[name]
+        -- The client may show the name as "Name", "Name-Realm" or "Name Surname".
+        local full = ns.FullName(name)
+        local at = recentWhispers[string.lower(name)] or (full and recentWhispers[string.lower(ns.ShortName(full))])
         if at and ns.Now() - at < 6 then
-            ns.Fire("CHESS_PEER_OFFLINE", ns.FullName(name))
+            ns.Fire("CHESS_PEER_OFFLINE", full)
             return true
         end
     end

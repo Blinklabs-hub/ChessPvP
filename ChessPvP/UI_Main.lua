@@ -146,7 +146,7 @@ end
 local play = {}
 
 local function KnownGames(name)
-    if name == ns.me then return P.RatedGames() end
+    if ns.SameName(name, ns.me) then return P.RatedGames() end
     local e = P.GetPlayer(name)
     return e and (e.w + e.l + e.d) or D.PLACEMENT_GAMES
 end
@@ -509,8 +509,7 @@ local function BuildPlay(page)
         end
         local name = nameBox:GetText() or ""
         if name == "" and UnitExists("target") and UnitIsPlayer("target") then
-            local n, r = UnitName("target")
-            if n and not ns.IsSecret(n) then name = (r and r ~= "") and (n .. "-" .. r) or n end
+            name = ns.UnitFirstName("target") or ""
         end
         if name == "" then
             ns.Print("type a character name, or target a player first.")

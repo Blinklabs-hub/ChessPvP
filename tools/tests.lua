@@ -84,10 +84,8 @@ if want("ai") then
     local E, AI = c.ns.Engine, c.ns.AI
     -- mate in one
     local pos = E.New("6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1")
-    for level = 2, 3 do
-        local m = AI.ThinkNow(pos, level)
-        eq(E.MoveToUCI(m), "a1a8", "level " .. level .. " finds back-rank mate")
-    end
+    -- Only Master: Novice and Adept blunder on purpose some of the time.
+    eq(E.MoveToUCI(AI.ThinkNow(pos, 3)), "a1a8", "master finds back-rank mate")
     -- free queen
     pos = E.New("4k3/8/8/3q4/8/8/8/3RK3 w - - 0 1")
     eq(E.MoveToUCI(AI.ThinkNow(pos, 3)), "d1d5", "master takes the hanging queen")
@@ -192,16 +190,24 @@ if want("online") or TEST_FILTER == "debug" then
 
     section("online: packet loss")
     net.dropRate = 0.4
-    a.ns.Game.Invite("Bob"); Advance(2)
-    if not b.ns.Game.LatestInvite() then a.ns.Game.Invite("Bob"); net.dropRate = 0; Advance(2); net.dropRate = 0.4 end
-    b.ns.Game.AnswerLatest(true); Advance(3)
-    ga, gb = a.ns.Game.current, b.ns.Game.current
-    if ga.id ~= gb.id or ga.state ~= "active" then
-        net.dropRate = 0
-        a.ns.Game.Invite("Bob"); Advance(1); b.ns.Game.AnswerLatest(true); Advance(1)
+    -- Challenge until both sides are in the same active game (any message may be lost).
+    local started = false
+    for attempt = 1, 20 do
+        if not a.ns.Game.outgoing then a.ns.Game.Invite("Bob") end
+        Advance(2)
+        if b.ns.Game.LatestInvite() then b.ns.Game.AnswerLatest(true) end
+        Advance(25) -- covers accept resends, or the acceptor giving up
         ga, gb = a.ns.Game.current, b.ns.Game.current
-        net.dropRate = 0.4
+        if ga.id == gb.id and ga.state == "active" and gb.state == "active" then
+            started = true
+            break
+        end
+        -- Never both stuck: a lost start must not leave just one side in a game.
+        check(not (gb.state == "active" and ga.id ~= gb.id), "no one-sided game after lost accept (attempt " .. attempt .. ")")
+        if a.ns.Game.outgoing then a.ns.Game.CancelInvite() end
+        Advance(5)
     end
+    check(started, "lossy game starts")
     white = (ga.myColor == 1) and a or b
     black = (ga.myColor == 1) and b or a
     local moves = { "e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6", "b5a4", "g8f6", "e1g1", "f8e7" }
@@ -309,6 +315,65 @@ if want("online") or TEST_FILTER == "debug" then
     end
     Advance(1)
     check(true, "all tabs render without errors")
+end
+
+------------------------------------------------------------------------
+if want("forever") then
+    -- Forever: surnames, surname returned where retail returns a realm, whispers by first name.
+    for _, fmt in ipairs({ "realm", "plain", "surname", "surnameonly" }) do
+        section("forever names, sender format '" .. fmt .. "'")
+        net.forever, net.senderFormat, net.allowRealmWhisper = true, fmt, false
+        local a = NewClient("Muke")
+        local b = NewClient("Keepingcalm")
+        eq(a.ns.me, "Muke-TestRealm", "own identity ignores the surname")
+        eq(a.ns.realm, "TestRealm", "realm read from the realm API")
+        Advance(20)
+        check(a.ns.Profile.online["Keepingcalm-TestRealm"] ~= nil, "lobby key is Name-Realm")
+
+        -- Challenge via target (the path from the bug report)
+        a.target = b
+        a.ns.UI.Show()
+        a.ns.UI.ShowTab("play")
+        a.ns.Game.Invite(a.ns.UnitFirstName("target"))
+        Advance(1)
+        check(b.ns.Game.LatestInvite() ~= nil, "challenge by target arrives")
+        b.ns.Game.AnswerLatest(true)
+        Advance(1)
+        local ga, gb = a.ns.Game.current, b.ns.Game.current
+        check(ga and gb and ga.id == gb.id and ga.state == "active", "game starts")
+        local w = (ga.myColor == 1) and a or b
+        local k = (ga.myColor == 1) and b or a
+        w.ns.Game.Move("f2f3"); Advance(1)
+        k.ns.Game.Move("e7e5"); Advance(1)
+        w.ns.Game.Move("g2g4"); Advance(1)
+        k.ns.Game.Move("d8h4"); Advance(1)
+        eq(ga.reason, "checkmate", "game completes")
+        eq(gb.reason, "checkmate", "game completes on both sides")
+
+        -- Typed names with a surname, wrong case
+        a.ns.Game.Invite("keepingcalm keepingcalmson")
+        Advance(1)
+        check(b.ns.Game.LatestInvite() ~= nil, "typed 'first surname' works")
+        b.ns.Game.AnswerLatest(false)
+        Advance(1)
+
+        -- Offline player gets detected
+        a.ns.Game.Invite("Ghost")
+        Advance(2)
+        eq(a.ns.Game.outgoing, nil, "offline player detected")
+        RemoveClient(a)
+        RemoveClient(b)
+    end
+
+    section("forever: profile saved under the old broken key is migrated")
+    net.forever, net.senderFormat = true, "realm"
+    local old = { chars = { ["Muke-Mukeson"] = { rating = 1337, peak = 1400, w = 9, l = 1, d = 0 } }, realms = { Mukeson = { players = {} } } }
+    local c = NewClient("Muke", old)
+    eq(c.ns.Profile.me.rating, 1337, "rating kept after migration")
+    eq(c.env.ChessPvPDB.chars["Muke-Mukeson"], nil, "old key removed")
+    eq(c.env.ChessPvPDB.realms.Mukeson, nil, "bogus realm cache removed")
+    RemoveClient(c)
+    net.forever, net.senderFormat, net.allowRealmWhisper = false, "realm", nil
 end
 
 ------------------------------------------------------------------------

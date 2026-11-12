@@ -6,7 +6,26 @@ T = 1000 -- virtual clock (seconds)
 local timers = {}
 local netQueue = {}
 clients = {}
-net = { dropRate = 0, log = false, sent = 0 }
+-- forever: names have surnames, UnitName/UnitFullName return the surname as 2nd value.
+-- senderFormat: how CHAT_MSG_ADDON reports the sender ("realm" = Name-Realm, "plain" = Name,
+-- "surname" = "Name Surname-Realm", "surnameonly" = "Name Surname").
+net = { dropRate = 0, log = false, sent = 0, forever = false, senderFormat = "realm" }
+
+local function SenderName(c)
+    local f = net.senderFormat
+    if f == "plain" then return c.name end
+    if f == "surname" then return c.name .. " " .. c.surname .. "-" .. REALM end
+    if f == "surnameonly" then return c.name .. " " .. c.surname end
+    return c.full
+end
+
+-- Whisper targets the server accepts: the first name, or Name-Realm (retail style).
+local function MatchesTarget(c, target)
+    target = tostring(target):lower()
+    if target == c.name:lower() then return true end
+    if target == c.full:lower() then return net.allowRealmWhisper ~= false end
+    return false
+end
 
 local function readFile(path)
     return assert(SOURCES[path:match("[^/]+$")], "missing " .. path)
@@ -79,7 +98,7 @@ local function deliver(client, ...)
 end
 
 function NewClient(name, savedDB)
-    local client = { name = name, full = name .. "-" .. REALM, events = {}, frames = {}, joined = false, chat = {}, filters = {} }
+    local client = { name = name, surname = name .. "son", full = name .. "-" .. REALM, events = {}, frames = {}, joined = false, chat = {}, filters = {} }
     local env = {}
     client.env = env
     setmetatable(env, { __index = _G })
@@ -100,10 +119,31 @@ function NewClient(name, savedDB)
     env.GetTime = function() return T end
     env.GetServerTime = function() return math.floor(1700000000 + T) end
     env.debugprofilestop = function() return os.clock() * 1000 end
-    env.UnitFullName = function() return name, REALM end
-    env.UnitName = function() return nil end
-    env.UnitExists = function() return false end
-    env.UnitIsPlayer = function() return false end
+    if net.forever then
+        env.WOW_PROJECT_ID = 18
+        env.WOW_PROJECT_CAMELOT = 18
+    end
+    env.GetBuildInfo = function() return "1.60.1", "70338", "", net.forever and 16001 or 120105 end
+    env.GetRealmName = function() return REALM end
+    env.UnitFullName = function() return name, net.forever and client.surname or REALM end
+    env.GetUnitName = function(unit)
+        if unit == "player" then return net.forever and (name .. " " .. client.surname) or name end
+        local t = client.target
+        if unit == "target" and t then return net.forever and (t.name .. " " .. t.surname) or t.name end
+    end
+    env.UnitName = function(unit)
+        if unit == "player" then
+            if net.forever then return name, client.surname end
+            return name
+        end
+        local t = client.target
+        if unit == "target" and t then
+            if net.forever then return t.name, t.surname end
+            return t.name
+        end
+    end
+    env.UnitExists = function(unit) return unit == "player" or (unit == "target" and client.target ~= nil) end
+    env.UnitIsPlayer = function(unit) return env.UnitExists(unit) end
     env.GetNormalizedRealmName = function() return REALM end
     env.GetChannelName = function() return client.joined and 5 or 0 end
     env.JoinTemporaryChannel = function() client.joined = true end
@@ -120,19 +160,19 @@ function NewClient(name, savedDB)
             if dist == "WHISPER" then
                 local found
                 for _, c in ipairs(clients) do
-                    if not c.offline and c.full:lower() == tostring(target):lower() then found = c end
+                    if not c.offline and MatchesTarget(c, target) then found = c end
                 end
                 if not found then
                     local f = client.filters["CHAT_MSG_SYSTEM"]
                     local msg = string.format(env.ERR_CHAT_PLAYER_NOT_FOUND_S, target)
                     if not (f and f(nil, "CHAT_MSG_SYSTEM", msg)) then table.insert(client.chat, "SYS:" .. msg) end
                 elseif math.random() >= net.dropRate then
-                    table.insert(netQueue, { at = T + 0.05, to = found, args = { prefix, text, "WHISPER", client.full } })
+                    table.insert(netQueue, { at = T + 0.05, to = found, args = { prefix, text, "WHISPER", SenderName(client) } })
                 end
             else
                 for _, c in ipairs(clients) do
                     if c.joined and not c.offline then
-                        table.insert(netQueue, { at = T + 0.05, to = c, args = { prefix, text, "CHANNEL", client.full } })
+                        table.insert(netQueue, { at = T + 0.05, to = c, args = { prefix, text, "CHANNEL", SenderName(client) } })
                     end
                 end
             end

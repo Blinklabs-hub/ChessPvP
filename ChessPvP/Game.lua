@@ -121,6 +121,7 @@ local function Accept(sender, parts)
     if not gid or not seq then return nil end
     local g = G.current
     if g and g.id == gid and g.mode == "online" and g.opp == sender then
+        g.acPending = nil -- any game message proves the game started on their side
         C.Whisper(sender, "AK", gid, seq)
         if g.state ~= "active" then
             -- They still think the game is running (messages crossed): tell them how it ended.
@@ -438,20 +439,19 @@ end
 ------------------------------------------------------------------------
 -- Challenges
 ------------------------------------------------------------------------
+-- Turns whatever the player typed ("bob", "Bob Smith", "Bob-Realm") into "Bob-Realm".
 local function NormalizeName(name)
-    name = string.gsub(name, "%s+", "")
-    if string.match(name, "^[%a%-]+$") then
+    local full = ns.FullName(name)
+    if not full then return nil end
+    local n, r = string.match(full, "^([^-]+)-(.*)$")
+    if string.match(n, "^%a+$") then
         -- Plain ASCII: fix the capitalisation of the character name.
-        local n, r = string.match(name, "^([^-]+)-?(.*)$")
         n = string.upper(string.sub(n, 1, 1)) .. string.lower(string.sub(n, 2))
-        name = (r ~= "") and (n .. "-" .. r) or n
     end
-    return ns.FullName(name)
+    return n .. "-" .. r
 end
 
-local function SameName(a, b)
-    return a and b and string.lower(a) == string.lower(b)
-end
+local SameName = ns.SameName
 
 -- opts: base, inc, rated, color ("w", "b" or "r" for random), q (matchmaking)
 function G.Invite(name, opts)
@@ -521,6 +521,8 @@ local function AcceptInvite(inv)
         wt = (myColor == 1) and P.MyTitleId() or inv.title, bt = (myColor == 1) and inv.title or P.MyTitleId(),
     })
     C.Whisper(inv.from, "AC", inv.id, p.rating, P.MyTitleId())
+    -- Resent until the challenger confirms (GA), in case the message is lost.
+    g.acPending = { next = ns.Now() + 3, tries = 0, text = ns.Join("AC", inv.id, p.rating, P.MyTitleId()) }
     -- Any other pending challenges are declined.
     for _, other in pairs(G.incoming) do
         C.Whisper(other.from, "DC", other.id, "busy")
@@ -603,6 +605,11 @@ C.handlers.AC = function(sender, dist, parts)
     if dist ~= "WHISPER" then return end
     local o = G.outgoing
     local gid = parts[2]
+    local cur = G.current
+    if cur and cur.id == gid and cur.mode == "online" and cur.opp == sender then
+        C.Whisper(sender, "GA", gid) -- a repeated accept: confirm again
+        return
+    end
     if not o or o.id ~= gid or not SameName(o.to, sender) or OnlineBusy() then
         -- We are no longer waiting for this answer: tell them the game is off.
         if gid then C.Whisper(sender, "NG", gid) end
@@ -627,8 +634,16 @@ C.handlers.AC = function(sender, dist, parts)
         C.Whisper(other.from, "DC", other.id, "busy")
     end
     G.incoming = {}
+    C.Whisper(sender, "GA", gid)
     Begin(g)
     ns.Fire("CHESS_INVITE_CHANGED")
+end
+
+-- The challenger confirms that the game has started on their side.
+C.handlers.GA = function(sender, dist, parts)
+    if dist ~= "WHISPER" then return end
+    local g = G.current
+    if g and g.id == parts[2] and g.opp == sender then g.acPending = nil end
 end
 
 local DECLINE_TEXT = {
@@ -1094,6 +1109,18 @@ ns.On("CHESS_TICK", function()
     end
 
     local g = G.current
+    local ac = g and g.state == "active" and g.mode == "online" and g.acPending
+    if ac and now >= ac.next then
+        ac.tries = ac.tries + 1
+        if ac.tries > 6 then
+            -- The challenger never confirmed: the game did not start on their side.
+            g.acPending = nil
+            Finish(g, "*", "abandoned")
+        else
+            ac.next = now + 3
+            C.SendRaw("WHISPER", g.opp, ac.text)
+        end
+    end
     if g and g.state == "active" and g.mode == "online" then
         if g.rejoinDeadline and now > g.rejoinDeadline then
             g.rejoinDeadline = nil

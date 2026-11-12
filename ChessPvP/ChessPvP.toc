@@ -2,7 +2,7 @@
 ## Title: |cffffd100Chess|r|cffffffffPvP|r
 ## Notes: Play chess against other players, with a realm ladder, titles and unlockable rewards.
 ## Author: Muke
-## Version: 1.0.0
+## Version: 1.0.1
 ## SavedVariables: ChessPvPDB
 ## IconTexture: Interface\AddOns\ChessPvP\Textures\logo.tga
 ## AddonCompartmentFunc: ChessPvP_OnAddonCompartmentClick

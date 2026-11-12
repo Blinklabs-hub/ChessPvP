@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "1.0.0"
+ns.VERSION = "1.0.1"
 ns.PROTO = 1 -- network protocol version; bump when messages change incompatibly
 ChessPvP = ns -- exposed for debugging and the addon compartment
 
@@ -91,19 +91,52 @@ function ns.After(seconds, fn)
     C_Timer.After(seconds, fn)
 end
 
--- "Name" -> "Name-Realm" (using our own realm when none is given).
+-- Players are identified internally as "Firstname-Realm".
+--
+-- WoW Forever characters also have a surname ("Muke Spiteri"). Name APIs return it where
+-- retail returns the realm, and some strings contain it after a space. Surnames are never
+-- part of a player's identity here: only the first word of a name is kept.
+--
+-- Accepts "Name", "Name-Realm", "Name Surname", "Name Surname-Realm" (any capitalisation of
+-- the realm part is kept as given) and returns "Name-Realm", or nil when empty.
 function ns.FullName(name)
-    if not name or name == "" then return nil end
-    if string.find(name, "-", 1, true) then return name end
-    return name .. "-" .. (ns.realm or "")
+    if type(name) ~= "string" or ns.IsSecret(name) then return nil end
+    name = string.match(name, "^%s*(.-)%s*$")
+    if name == "" then return nil end
+    local base, realm = string.match(name, "^([^%-]+)%-(.+)$")
+    if not base then base = name end
+    base = string.match(base, "^(%S+)") -- drop a surname
+    if not base then return nil end
+    if realm then realm = string.gsub(realm, "%s+", "") end
+    if not realm or realm == "" then realm = ns.realm or "" end
+    return base .. "-" .. realm
 end
 
 -- "Name-Realm" -> "Name" when the realm is ours, otherwise unchanged.
+-- This is also the form used as a whisper target.
 function ns.ShortName(full)
     if not full then return "?" end
     local name, realm = string.match(full, "^([^-]+)-(.+)$")
-    if name and realm == ns.realm then return name end
+    if name and (realm == ns.realm or realm == "") then return name end
     return full
+end
+
+function ns.SameName(a, b)
+    return a ~= nil and b ~= nil and string.lower(a) == string.lower(b)
+end
+
+-- First name of a unit, without surname (Forever) or realm.
+function ns.UnitFirstName(unit)
+    local n, r = UnitName(unit)
+    if type(n) ~= "string" or ns.IsSecret(n) then return nil end
+    n = string.match(n, "^(%S+)")
+    if not n then return nil end
+    -- On retail the second value is a realm for players from other realms. On Forever it is
+    -- a surname, so it is only used when the game is not Forever.
+    if not ns.isForever and type(r) == "string" and not ns.IsSecret(r) and r ~= "" then
+        return n .. "-" .. string.gsub(r, "%s+", "")
+    end
+    return n
 end
 
 function ns.FormatClock(seconds)
@@ -175,13 +208,46 @@ ns.RegisterEvent("ADDON_LOADED", function(name)
     ns.db = db
 end)
 
-ns.RegisterEvent("PLAYER_LOGIN", function()
-    local name, realm = UnitFullName("player")
-    if not realm or realm == "" then
-        realm = GetNormalizedRealmName and GetNormalizedRealmName() or (GetRealmName() or ""):gsub("[%s%-]", "")
+local function DetectForever()
+    if WOW_PROJECT_CAMELOT and WOW_PROJECT_ID == WOW_PROJECT_CAMELOT then return true end
+    if WOW_PROJECT_ID == 18 then return true end
+    local _, _, _, toc = GetBuildInfo()
+    if toc and toc >= 16000 and toc < 17000 then return true end
+    local full = GetUnitName and GetUnitName("player")
+    return type(full) == "string" and not ns.IsSecret(full) and string.find(full, " ", 1, true) ~= nil
+end
+
+local function RealmName()
+    local realm = GetNormalizedRealmName and GetNormalizedRealmName()
+    if type(realm) ~= "string" or realm == "" then
+        realm = string.gsub(GetRealmName() or "", "[%s%-]", "")
     end
-    ns.realm = realm
-    ns.me = name .. "-" .. realm
+    return realm
+end
+
+-- Earlier versions keyed the profile by "Firstname-Surname" on Forever (the surname was
+-- mistaken for the realm). Move that data to the correct key.
+local function MigrateLegacyKeys(db)
+    local first, second = UnitFullName("player")
+    if type(second) ~= "string" or second == "" or second == ns.realm then return end
+    local legacy = first .. "-" .. second
+    if legacy == ns.me then return end
+    if db.chars[legacy] and not db.chars[ns.me] then
+        db.chars[ns.me] = db.chars[legacy]
+    end
+    db.chars[legacy] = nil
+    -- The ladder cache under the fake realm has wrongly keyed names: drop it, it refills.
+    db.realms[second] = nil
+end
+
+ns.RegisterEvent("PLAYER_LOGIN", function()
+    ns.isForever = DetectForever()
+    ns.realm = RealmName()
+    local first = ns.UnitFirstName("player") or UnitName("player")
+    first = string.match(first, "^([^%-]+)") -- never a realm part for ourselves
+    ns.myName = first
+    ns.me = first .. "-" .. ns.realm
+    MigrateLegacyKeys(ns.db)
     ns.Fire("CHESS_READY")
 end)
 
@@ -195,6 +261,7 @@ local function Help()
     ns.Print("  /chess accept | decline - answer the latest challenge")
     ns.Print("  /chess resign - resign the current game")
     ns.Print("  /chess reset - move the window back to the middle of the screen")
+    ns.Print("  /chess debug - show name and connection details (for bug reports)")
 end
 
 SLASH_CHESSPVP1 = "/chess"
@@ -208,10 +275,7 @@ SlashCmdList["CHESSPVP"] = function(msg)
     elseif cmd == "challenge" or cmd == "c" then
         local target = rest
         if target == "" and UnitExists("target") and UnitIsPlayer("target") then
-            local n, r = UnitName("target")
-            if n and not ns.IsSecret(n) then
-                target = (r and r ~= "") and (n .. "-" .. r) or n
-            end
+            target = ns.UnitFirstName("target") or ""
         end
         if not target or target == "" then
             ns.Print("usage: /chess challenge <name>")
@@ -226,6 +290,28 @@ SlashCmdList["CHESSPVP"] = function(msg)
         ns.Game.Resign()
     elseif cmd == "reset" then
         ns.UI.ResetPosition()
+    elseif cmd == "debug" then
+        local function S(...)
+            local t = {}
+            for i = 1, select("#", ...) do
+                local v = select(i, ...)
+                t[i] = ns.IsSecret(v) and "<secret>" or ("'" .. tostring(v) .. "'")
+            end
+            return table.concat(t, ", ")
+        end
+        ns.Print("version " .. ns.VERSION .. ", forever=" .. tostring(ns.isForever) .. ", project=" .. tostring(WOW_PROJECT_ID))
+        ns.Print("UnitName: " .. S(UnitName("player")))
+        ns.Print("UnitFullName: " .. S(UnitFullName("player")))
+        ns.Print("GetUnitName: " .. S(GetUnitName and GetUnitName("player", true)))
+        ns.Print("realm: " .. S(GetRealmName(), GetNormalizedRealmName and GetNormalizedRealmName()))
+        ns.Print("me: " .. tostring(ns.me) .. ", channel: " .. tostring(ns.Comm.ChannelId()))
+        if UnitExists("target") then
+            ns.Print("target UnitName: " .. S(UnitName("target")) .. " -> " .. tostring(ns.UnitFirstName("target")))
+        end
+        local senders = ns.Comm.recentSenders
+        for i = 1, #senders do
+            ns.Print("heard from: '" .. senders[i][1] .. "' -> " .. senders[i][2])
+        end
     else
         Help()
     end
