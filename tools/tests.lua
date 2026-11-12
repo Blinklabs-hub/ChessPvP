@@ -2008,25 +2008,28 @@ if want("vbui") then
     UI.Show()
     local FD = a.ns.Finder
     check(FD.IsShown(), "opening the addon with no game running shows the finder")
-    check(UI.IsVisibleTab("games"), "on Find a Game")
-    local F = FD.find
-    eq(#F.buttons, 5, "a round button for each game")
-    local names = {}
-    for _, btn in ipairs(F.buttons) do names[#names + 1] = btn.name:GetText() end
-    eq(table.concat(names, ","), "Chess,Battleship,Four in a Row,Vault Breaker,Hidden Army", "in order")
-    local q = FD.QueueSet()
-    for k in pairs(q) do q[k] = nil end
-    F.buttons[3]:Click()
-    eq(UI.Game(), "c4", "clicking a game chooses it")
-    check(q.c4, "and ticks it")
-    check(F.buttons[3].tick:IsShown() and F.buttons[3].glow:IsShown(), "the chosen game is ticked and glows")
-    check(not F.buttons[1].tick:IsShown(), "unticked games show no tick")
-    F.buttons[4]:Click()
-    check(q.c4 and q.vb, "several games can be ticked")
-    F.queue:Click()
+    check(UI.IsVisibleTab("chesshub"), "on the chosen game's Play page")
+    local n = 0
+    for key in pairs(FD.frame.tabs) do if a.ns.Data.GAMES[key] then n = n + 1 end end
+    eq(n, 5, "a side tab for each game")
+    eq(FD.frame.tabs.find, nil, "and no separate Find a Game tab")
+    FD.frame.tabs.c4:Click()
+    check(UI.IsVisibleTab("c4hub"), "a game's tab opens its Play page")
+    eq(UI.Game(), "c4", "and chooses the game")
+    check(FD.frame.tabs.c4:GetChecked(), "the open game's tab is marked")
+    check(FD.frame.sub.hub.selected and not FD.frame.sub.lobby.selected, "the Play button is highlighted, not greyed out")
+    local h = FD.hubs.c4
+    h.help:Click()
+    eq(UI.helpFrame.title:GetText(), "How to play: Four in a Row", "How to play is for this game")
+    UI.helpFrame:Hide()
+    h.queue.button:Click()
     local G = a.ns.Game
-    check(G.Seeking("c4") and G.Seeking("vb") and not G.Seeking("chess"), "Find Opponent queues for every ticked game")
-    check(F.listing:IsShown(), "Your Listing appears")
+    check(G.Seeking("c4") and not G.Seeking("vb"), "Find Opponent queues for this game")
+    check(h.listing:IsShown(), "Your Listing appears")
+    FD.frame.tabs.vb:Click()
+    eq(FD.hubs.vb.queue.button:GetText(), "Also Queue Here", "another game's page offers to queue there too")
+    FD.hubs.vb.queue.button:Click()
+    check(G.Seeking("c4") and G.Seeking("vb"), "queued for both games")
     -- someone queued for Battleship and Vault Breaker: the shared game is played
     b.ns.Game.StartSeek(0, 0, false, true, { "bs", "vb" })
     Advance(30)
@@ -2034,15 +2037,22 @@ if want("vbui") then
     check(UI.IsVisibleTab("vbplay"), "the game opens in its own window")
     check(not FD.IsShown(), "and the finder steps aside")
     a.ns.Vault.Resign(); Advance(2)
-    UI.ShowTab("games")
-    check(not F.listing:IsShown(), "no listing once the queue is over")
+    UI.ShowTab("vbhub")
+    check(not FD.hubs.vb.listing:IsShown(), "no listing once the queue is over")
+    local s3 = nil
+    FD.hubs.ha = FD.hubs.ha
+    FD.frame.tabs.ha:Click()
+    FD.hubs.ha.practice.start:Click()
+    check(a.ns.Army.current and a.ns.Army.current.mode == "ai", "Play vs Computer is on each game's Play page")
+    check(UI.IsVisibleTab("haplay"), "and opens the game window")
+    a.ns.Army.Resign(); Advance(2)
 
     section("finder: a tab for each game")
     FD.frame.tabs.vb:Click()
-    check(UI.IsVisibleTab("vblobby"), "a game's tab opens its lobby")
-    check(FD.frame.tabs.vb:GetChecked(), "and is marked as the open tab")
+    FD.frame.sub.lobby:Click()
+    check(UI.IsVisibleTab("vblobby"), "Lobby")
     FD.frame.sub.live:Click()
-    check(UI.IsVisibleTab("vblive"), "the page buttons switch to live games")
+    check(UI.IsVisibleTab("vblive"), "Live Games")
     FD.frame.tabs.chess:Click()
     check(UI.IsVisibleTab("live"), "another game's tab keeps the same page")
     eq(UI.Game(), "chess", "and chooses that game")
@@ -2052,8 +2062,8 @@ if want("vbui") then
     check(UI.IsVisibleTab("collection"), "Titles & Feats")
     FD.frame.tabs.ha:Click()
     check(UI.IsVisibleTab("hacollection"), "for any game")
-    FD.frame.tabs.find:Click()
-    check(UI.IsVisibleTab("games"), "Find a Game is still there")
+    FD.frame.sub.hub:Click()
+    check(UI.IsVisibleTab("hahub"), "and back to Play")
     FD.frame.tabs.settings:Click()
     check(UI.IsVisibleTab("settings"), "Settings has its own tab")
     UI.ShowTab("vbboard")
@@ -2124,8 +2134,8 @@ if want("vbui") then
     check(av.banner:IsShown(), "the winner sees the banner")
     eq(av.banner.title:GetText(), "Vault Cracked!", "Vault Cracked!")
     Advance(5)
-    UI.ShowTab("games"); UI.SetGame("vb"); UI.Refresh()
-    check(a.ns.Finder.find.card.record:GetText():find("40ff401|r") ~= nil, "the finder card shows the Vault Breaker record")
+    UI.ShowTab("vbhub"); UI.Refresh()
+    check(a.ns.Finder.hubs.vb.record:GetText():find("40ff401|r won") ~= nil, "the Play page shows the Vault Breaker record")
 
     section("vault breaker ui: titles")
     local P = a.ns.Profile

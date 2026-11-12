@@ -218,6 +218,30 @@ function W.Dropdown(parent, width, items, onSelect)
     return b
 end
 
+-- Marks a button as the selected one (a gold glow and bright text) without disabling it.
+function W.SetSelected(b, on)
+    if not b.selGlow then
+        b.selGlow = b:CreateTexture(nil, "OVERLAY")
+        b.selGlow:SetPoint("TOPLEFT", 2, -2)
+        b.selGlow:SetPoint("BOTTOMRIGHT", -2, 2)
+        b.selGlow:SetTexture(W.TEX .. "burst")
+        b.selGlow:SetBlendMode("ADD")
+        b.selGlow:SetVertexColor(1, 0.75, 0.2, 0.55)
+        b.selLine = b:CreateTexture(nil, "OVERLAY")
+        b.selLine:SetPoint("BOTTOMLEFT", 6, 3)
+        b.selLine:SetPoint("BOTTOMRIGHT", -6, 3)
+        b.selLine:SetHeight(2)
+        b.selLine:SetColorTexture(1, 0.85, 0.3, 1)
+    end
+    b:Enable()
+    b.selected = on and true or false
+    if on then b.selGlow:Show(); b.selLine:Show() else b.selGlow:Hide(); b.selLine:Hide() end
+    local fs = b.GetFontString and b:GetFontString()
+    if fs then
+        if on then fs:SetTextColor(1, 1, 1) else fs:SetTextColor(1, 0.82, 0) end
+    end
+end
+
 function W.Button(parent, text, w, h, onClick)
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetSize(w, h or 22)

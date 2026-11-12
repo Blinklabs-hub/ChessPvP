@@ -40,6 +40,7 @@ local KIND = {
     live = "live", bslive = "live", c4live = "live", vblive = "live", halive = "live",
     ladder = "board", admirals = "board", c4board = "board", vbboard = "board", haboard = "board",
     collection = "coll", bscollection = "coll", c4collection = "coll", vbcollection = "coll", hacollection = "coll",
+    chesshub = "hub", bshub = "hub", c4hub = "hub", vbhub = "hub", hahub = "hub",
 }
 local TAB_FOR = {
     chess = { play = "play", lobby = "lobby", live = "live", board = "ladder", coll = "collection" },
@@ -48,6 +49,7 @@ local TAB_FOR = {
     vb = { play = "vbplay", lobby = "vblobby", live = "vblive", board = "vbboard", coll = "vbcollection" },
     ha = { play = "haplay", lobby = "halobby", live = "halive", board = "haboard", coll = "hacollection" },
 }
+for key, t in pairs(TAB_FOR) do t.hub = key .. "hub" end
 UI.KIND, UI.TAB_FOR = KIND, TAB_FOR
 local TAB_BY_ID = {}
 for _, t in ipairs(TABS) do TAB_BY_ID[t.id] = t end
@@ -399,7 +401,7 @@ end
 -- Opens the finder on a game's Find page (after a game, "New Game" comes here).
 function UI.NewGame(game)
     if game then ns.db.settings.game = game end
-    FD.Show("games")
+    FD.Show(TAB_FOR[Game()].hub)
 end
 
 function UI.OpenFinder()
