@@ -3,7 +3,7 @@
 A chess addon for WoW Forever (interface 16001). You can play other players who have the addon, and there is a realm ladder, rank titles, badges, and board and piece unlocks.
 
 ## Install
-1. Download `CheckmateAzeroth-1.2.0.zip` from the [latest release](https://github.com/Blinklabs-hub/CheckmateAzeroth/releases/latest).
+1. Download `CheckmateAzeroth-1.3.0.zip` from the [latest release](https://github.com/Blinklabs-hub/CheckmateAzeroth/releases/latest).
 2. Unzip it and copy the `CheckmateAzeroth` folder (the one with `CheckmateAzeroth.toc` inside) to `World of Warcraft\_forever_\Interface\AddOns\`.
 3. Start the game and type `/checkmate` (or `/chess`), or click the knight button.
 

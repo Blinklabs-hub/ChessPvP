@@ -174,7 +174,7 @@ local function MyStatus()
 end
 
 function G.Announce(force)
-    if not C.Joined() or not P.me then return end
+    if not C.CanAnnounce() or not P.me then return end
     local now = ns.Now()
     if not force and now - lastAnnounce < 15 then
         if not announceQueued then
@@ -194,12 +194,12 @@ function G.Announce(force)
     -- While in a battle, what kind it is (for the Live Battles tab).
     local cur, battle = G.current, ""
     if status == "g" and cur then battle = table.concat({ cur.rated and "r" or "c", cur.base, cur.inc, #cur.moves }, ",") end
-    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(),
+    C.Presence("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(),
         char, guild, battle)
 end
 
 C.handlers.PF = function(sender, dist, parts)
-    if dist ~= "CHANNEL" then return end
+    if not C.IsBroadcast(dist) then return end
     local rating, w, l, d = tonumber(parts[3]), tonumber(parts[4]), tonumber(parts[5]), tonumber(parts[6])
     local title, points, status, opp = parts[7] or "", tonumber(parts[8]) or 0, parts[9] or "i", parts[10]
     if not P.UpdatePlayer(sender, rating, w, l, d, title, points) then return end
@@ -218,7 +218,7 @@ end
 
 -- A newcomer asks everyone to announce themselves; replies are spread out over time.
 C.handlers.HI = function(sender, dist)
-    if dist ~= "CHANNEL" then return end
+    if not C.IsBroadcast(dist) then return end
     local count = 0
     for _ in pairs(P.online) do count = count + 1 end
     local delay = 1 + math.random() * max(20, count / 5)
@@ -228,20 +228,32 @@ C.handlers.HI = function(sender, dist)
 end
 
 C.handlers.BY = function(sender, dist)
-    if dist ~= "CHANNEL" then return end
+    if not C.IsBroadcast(dist) then return end
     P.SetOffline(sender)
     ns.Fire("CHESS_LOBBY_CHANGED")
 end
 
 ns.On("CHESS_CHANNEL_READY", function()
     ns.After(2, function()
-        C.Broadcast("HI")
+        C.Presence("HI")
         G.Announce(true)
     end)
 end)
 
+-- Guild and group members are found even without the channel: say hello on login and
+-- whenever the group changes.
+local lastGroupHello = -100
+local function GroupHello()
+    if not P.me or #C.GroupDists() == 0 or ns.Now() - lastGroupHello < 20 then return end
+    lastGroupHello = ns.Now()
+    for _, dist in ipairs(C.GroupDists()) do C.SendRaw(dist, nil, "HI") end
+    G.Announce(true)
+end
+ns.On("CHESS_READY", function() ns.After(12, GroupHello) end)
+ns.RegisterEvent("GROUP_ROSTER_UPDATE", function() ns.After(3, GroupHello) end)
+
 ns.RegisterEvent("PLAYER_LOGOUT", function()
-    if C.Joined() then C.Broadcast("BY") end
+    if C.CanAnnounce() then C.Presence("BY") end
 end)
 
 ------------------------------------------------------------------------

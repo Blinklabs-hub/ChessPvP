@@ -38,6 +38,8 @@ local function TrySend(q)
     if q.dist == "CHANNEL" then
         target = C.ChannelId()
         if target == 0 then return "drop" end
+    elseif q.dist ~= "WHISPER" then
+        target = nil -- GUILD / PARTY / RAID need no target
     else
         -- Retail: plain name for our realm, Name-Realm otherwise. Forever: "First Surname".
         target = ns.WhisperTarget(q.target)
@@ -81,7 +83,7 @@ function C.SendRaw(dist, target, text, bulk)
         return
     end
     local item = { dist = dist, target = target, text = text, bulk = bulk }
-    if dist == "CHANNEL" or bulk then
+    if dist ~= "WHISPER" or bulk then
         if #queue > 40 then return end -- never let ladder chatter pile up
         queue[#queue + 1] = item
     else
@@ -106,6 +108,36 @@ function C.Broadcast(...)
     C.SendRaw("CHANNEL", nil, ns.Join(...))
 end
 
+-- Guild and group routes (addon messages only, nothing visible in chat).
+function C.GroupDists()
+    local list = {}
+    if IsInGuild and IsInGuild() then list[#list + 1] = "GUILD" end
+    if IsInRaid and IsInRaid() then
+        list[#list + 1] = "RAID"
+    elseif IsInGroup and IsInGroup() then
+        list[#list + 1] = "PARTY"
+    end
+    return list
+end
+
+-- Presence (hello / profile / goodbye) goes out on the hidden channel AND to the guild and
+-- group, so friends find each other even if the channel cannot be joined.
+function C.Presence(...)
+    local text = ns.Join(...)
+    if C.Joined() then C.SendRaw("CHANNEL", nil, text) end
+    for _, dist in ipairs(C.GroupDists()) do C.SendRaw(dist, nil, text) end
+end
+
+function C.CanAnnounce()
+    return C.Joined() or #C.GroupDists() > 0
+end
+
+-- Messages that reach many players at once (not a whisper).
+local BROADCAST = { CHANNEL = true, GUILD = true, PARTY = true, RAID = true, INSTANCE_CHAT = true }
+function C.IsBroadcast(dist)
+    return BROADCAST[dist] == true
+end
+
 function C.Joined()
     return C.ChannelId() ~= 0
 end
@@ -113,11 +145,28 @@ end
 ------------------------------------------------------------------------
 -- Receiving
 ------------------------------------------------------------------------
+-- The addon's old name used another prefix: tell the player when an old version reaches us.
+local OLD_PREFIX = "ChessPvP"
+local warnedOld = {}
+local function OldVersion(sender)
+    if ns.IsSecret(sender) or type(sender) ~= "string" then return end
+    local name = ns.FullName(sender)
+    if not name or warnedOld[name] then return end
+    warnedOld[name] = true
+    ns.Print("|cffff8040" .. ns.ShortName(name) .. " is using an old version (ChessPvP). They need to install Checkmate: Azeroth " ..
+        ns.VERSION .. " to play you:|r github.com/Blinklabs-hub/CheckmateAzeroth/releases")
+end
+
 ns.RegisterEvent("CHAT_MSG_ADDON", function(prefix, text, dist, sender)
-    if ns.IsSecret(prefix) or prefix ~= PREFIX then return end
+    if ns.IsSecret(prefix) then return end
+    if prefix == OLD_PREFIX then
+        OldVersion(sender)
+        return
+    end
+    if prefix ~= PREFIX then return end
     if ns.IsSecret(text) or ns.IsSecret(sender) or ns.IsSecret(dist) then return end
     if type(text) ~= "string" or type(sender) ~= "string" then return end
-    if dist ~= "WHISPER" and dist ~= "CHANNEL" then return end
+    if dist ~= "WHISPER" and not C.IsBroadcast(dist) then return end
     local raw = sender
     sender = ns.FullName(sender)
     if not sender or ns.SameName(sender, ns.me) then return end
@@ -223,5 +272,8 @@ end)
 
 ns.On("CHESS_READY", function()
     local register = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or RegisterAddonMessagePrefix
-    if register then pcall(register, PREFIX) end
+    if register then
+        pcall(register, PREFIX)
+        pcall(register, OLD_PREFIX)
+    end
 end)

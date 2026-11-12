@@ -933,6 +933,28 @@ if want("identity") then
 end
 
 ------------------------------------------------------------------------
+if want("discovery") then
+    section("discovery: friends find each other without the hidden channel")
+    net.forever = true
+    for _, route in ipairs({ "guild", "party" }) do
+        local a = NewClient("Canga", nil, "Prime")
+        local b = NewClient("Just", nil, "Keepingcalm")
+        a.noChannel, b.noChannel = true, true
+        if route == "guild" then a.guild, b.guild = "Peking", "Peking" else a.party, b.party = 1, 1 end
+        Advance(40)
+        check(not a.ns.Comm.Joined(), route .. ": the hidden channel really is unavailable")
+        check(a.ns.Profile.online["Just Keepingcalm"] ~= nil, route .. ": Canga sees Keepingcalm in the lobby")
+        check(b.ns.Profile.online["Canga Prime"] ~= nil, route .. ": Keepingcalm sees Canga in the lobby")
+        a.ns.Game.Invite("Just Keepingcalm", { rated = false }); Advance(1)
+        b.ns.Game.AnswerLatest(true); Advance(2)
+        check(a.ns.Game.current and a.ns.Game.current.state == "active", route .. ": and they can play")
+        a.ns.Game.Resign(); Advance(2)
+        for _, cl in ipairs({ a, b }) do eq(#cl.errors, 0, route .. " " .. cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
 if want("cheat") then
     section("validation")
     local c = NewClient("Val")

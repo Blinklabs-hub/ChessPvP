@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "1.2.0"
+ns.VERSION = "1.3.0"
 ns.PROTO = 2 -- network protocol version; bump when messages change incompatibly
 CheckmateAzeroth = ns -- exposed for debugging and the addon compartment
 

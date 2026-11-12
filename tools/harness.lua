@@ -178,7 +178,11 @@ function NewClient(name, savedDB, surname)
     env.UnitIsPlayer = function(unit) return env.UnitExists(unit) end
     env.GetNormalizedRealmName = function() return REALM end
     env.GetChannelName = function() return client.joined and 5 or 0 end
-    env.JoinTemporaryChannel = function() client.joined = true end
+    -- client.noChannel simulates a client that cannot join the hidden channel.
+    env.JoinTemporaryChannel = function() if not client.noChannel then client.joined = true end end
+    env.IsInGuild = function() return client.guild ~= nil end
+    env.IsInGroup = function() return client.party ~= nil end
+    env.IsInRaid = function() return false end
     env.ChatFrame_AddMessageEventFilter = function(ev, fn) client.filters[ev] = fn end
     env.C_Timer = { After = function(sec, fn) table.insert(timers, { at = T + sec, fn = fn, client = client }) end }
     env.C_ChatInfo = {
@@ -201,7 +205,16 @@ function NewClient(name, savedDB, surname)
                 elseif math.random() >= net.dropRate then
                     table.insert(netQueue, { at = T + 0.05, to = found, args = { prefix, text, "WHISPER", SenderName(client) } })
                 end
+            elseif dist == "GUILD" or dist == "PARTY" then
+                for _, c in ipairs(clients) do
+                    local same = (dist == "GUILD" and client.guild and c.guild == client.guild)
+                        or (dist == "PARTY" and client.party and c.party == client.party)
+                    if same and not c.offline then
+                        table.insert(netQueue, { at = T + 0.05, to = c, args = { prefix, text, dist, SenderName(client) } })
+                    end
+                end
             else
+                if not client.joined then return 9 end
                 for _, c in ipairs(clients) do
                     if c.joined and not c.offline then
                         table.insert(netQueue, { at = T + 0.05, to = c, args = { prefix, text, "CHANNEL", SenderName(client) } })
