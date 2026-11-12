@@ -114,6 +114,26 @@ function W.Title(parent, size, text, color)
     return fs
 end
 
+-- Makes a turn banner's centred text fit between its hint (left) and timer (right):
+-- the hint goes first, then the text shrinks. turn.text, turn.hint, turn.sub; width in pixels.
+function W.FitBanner(turn, width, baseSize)
+    if not width or width <= 0 then return end
+    baseSize = baseSize or 22
+    local function W_(fs) return (fs:IsShown() and fs:GetText() and fs:GetText() ~= "" and fs:GetStringWidth()) or 0 end
+    turn.hint:Show()
+    for size = baseSize, 12, -1 do
+        turn.text:SetFont(A.TitleFont(), size, "")
+        local tw = W_(turn.text)
+        local side = (width - tw) / 2 -- room on each side of the centred text
+        local sub = W_(turn.sub) + 16
+        if side >= sub then
+            if side < W_(turn.hint) + 20 then turn.hint:Hide() end
+            return
+        end
+        if turn.hint:IsShown() then turn.hint:Hide() end
+    end
+end
+
 function W.Button(parent, text, w, h, onClick)
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetSize(w, h or 22)

@@ -148,7 +148,7 @@ function UI.Layout()
     local top = ContentTop()
     -- The player line beside the title only when there is room for it.
     -- The character card shrinks with the window and hides when there is no room.
-    local cardW = min(360, w - 290)
+    local cardW = min(440, w - 300)
     if cardW >= 180 then
         main.me:SetWidth(cardW)
         main.me.name:SetWidth(cardW - 52 - 70)
@@ -317,7 +317,7 @@ local function Build()
     -- Your character card (armory style), top right. Click for your full profile.
     local card = CreateFrame("Button", nil, main)
     card:SetSize(340, 46)
-    card:SetPoint("TOPRIGHT", -30, -5)
+    card:SetPoint("TOPRIGHT", -38, -5)
     main.me = card
     card.portrait = W.Portrait(card, 46)
     card.portrait:SetPoint("LEFT", 0, 0)

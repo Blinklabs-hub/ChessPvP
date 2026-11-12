@@ -651,6 +651,7 @@ function BV.Layout(cellPx, showSide)
     view.turn:ClearAllPoints()
     view.turn:SetPoint("TOPLEFT", view.page, "TOPLEFT", 0, -(S + GAP))
     view.turn:SetSize(gridPx * 2 + GAP, BV.TURN - 6)
+    view.turn.width = gridPx * 2 + GAP
     view.handle:ClearAllPoints()
     view.handle:SetPoint("TOPLEFT", view.page, "TOPLEFT", gridPx * 2 + GAP * 2, -(S + GAP))
     view.handle:SetHeight(gridPx)
@@ -1073,6 +1074,7 @@ function BV.RefreshTurn(s)
     if urgent and left < 10 then turn.sub:SetTextColor(1, 0.3, 0.2) else turn.sub:SetTextColor(1, 1, 1) end
     turn.urgent = urgent
     turn:Show()
+    W.FitBanner(turn, turn.width, 22)
 end
 
 function BV.ResultText(s)

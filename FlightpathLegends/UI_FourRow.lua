@@ -552,6 +552,7 @@ function FV.Layout(cellPx, showSide)
     view.turn:ClearAllPoints()
     view.turn:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -(S + GAP))
     view.turn:SetSize(bw, FV.TURN - 6)
+    view.turn.width = bw
     local boardY = -(S + GAP + FV.TURN)
     view.holder:ClearAllPoints()
     view.holder:SetPoint("TOPLEFT", page, "TOPLEFT", 0, boardY)
@@ -757,6 +758,7 @@ function FV.RefreshTurn(s)
     if urgent and left < 10 then turn.sub:SetTextColor(1, 0.3, 0.2) else turn.sub:SetTextColor(1, 1, 1) end
     turn.urgent = urgent
     turn:Show()
+    W.FitBanner(turn, turn.width, 22)
 end
 
 function FV.ResultText(s)

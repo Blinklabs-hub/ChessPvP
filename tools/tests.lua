@@ -2048,7 +2048,7 @@ if want("vbui") then
     v.lockIn:Click()
     check(s.ready, "Seal Vault locks it")
     eq(s.phase, "play", "against the computer the game starts at once")
-    check(v.turn.text:GetText():find("MAKE YOUR GUESS") ~= nil, "the banner asks for a guess")
+    check(v.turn.text:GetText():find("YOUR GUESS") ~= nil, "the banner asks for a guess")
     check(v.right.rows[1].hl:IsShown(), "the guess row glows")
     for _, n in ipairs({ 1, 1, 2, 2 }) do v.gemButtons[n]:Click() end
     eq(v.right.rows[1].gems[3].gem, 2, "the guess shows in the row as it is built")

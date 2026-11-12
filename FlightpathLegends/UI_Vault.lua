@@ -59,6 +59,12 @@ local function MakeGem(parent, size)
     f.mark = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     f.mark:SetPoint("CENTER")
     f.mark:Hide()
+    function f:SetGemSize(sz)
+        self:SetSize(sz, sz)
+        self.socket:SetSize(sz * 0.86, sz * 0.86)
+        self.icon:SetSize(sz * 0.78, sz * 0.78)
+        self.ring:SetSize(sz * 0.95, sz * 0.95)
+    end
     function f:SetGem(n, hidden)
         self.gem = n
         if hidden then
@@ -143,13 +149,13 @@ local function BuildPanel(parent, kind)
     plate:SetHeight(VV.CODE - 4)
     plate:SetColorTexture(0.18, 0.14, 0.08, 0.9)
     p.lock = p:CreateTexture(nil, "ARTWORK")
-    p.lock:SetSize(32, 32)
-    p.lock:SetPoint("LEFT", plate, "LEFT", 4, 0)
+    p.lock:SetSize(VV.PINS - 4, VV.PINS - 4)
+    p.lock:SetPoint("CENTER", p, "TOPLEFT", VV.LABEL + VB.PEGS * VV.CELL + 4 + VV.PINS / 2, -(VV.CODE / 2 + 2))
     W.SetIcon(p.lock, "Interface\\Icons\\inv_misc_lockbox_1")
     p.code = {}
     for k = 1, VB.PEGS do
-        local g = MakeGem(p, VV.CELL + 4)
-        g:SetPoint("CENTER", p, "TOPLEFT", VV.LABEL + (k - 1) * VV.CELL + VV.CELL / 2 + 8, -(VV.CODE / 2 + 2))
+        local g = MakeGem(p, VV.CELL)
+        g:SetPoint("CENTER", p, "TOPLEFT", VV.LABEL + (k - 1) * VV.CELL + VV.CELL / 2, -(VV.CODE / 2 + 2))
         g:SetScript("OnClick", function() VV.OnSlotClick("code", k) end)
         p.code[k] = g
     end
@@ -545,15 +551,16 @@ function VV.Layout(cellPx, showSide)
     view.turn:ClearAllPoints()
     view.turn:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -(S + GAP))
     view.turn:SetSize(both, VV.TURN - 6)
+    view.turn.width = both
     view.palette:ClearAllPoints()
     view.palette:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -(top + ph + GAP))
     view.palette:SetWidth(both)
     -- gems on the left, buttons on the right
-    local gemStep = min(50, max(30, (both - 260) / VB.GEMS))
+    local gemStep = floor(min(48, max(26, (both - 16 - 260) / VB.GEMS)))
     for n, b in ipairs(view.gemButtons) do
+        b:SetGemSize(gemStep - 4)
         b:ClearAllPoints()
         b:SetPoint("LEFT", view.palette, "LEFT", 8 + (n - 1) * gemStep, 0)
-        b:SetScale(min(1, gemStep / 48))
     end
     view.lockIn:ClearAllPoints()
     view.lockIn:SetPoint("RIGHT", view.palette, "RIGHT", -8, 0)
@@ -723,14 +730,15 @@ function VV.RefreshTurn(s)
         bg, text, urgent = GOLDC, "LOCK YOUR VAULT", true
         hint = "Pick four gems (or Random), then Seal Vault"
     elseif s.phase == "set" then
-        text = "VAULT SEALED - WAITING FOR " .. string.upper(who)
+        text = "SEALED - WAITING FOR " .. string.upper(ns.ShortName(who))
         secs = ""
     elseif VB.CanGuess() then
-        bg, text, urgent = GREEN, string.format("ROUND %d OF %d - MAKE YOUR GUESS!", s.round, VB.ROUNDS), true
+        bg, text, urgent = GREEN, string.format("ROUND %d/%d - YOUR GUESS!", s.round, VB.ROUNDS), true
         hint = "Pick four gems, then Lock In"
         if s.missed > 0 then hint = hint .. string.format("   |cffff8040missed %d/%d|r", s.missed, VB.MAX_MISSED) end
     else
-        bg, text = RED, "GUESS LOCKED - " .. string.upper(who) .. " IS THINKING..."
+        bg, text = RED, string.upper(ns.ShortName(who)) .. " IS THINKING..."
+        if s.mode == "ai" then text = "THE COMPUTER IS THINKING..." end
         hint = string.format("Round %d of %d", s.round, VB.ROUNDS)
     end
     turn.bg:SetColorTexture(bg[1], bg[2], bg[3], 0.92)
@@ -741,6 +749,7 @@ function VV.RefreshTurn(s)
     if urgent and left < 10 then turn.sub:SetTextColor(1, 0.3, 0.2) else turn.sub:SetTextColor(1, 1, 1) end
     turn.urgent = urgent
     turn:Show()
+    W.FitBanner(turn, turn.width, 20)
 end
 
 function VV.ResultText(s)
