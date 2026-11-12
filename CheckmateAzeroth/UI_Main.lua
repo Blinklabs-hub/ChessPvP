@@ -386,7 +386,7 @@ local function RefreshInvite()
     end
     invitePopup.id = inv.id
     local e = P.players[inv.from]
-    local faction = (A.IsArmy(inv.army) and inv.army) or (e and (e.army or e.f))
+    local faction = e and e.f
     W.SetCrest(invitePopup.crest, faction)
     local v = ns.Ledger.Get(inv.from)
     local games = v and v.games or 0

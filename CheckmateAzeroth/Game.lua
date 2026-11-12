@@ -43,7 +43,6 @@ local function NewGame(o)
         spectators = {}, spectatorCount = 0,
         lastPiece = {}, knightPromo = {},
     }
-    if o.wa or o.ba then g.armies = ns.Assets.ResolveArmies(o.wa, o.ba) end
     g.timed = g.base > 0
     g.clock = { [1] = g.base, [-1] = g.base }
     g.turnT = ns.Now()
@@ -77,7 +76,6 @@ local function Persist(g)
     p.active = {
         id = g.id, mode = g.mode, white = g.white, black = g.black,
         wr = g.wr, br = g.br, wt = g.wt, bt = g.bt,
-        wa = g.armies and g.armies[1], ba = g.armies and g.armies[-1],
         myColor = g.myColor, opp = g.opp, rated = g.rated, base = g.base, inc = g.inc,
         aiLevel = g.aiLevel, moves = moves, seq = g.seq,
         clockW = g.clock[1], clockB = g.clock[-1], turnS = g.turnS,
@@ -192,7 +190,7 @@ function G.Announce(force)
     nextAnnounce = now + 240 + math.random(0, 60)
     local p = P.me
     local status, opp = MyStatus()
-    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(), ns.Assets.MyArmy())
+    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction())
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -202,7 +200,6 @@ C.handlers.PF = function(sender, dist, parts)
     if not P.UpdatePlayer(sender, rating, w, l, d, title, points) then return end
     local faction = parts[11]
     if faction == "Horde" or faction == "Alliance" then P.players[sender].f = faction end
-    if ns.Assets.IsArmy(parts[12]) then P.players[sender].army = parts[12] end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
     ns.Fire("CHESS_LOBBY_CHANGED")
@@ -401,8 +398,6 @@ function G.StartAI(level, color)
     Begin(NewGame({
         mode = "ai", aiLevel = level, myColor = color,
         white = (color == 1) and me or botName, black = (color == 1) and botName or me,
-        wa = (color == 1) and ns.Assets.MyArmy() or ns.Assets.Rival(ns.Assets.MyArmy()),
-        ba = (color == 1) and ns.Assets.Rival(ns.Assets.MyArmy()) or ns.Assets.MyArmy(),
     }))
 end
 
@@ -411,8 +406,7 @@ function G.StartLocal()
         ns.Print("finish your current game first.")
         return
     end
-    Begin(NewGame({ mode = "local", white = "White", black = "Black",
-        wa = ns.Assets.MyArmy(), ba = ns.Assets.Rival(ns.Assets.MyArmy()) }))
+    Begin(NewGame({ mode = "local", white = "White", black = "Black" }))
 end
 
 function G.Resign()
@@ -524,7 +518,7 @@ function G.Invite(name, opts)
         expires = ns.Now() + INVITE_TIMEOUT, q = opts.q,
     }
     C.Whisper(name, "IV", id, base, inc, rated and 1 or 0, (myColor == 1) and "w" or "b",
-        P.me.rating, ns.PROTO, opts.q and 1 or 0, P.MyTitleId(), ns.Assets.MyArmy())
+        P.me.rating, ns.PROTO, opts.q and 1 or 0, P.MyTitleId())
     if not opts.q then
         ns.Print("challenge sent to " .. ns.ShortName(name) .. ".")
     end
@@ -561,11 +555,10 @@ local function AcceptInvite(inv)
         white = (myColor == 1) and ns.me or inv.from, black = (myColor == 1) and inv.from or ns.me,
         wr = (myColor == 1) and p.rating or inv.rating, br = (myColor == 1) and inv.rating or p.rating,
         wt = (myColor == 1) and P.MyTitleId() or inv.title, bt = (myColor == 1) and inv.title or P.MyTitleId(),
-        wa = (myColor == 1) and ns.Assets.MyArmy() or inv.army, ba = (myColor == 1) and inv.army or ns.Assets.MyArmy(),
     })
-    C.Whisper(inv.from, "AC", inv.id, p.rating, P.MyTitleId(), ns.Assets.MyArmy())
+    C.Whisper(inv.from, "AC", inv.id, p.rating, P.MyTitleId())
     -- Resent until the challenger confirms (GA), in case the message is lost.
-    g.acPending = { next = ns.Now() + 3, tries = 0, text = ns.Join("AC", inv.id, p.rating, P.MyTitleId(), ns.Assets.MyArmy()) }
+    g.acPending = { next = ns.Now() + 3, tries = 0, text = ns.Join("AC", inv.id, p.rating, P.MyTitleId()) }
     -- Any other pending challenges are declined.
     for _, other in pairs(G.incoming) do
         C.Whisper(other.from, "DC", other.id, "busy")
@@ -622,7 +615,7 @@ C.handlers.IV = function(sender, dist, parts)
     if base == 0 then rated = false end
     local inv = {
         id = gid, from = sender, base = base, inc = inc, rated = rated,
-        theirColor = color, rating = floor(rating), title = parts[10] or "", army = parts[11],
+        theirColor = color, rating = floor(rating), title = parts[10] or "",
         expires = ns.Now() + INVITE_TIMEOUT,
     }
     if q then
@@ -666,7 +659,6 @@ C.handlers.AC = function(sender, dist, parts)
     if rating < 100 or rating > 3500 then rating = D.START_RATING end
     rating = floor(rating)
     local title = parts[4] or ""
-    local theirArmy = parts[5]
     G.outgoing = nil
     G.seek = nil
     local p = P.me
@@ -677,7 +669,6 @@ C.handlers.AC = function(sender, dist, parts)
         white = (myColor == 1) and ns.me or sender, black = (myColor == 1) and sender or ns.me,
         wr = (myColor == 1) and p.rating or rating, br = (myColor == 1) and rating or p.rating,
         wt = (myColor == 1) and P.MyTitleId() or title, bt = (myColor == 1) and title or P.MyTitleId(),
-        wa = (myColor == 1) and ns.Assets.MyArmy() or theirArmy, ba = (myColor == 1) and theirArmy or ns.Assets.MyArmy(),
     })
     for _, other in pairs(G.incoming) do
         C.Whisper(other.from, "DC", other.id, "busy")
@@ -809,8 +800,8 @@ C.handlers.SK = function(sender, dist, parts)
 end
 
 ------------------------------------------------------------------------
--- Profiles: ask a player for the things only they know (army, feats, title).
---   PQ                         -> PR;army;title;feat indexes (comma separated)
+-- Profiles: ask a player for the things only they know (faction, feats, title).
+--   PQ                         -> PR;faction;title;feat indexes (comma separated)
 ------------------------------------------------------------------------
 function G.RequestProfile(name)
     if ns.SameName(name, ns.me) then return end
@@ -823,7 +814,7 @@ C.handlers.PQ = function(sender, dist)
     for i = 1, #D.BADGES do
         if P.me.badges[D.BADGES[i].id] then list[#list + 1] = i end
     end
-    C.Whisper(sender, "PR", ns.Assets.MyArmy(), P.MyTitleId(), table.concat(list, ","))
+    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","))
 end
 
 C.handlers.PR = function(sender, dist, parts)
@@ -833,7 +824,7 @@ C.handlers.PR = function(sender, dist, parts)
         e = { r = D.START_RATING, w = 0, l = 0, d = 0, t = "", seen = ns.ServerTime() }
         P.players[sender] = e
     end
-    if ns.Assets.IsArmy(parts[2]) then e.army = parts[2] end
+    if parts[2] == "Horde" or parts[2] == "Alliance" then e.f = parts[2] end
     if parts[3] and #parts[3] <= 24 then e.t = parts[3] end
     local feats = {}
     for idx in string.gmatch(parts[4] or "", "%d+") do
@@ -1142,7 +1133,7 @@ C.handlers.SP = function(sender, dist)
         g.spectatorCount = g.spectatorCount + 1
     end
     C.Whisper(sender, "SS", g.id, g.white, g.black, g.wr or 0, g.br or 0, g.base, g.inc, g.rated and 1 or 0,
-        floor(max(0, G.Remaining(g, 1)) * 10), floor(max(0, G.Remaining(g, -1)) * 10), g.wt or "", g.bt or "", g.armies and g.armies[1] or "", g.armies and g.armies[-1] or "")
+        floor(max(0, G.Remaining(g, 1)) * 10), floor(max(0, G.Remaining(g, -1)) * 10), g.wt or "", g.bt or "")
     SendMoveList(sender, g, 1)
 end
 
@@ -1175,7 +1166,7 @@ C.handlers.SS = function(sender, dist, parts)
     local g = NewGame({
         id = gid, mode = "spectate", source = sender, white = white, black = black,
         wr = tonumber(parts[5]), br = tonumber(parts[6]), base = base, inc = inc, rated = parts[9] == "1",
-        wt = parts[12], bt = parts[13], wa = parts[14], ba = parts[15],
+        wt = parts[12], bt = parts[13],
     })
     g.clock[1] = (tonumber(parts[10]) or 0) / 10
     g.clock[-1] = (tonumber(parts[11]) or 0) / 10

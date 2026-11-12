@@ -157,19 +157,19 @@ function P.SetPieces(id)
     end
 end
 
--- Armies (Assets.ARMIES): Alliance and Horde are always available.
-function P.ArmyUnlocked(id)
-    local req = ns.Assets.ARMY_REQ[id]
-    if not req then return true end
-    return P.Stat(req[1]) >= req[2], string.format(D.STAT_TEXT[req[1]], req[2])
+-- Which side of a matchup style the player leads (1 or 2).
+function P.LeadIndex(set)
+    local lead = P.me and P.me.lead and P.me.lead[set.id]
+    if lead == 2 then return 2 end
+    return 1
 end
 
-function P.SetArmy(id)
-    if ns.Assets.IsArmy(id) and P.ArmyUnlocked(id) then
-        P.me.army = id
-        ns.Fire("PROFILE_CHANGED")
-        if ns.Game then ns.Game.Announce() end
-    end
+function P.SwapLead(id)
+    local set = D.PIECES_BY_ID[id]
+    if not set or not set.armies or set.faction then return end
+    P.me.lead = P.me.lead or {}
+    P.me.lead[id] = (P.LeadIndex(set) == 1) and 2 or 1
+    ns.Fire("PROFILE_CHANGED")
 end
 
 function P.Theme()
@@ -204,9 +204,6 @@ local function UnlockedSet()
     end
     for i = 1, #D.PIECES do
         if P.IsUnlocked(D.PIECES[i]) then set["Style: " .. D.PIECES[i].name] = true end
-    end
-    for _, id in ipairs(ns.Assets.ARMY_ORDER) do
-        if P.ArmyUnlocked(id) then set["Army: " .. ns.Assets.ARMIES[id].title] = true end
     end
     -- Only the highest rank counts here, so finishing placement announces one title.
     local titles = P.AvailableTitles()
@@ -331,7 +328,6 @@ function P.Board()
                 name = name, r = e.r, w = e.w, l = e.l, d = e.d, games = e.games, beaten = e.beaten,
                 disputed = e.disputed, peak = e.peak, t = t, me = name == ns.me,
                 f = name == ns.me and ns.Assets.MyFaction() or (known and known.f),
-                army = name == ns.me and ns.Assets.MyArmy() or (known and known.army),
             }
         end
     end
@@ -364,7 +360,7 @@ function P.OnlineList()
                 name = name, status = o.status, opp = o.opp,
                 -- Witnessed rating when known; otherwise what they claim, marked unverified.
                 r = v and v.r or (e and e.r) or D.START_RATING, verified = v ~= nil,
-                t = e and e.t or "", f = e and e.f, army = e and e.army,
+                t = e and e.t or "", f = e and e.f,
                 g = v and v.games or 0, casual = ns.Ledger.Casual(name),
             }
         end

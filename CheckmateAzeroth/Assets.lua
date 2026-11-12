@@ -208,17 +208,6 @@ A.ARMIES = {
     },
 }
 
--- Unlock requirements per army (stat, amount) - see Profile.Stat.
-A.ARMY_REQ = {
-    Kaldorei = { "games", 3 },
-    Ironforge = { "games", 3 },
-    Scourge = { "wins", 5 },
-    Legion = { "wins", 10 },
-    Blackrock = { "points", 60 },
-    Keepers = { "peak", 1500 },
-    OldGods = { "streak", 5 },
-}
-
 -- Sound entries for every army (death cries and battle cries).
 function A.RegisterArmySounds()
     for id, army in pairs(A.ARMIES) do
@@ -246,33 +235,33 @@ function A.IsArmy(id)
     return type(id) == "string" and A.ARMIES[id] ~= nil
 end
 
--- The army this player has chosen to lead (falls back to their faction).
+-- The two sides of a piece style from the local player's point of view: mine, theirs.
+-- Classic chess and other non-matchup styles fall back to the player's faction.
+function A.Sides(set)
+    set = set or (ns.Profile and ns.Profile.me and ns.Profile.PieceSet())
+    if set and set.armies and not set.faction then
+        local lead = ns.Profile.LeadIndex(set)
+        return set.armies[lead], set.armies[3 - lead]
+    end
+    local mine = A.MyFaction()
+    return mine, mine == "Horde" and "Alliance" or "Horde"
+end
+
+-- The army the local player leads with the current style.
 function A.MyArmy()
-    local p = ns.Profile and ns.Profile.me
-    local id = p and p.army
-    if A.IsArmy(id) and ns.Profile.ArmyUnlocked(id) then return id end
-    return A.MyFaction()
+    return (A.Sides())
 end
 
 function A.Rival(id)
-    local army = A.ARMIES[id]
-    return army and army.rival or "Horde"
+    return id == "Horde" and "Alliance" or "Horde"
 end
 
--- The two armies of a game: my choice and theirs; on a clash Black takes the rival.
-function A.ResolveArmies(whiteArmy, blackArmy)
-    if not A.IsArmy(whiteArmy) then whiteArmy = "Alliance" end
-    if not A.IsArmy(blackArmy) then blackArmy = A.Rival(whiteArmy) end
-    if blackArmy == whiteArmy then blackArmy = A.Rival(whiteArmy) end
-    return { [1] = whiteArmy, [-1] = blackArmy }
-end
-
--- Army for a chess colour (1 white, -1 black) in a game (nil = no game yet).
-function A.ArmyFor(color, g)
-    if g and g.armies and g.armies[color] then return g.armies[color] end
-    local mine = A.MyArmy()
+-- Army for a chess colour (1 white, -1 black) in a game (nil = no game yet), as drawn on
+-- this player's screen: their own pieces are their side of the chosen style.
+function A.ArmyFor(color, g, set)
+    local mine, theirs = A.Sides(set)
     local myColor = (g and g.myColor) or 1
-    return color == myColor and mine or A.Rival(mine)
+    return color == myColor and mine or theirs
 end
 
 function A.UnitName(army, t)

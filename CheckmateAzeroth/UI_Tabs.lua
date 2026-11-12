@@ -183,7 +183,7 @@ function T.BuildLobby(page)
             self.status:SetWidth(max(60, w - statusX - 190))
         end
     end, function(row, item)
-        local army = item.army or item.f
+        local army = item.f
         local info = army and A.ARMIES[army]
         local color = info and info.color or { 0.9, 0.9, 0.9 }
         row.name:SetText("|c" .. W.Hex(color) .. ns.ShortName(item.name) .. "|r")
@@ -236,7 +236,7 @@ function T.RefreshLobby()
     for id, b in pairs(lobby.filters) do
         if id == lobby.filter then b:Disable() else b:Enable() end
     end
-    W.SetCrest(lobby.emptyCrest, A.MyArmy())
+    W.SetCrest(lobby.emptyCrest, A.MyFaction())
     if #rows == 0 then
         local text
         if not C.Joined() then
@@ -258,7 +258,7 @@ function T.RefreshLobby()
     -- Queue panel
     local s = ns.db.settings
     local idx = s.queueTc or 0
-    lobby.tcButton:SetText(idx == 0 and "Any time control" or D.TIME_CONTROLS[idx].name)
+    lobby.tcButton:SetText(ns.PlayView.QueueTcText())
     local seek = G.seek
     lobby.ratedButton:SetText(seek and seek.rated and "Leave queue" or "Rated Queue")
     lobby.casualButton:SetText(seek and not seek.rated and "Leave queue" or "Casual Queue")
@@ -410,8 +410,8 @@ function T.BuildLadder(page)
         row.num:SetText(mc and ("|c" .. W.Hex(mc) .. index .. "|r") or index)
         local idx = RankIndex(it.r, it.games)
         if idx then W.SetRankIcon(row.rank, idx) else row.rank:Hide() end
-        W.SetCrest(row.crest, it.army or it.f)
-        row.name:SetText("|c" .. W.Hex(FactionColor(it.army or it.f)) .. ns.ShortName(it.name) .. "|r")
+        W.SetCrest(row.crest, it.f)
+        row.name:SetText("|c" .. W.Hex(FactionColor(it.f)) .. ns.ShortName(it.name) .. "|r")
         row.title:SetText(P.TitleText(it.t, it.r, it.games))
         row.rating:SetText(it.r)
         row.record:SetText(string.format("|cff40ff40%d|r / |cffff5040%d|r / |cffaaaaaa%d|r", it.w, it.l, it.d))
@@ -487,12 +487,12 @@ function T.RefreshLadder()
         local f, it = ladder.podium[i], rows[i]
         if it and ladder.podiumH > 0 then
             f.name_ = it.name
-            f.name:SetText("|c" .. W.Hex(FactionColor(it.army or it.f)) .. ns.ShortName(it.name) .. "|r")
+            f.name:SetText("|c" .. W.Hex(FactionColor(it.f)) .. ns.ShortName(it.name) .. "|r")
             f.sub:SetText(P.TitleText(it.t, it.r, it.games))
             f.rating:SetText(it.r)
-            W.SetCrest(f.crest, it.army or it.f)
+            W.SetCrest(f.crest, it.f)
             local ri = RankIndex(it.r, it.games)
-            if not (ri and W.SetRankIcon(f.rank, ri)) then W.SetCrest(f.rank, it.army or it.f) end
+            if not (ri and W.SetRankIcon(f.rank, ri)) then W.SetCrest(f.rank, it.f) end
             f:Show()
         else
             f:Hide()
@@ -504,13 +504,12 @@ end
 ------------------------------------------------------------------------
 -- Collection
 ------------------------------------------------------------------------
-local coll = { section = "armies" }
+local coll = { section = "pieces" }
 T.coll = coll
 
 local SECTIONS = {
     { id = "boards", name = "Battlefields", icon = "Interface\\Icons\\inv_misc_map_01" },
-    { id = "armies", name = "Armies", icon = "Interface\\Icons\\inv_bannerpvp_02" },
-    { id = "pieces", name = "Styles", icon = "Interface\\Icons\\inv_misc_book_09" },
+    { id = "pieces", name = "Styles", icon = "Interface\\Icons\\inv_bannerpvp_02" },
     { id = "titles", name = "Titles", icon = "Interface\\PvPRankBadges\\PvPRank06" },
     { id = "badges", name = "Feats", icon = "Interface\\Icons\\achievement_pvp_a_04" },
 }
@@ -594,33 +593,82 @@ local function UpdateBoardTile(tile, e)
 end
 
 local function BuildPieceTile(tile)
-    TileFrame(tile, 140, 150)
+    TileFrame(tile, 220, 176)
     tile.views = {}
-    for i, x in ipairs({ -30, 30 }) do
-        local v = Board.CreatePieceView(tile, 54)
+    for i, x in ipairs({ -52, 52 }) do
+        local v = Board.CreatePieceView(tile, 66)
         v:SetPoint("CENTER", tile, "TOP", x, -48)
         tile.views[i] = v
     end
+    tile.vs = W.Title(tile, 18, "vs")
+    tile.vs:SetPoint("CENTER", tile, "TOP", 0, -48)
+    tile.mine = W.Label(tile, "GameFontHighlightSmall")
+    tile.mine:SetPoint("TOP", tile, "TOP", -52, -84)
+    tile.mine:SetWidth(100)
+    tile.mine:SetJustifyH("CENTER")
+    tile.theirs = W.Label(tile, "GameFontHighlightSmall")
+    tile.theirs:SetPoint("TOP", tile, "TOP", 52, -84)
+    tile.theirs:SetWidth(100)
+    tile.theirs:SetJustifyH("CENTER")
     tile.name = W.Title(tile, 14)
-    tile.name:SetPoint("TOP", 0, -102)
+    tile.name:SetPoint("TOP", 0, -112)
     tile.name:SetJustifyH("CENTER")
-    tile.name:SetWidth(132)
+    tile.name:SetWidth(212)
     tile.state = W.Label(tile, "GameFontHighlightSmall")
     tile.state:SetPoint("TOP", tile.name, "BOTTOM", 0, -3)
-    tile.state:SetWidth(132)
+    tile.state:SetWidth(212)
     tile.state:SetJustifyH("CENTER")
+    tile.swap = W.Button(tile, "Swap sides", 96, 20, function()
+        if tile.item then
+            P.SwapLead(tile.item.item.id)
+            if not tile.item.selected then P.SetPieces(tile.item.item.id) end
+        end
+    end)
+    tile.swap:SetPoint("BOTTOM", 0, 6)
     tile:SetScript("OnClick", function(self)
         if self.item and self.item.unlocked then
             ns.Sound("click")
             P.SetPieces(self.item.item.id)
+            local mine = A.Sides(self.item.item)
+            ns.Sound("cry" .. mine)
+        end
+    end)
+    W.Tooltip(tile, function(self, tip)
+        local e = self.item
+        if not e then return false end
+        local set = e.item
+        tip:SetText(set.name, 1, 0.82, 0)
+        if set.armies then
+            local mine, theirs = A.Sides(set)
+            local names = { "Pawn", "Knight", "Bishop", "Rook", "Queen", "King" }
+            tip:AddDoubleLine("You lead", "Opponent", 0.6, 1, 0.6, 1, 0.5, 0.4)
+            for k = 6, 1, -1 do
+                tip:AddDoubleLine(A.ARMIES[mine].units[k].name, A.ARMIES[theirs].units[k].name, 1, 1, 1, 1, 1, 1)
+            end
+            tip:AddLine(" ")
+            tip:AddLine(set.faction and "You always lead your character's faction." or "Use Swap sides to lead the other army.", 0.8, 0.8, 0.8, true)
+            tip:AddLine("Only changes how the board looks on your screen.", 0.6, 0.6, 0.6, true)
         end
     end)
 end
 
 local function UpdatePieceTile(tile, e)
-    tile.views[1]:SetPiece(6, nil, e.item)
-    tile.views[2]:SetPiece(-5, nil, e.item)
-    tile.name:SetText(e.unlocked and e.item.name or ("|cff808080" .. e.item.name .. "|r"))
+    local set = e.item
+    tile.views[1]:SetPiece(6, nil, set)
+    tile.views[2]:SetPiece(-6, nil, set)
+    for _, v in ipairs(tile.views) do v:SetAlpha(e.unlocked and 1 or 0.45) end
+    if set.armies then
+        local mine, theirs = A.Sides(set)
+        local a, b = A.ARMIES[mine], A.ARMIES[theirs]
+        tile.mine:SetText("|c" .. W.Hex(a.color) .. a.name .. "|r")
+        tile.theirs:SetText("|c" .. W.Hex(b.color) .. b.name .. "|r")
+        tile.vs:Show()
+    else
+        tile.mine:SetText("White")
+        tile.theirs:SetText("Black")
+        tile.vs:Show()
+    end
+    tile.name:SetText(e.unlocked and set.name or ("|cff808080" .. set.name .. "|r"))
     if e.selected then
         tile.state:SetText("|cff40ff40In use|r")
         tile.sel:Show()
@@ -629,7 +677,7 @@ local function UpdatePieceTile(tile, e)
         tile.state:SetText(e.unlocked and "|cffaaaaaaClick to use|r" or ("|cffff6040" .. e.req .. "|r"))
     end
     if e.unlocked then tile.lock:Hide() else tile.lock:Show() end
-    for _, v in ipairs(tile.views) do v:SetAlpha(e.unlocked and 1 or 0.45) end
+    if e.unlocked and set.armies and not set.faction then tile.swap:Show() else tile.swap:Hide() end
 end
 
 local function BuildTitleTile(tile)
@@ -725,71 +773,9 @@ local function UpdateBadgeTile(tile, e)
     end
 end
 
-local function BuildArmyTile(tile)
-    TileFrame(tile, 190, 176)
-    tile.views = {}
-    local spots = { { 0, -50, 70, 6 }, { -56, -62, 46, 5 }, { 56, -62, 46, 1 } } -- x, y, size, piece
-    for i, sp in ipairs(spots) do
-        local v = Board.CreatePieceView(tile, sp[3])
-        v:SetPoint("CENTER", tile, "TOP", sp[1], sp[2])
-        v:SetFrameLevel(tile:GetFrameLevel() + (i == 1 and 4 or 2))
-        tile.views[i] = v
-        v.spot = sp
-    end
-    tile.name = W.Title(tile, 15)
-    tile.name:SetPoint("TOP", 0, -100)
-    tile.name:SetJustifyH("CENTER")
-    tile.name:SetWidth(182)
-    tile.units = W.Label(tile, "GameFontDisableSmall")
-    tile.units:SetPoint("TOP", tile.name, "BOTTOM", 0, -2)
-    tile.units:SetWidth(182)
-    tile.units:SetJustifyH("CENTER")
-    tile.state = W.Label(tile, "GameFontHighlightSmall")
-    tile.state:SetPoint("BOTTOM", 0, 8)
-    tile.state:SetWidth(182)
-    tile.state:SetJustifyH("CENTER")
-    tile:SetScript("OnClick", function(self)
-        if self.item and self.item.unlocked then
-            ns.Sound("click")
-            P.SetArmy(self.item.id)
-            ns.Sound("cry" .. self.item.id)
-        end
-    end)
-    W.Tooltip(tile, function(self, tip)
-        local e = self.item
-        if not e then return false end
-        local army = A.ARMIES[e.id]
-        tip:SetText(army.title, army.color[1], army.color[2], army.color[3])
-        local names = { "Pawn", "Knight", "Bishop", "Rook", "Queen", "King" }
-        for k = 6, 1, -1 do tip:AddDoubleLine(names[k], army.units[k].name, 0.7, 0.7, 0.7, 1, 1, 1) end
-        tip:AddLine(" ")
-        tip:AddLine("Your opponent sees this army too.", 0.8, 0.8, 0.8, true)
-    end)
-end
-
-local function UpdateArmyTile(tile, e)
-    local army = A.ARMIES[e.id]
-    local fake = { armies = { [1] = e.id, [-1] = e.id } }
-    for _, v in ipairs(tile.views) do
-        v:SetPiece(v.spot[4], fake, D.PIECES_BY_ID.warcraft)
-        v:SetAlpha(e.unlocked and 1 or 0.4)
-    end
-    tile.name:SetText("|c" .. W.Hex(e.unlocked and army.color or { 0.5, 0.5, 0.5 }) .. army.title .. "|r")
-    tile.units:SetText(army.units[6].name .. "  ·  " .. army.units[5].name)
-    if e.selected then
-        tile.state:SetText("|cff40ff40You lead this army|r")
-        tile.sel:Show()
-    else
-        tile.sel:Hide()
-        tile.state:SetText(e.unlocked and "|cffaaaaaaClick to lead this army|r" or ("|cffff6040" .. e.req .. "|r"))
-    end
-    if e.unlocked then tile.lock:Hide() else tile.lock:Show() end
-end
-
 local GRID_SPEC = {
-    armies = { 190, 176, BuildArmyTile, UpdateArmyTile },
     boards = { 140, 150, BuildBoardTile, UpdateBoardTile },
-    pieces = { 140, 150, BuildPieceTile, UpdatePieceTile },
+    pieces = { 220, 176, BuildPieceTile, UpdatePieceTile },
     titles = { 220, 48, BuildTitleTile, UpdateTitleTile },
     badges = { 300, 66, BuildBadgeTile, UpdateBadgeTile },
 }
@@ -825,7 +811,7 @@ function T.BuildCollection(page)
     end
     coll.points = W.Title(page, 15)
     coll.points:SetPoint("TOPLEFT", 4, -(#SECTIONS * 46 + 10))
-    coll.pointsSub = W.Label(page, "GameFontDisableSmall", "Earn feats to unlock\nbattlefields, armies and titles.")
+    coll.pointsSub = W.Label(page, "GameFontDisableSmall", "Every feat awards a title.\nBattlefields and styles\nare all free to use.")
     coll.pointsSub:SetPoint("TOPLEFT", coll.points, "BOTTOMLEFT", 0, -4)
     coll.pointsSub:SetWidth(150)
 
@@ -866,15 +852,8 @@ function T.RefreshCollection()
             local ok, req = P.IsUnlocked(t)
             data[i] = { item = t, unlocked = ok, req = req, selected = (P.Theme() == t) }
         end
-    elseif section == "armies" then
-        coll.header:SetText("Armies of Azeroth")
-        local mine = A.MyArmy()
-        for _, id in ipairs(A.ARMY_ORDER) do
-            local ok, req = P.ArmyUnlocked(id)
-            data[#data + 1] = { id = id, unlocked = ok, req = req, selected = mine == id }
-        end
     elseif section == "pieces" then
-        coll.header:SetText("Piece styles")
+        coll.header:SetText("Piece styles  |cffaaaaaaWarcraft matchups|r")
         for i = 1, #D.PIECES do
             local t = D.PIECES[i]
             local ok, req = P.IsUnlocked(t)

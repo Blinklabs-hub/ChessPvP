@@ -235,51 +235,67 @@ local function ArmedResign(button, setText)
     end)
 end
 
+-- The same queue time control is used here and in the Lobby (settings.queueTc, 0 = any).
+local function QueueTcText()
+    local idx = ns.db.settings.queueTc or 0
+    return idx == 0 and "Any time control" or D.TIME_CONTROLS[idx].name
+end
+PV.QueueTcText = QueueTcText
+
 local function BuildSetup(sp)
     local s = ns.db.settings
-    local h1 = W.Title(sp, 18, "Seek a Battle")
-    h1:SetPoint("TOPLEFT", 4, -2)
+    local W2 = PV.SIDE - 8
 
-    local tcLabel = W.Label(sp, "GameFontHighlightSmall", "Time control")
-    tcLabel:SetPoint("TOPLEFT", h1, "BOTTOMLEFT", 0, -14)
-    play.tcButton = W.Button(sp, "", 150, 22, function()
-        s.tc = (s.tc % #D.TIME_CONTROLS) + 1
+    -- Quick Match: the queue (same as in the Lobby)
+    local h1 = W.Title(sp, 18, "Quick Match")
+    h1:SetPoint("TOPLEFT", 4, -2)
+    local q1 = W.Label(sp, "GameFontDisableSmall", "Get paired with anyone waiting in the same queue.")
+    q1:SetPoint("TOPLEFT", h1, "BOTTOMLEFT", 0, -4)
+    q1:SetWidth(W2)
+    play.queueTc = W.Button(sp, "", W2, 22, function()
+        s.queueTc = ((s.queueTc or 0) + 1) % (#D.TIME_CONTROLS)
         if G.seek then G.StopSeek() end
         ns.UI.Refresh()
     end)
-    play.tcButton:SetPoint("TOPRIGHT", sp, "TOPRIGHT", -4, -30)
+    play.queueTc:SetPoint("TOPLEFT", q1, "BOTTOMLEFT", 0, -6)
+    play.ratedQueue = W.Button(sp, "Rated Queue", W2 / 2 - 3, 28, function()
+        if G.seek and G.seek.rated then G.StopSeek() else ns.Tabs.JoinQueue(true) end
+        ns.UI.Refresh()
+    end)
+    play.ratedQueue:SetPoint("TOPLEFT", play.queueTc, "BOTTOMLEFT", 0, -6)
+    play.casualQueue = W.Button(sp, "Casual Queue", W2 / 2 - 3, 28, function()
+        if G.seek and not G.seek.rated then G.StopSeek() else ns.Tabs.JoinQueue(false) end
+        ns.UI.Refresh()
+    end)
+    play.casualQueue:SetPoint("LEFT", play.ratedQueue, "RIGHT", 6, 0)
+    play.queueNote = W.Label(sp, "GameFontHighlightSmall", "")
+    play.queueNote:SetPoint("TOPLEFT", play.ratedQueue, "BOTTOMLEFT", 0, -5)
+    play.queueNote:SetWidth(W2)
 
-    local colLabel = W.Label(sp, "GameFontHighlightSmall", "Your colour (challenges)")
-    colLabel:SetPoint("TOPLEFT", tcLabel, "BOTTOMLEFT", 0, -16)
-    play.colorButton = W.Button(sp, "", 150, 22, function()
+    -- Challenge a player by name
+    local h2 = W.Title(sp, 18, "Challenge a Player")
+    h2:SetPoint("TOPLEFT", play.queueNote, "BOTTOMLEFT", 0, -14)
+    play.tcButton = W.Button(sp, "", W2 / 2 - 3, 22, function()
+        s.tc = (s.tc % #D.TIME_CONTROLS) + 1
+        ns.UI.Refresh()
+    end)
+    play.tcButton:SetPoint("TOPLEFT", h2, "BOTTOMLEFT", 0, -6)
+    play.colorButton = W.Button(sp, "", W2 / 2 - 3, 22, function()
         s.color = (s.color == "r" and "w") or (s.color == "w" and "b") or "r"
         ns.UI.Refresh()
     end)
-    play.colorButton:SetPoint("TOPRIGHT", play.tcButton, "BOTTOMRIGHT", 0, -6)
-
+    play.colorButton:SetPoint("LEFT", play.tcButton, "RIGHT", 6, 0)
     play.ratedCheck = W.Check(sp, "Rated", function() return s.rated end, function(v)
         s.rated = v
-        if G.seek then G.StopSeek() end
         ns.UI.Refresh()
     end)
-    play.ratedCheck:SetPoint("TOPLEFT", colLabel, "BOTTOMLEFT", -4, -12)
-
-    play.seekButton = W.Button(sp, "Find Match", PV.SIDE - 8, 30, function()
-        if G.seek then
-            G.StopSeek()
-        else
-            local tc = D.TIME_CONTROLS[s.tc]
-            G.StartSeek(tc.base, tc.inc, s.rated)
-        end
-        ns.UI.Refresh()
-    end)
-    play.seekButton:SetPoint("TOPLEFT", play.ratedCheck, "BOTTOMLEFT", 4, -8)
+    play.ratedCheck:SetPoint("TOPLEFT", play.tcButton, "BOTTOMLEFT", -4, -2)
 
     local nameBox = CreateFrame("EditBox", nil, sp, "InputBoxTemplate")
-    nameBox:SetSize(PV.SIDE - 118, 22)
+    nameBox:SetSize(W2 - 108, 22)
     nameBox:SetAutoFocus(false)
     nameBox:SetMaxLetters(48)
-    nameBox:SetPoint("TOPLEFT", play.seekButton, "BOTTOMLEFT", 6, -14)
+    nameBox:SetPoint("TOPLEFT", play.ratedCheck, "BOTTOMLEFT", 10, -2)
     play.nameBox = nameBox
     local function SendChallenge()
         if G.outgoing and not G.outgoing.q then
@@ -303,29 +319,25 @@ local function BuildSetup(sp)
     nameBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     play.challengeButton = W.Button(sp, "Challenge", 96, 22, SendChallenge)
     play.challengeButton:SetPoint("LEFT", nameBox, "RIGHT", 6, 0)
-    local hint = W.Label(sp, "GameFontDisableSmall", "Name of a player, or leave empty to challenge your target.")
-    hint:SetPoint("TOPLEFT", nameBox, "BOTTOMLEFT", -6, -4)
-    hint:SetWidth(PV.SIDE - 8)
+    play.setupNote = W.Label(sp, "GameFontDisableSmall", "")
+    play.setupNote:SetPoint("TOPLEFT", nameBox, "BOTTOMLEFT", -6, -4)
+    play.setupNote:SetWidth(W2)
 
-    play.setupNote = W.Label(sp, "GameFontHighlightSmall", "")
-    play.setupNote:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
-    play.setupNote:SetWidth(PV.SIDE - 8)
-    play.setupNote:SetTextColor(1, 0.82, 0)
-
-    local h2 = W.Title(sp, 18, "Practice")
-    h2:SetPoint("TOPLEFT", play.setupNote, "BOTTOMLEFT", 0, -20)
+    -- Practice
+    local h3 = W.Title(sp, 18, "Practice")
+    h3:SetPoint("TOPLEFT", play.setupNote, "BOTTOMLEFT", 0, -14)
     play.aiButton = W.Button(sp, "", 170, 24, function()
         s.aiLevel = (s.aiLevel % #AI.LEVELS) + 1
         ns.UI.Refresh()
     end)
-    play.aiButton:SetPoint("TOPLEFT", h2, "BOTTOMLEFT", 0, -10)
-    local aiStart = W.Button(sp, "Play", PV.SIDE - 184, 24, function()
+    play.aiButton:SetPoint("TOPLEFT", h3, "BOTTOMLEFT", 0, -6)
+    local aiStart = W.Button(sp, "Play", W2 - 176, 24, function()
         local color = (s.color == "w" and 1) or (s.color == "b" and -1) or nil
         G.StartAI(s.aiLevel, color)
     end)
     aiStart:SetPoint("LEFT", play.aiButton, "RIGHT", 6, 0)
-    local localButton = W.Button(sp, "Pass & Play (two players, one screen)", PV.SIDE - 8, 24, function() G.StartLocal() end)
-    localButton:SetPoint("TOPLEFT", play.aiButton, "BOTTOMLEFT", 0, -8)
+    local localButton = W.Button(sp, "Pass & Play (two players, one screen)", W2, 24, function() G.StartLocal() end)
+    localButton:SetPoint("TOPLEFT", play.aiButton, "BOTTOMLEFT", 0, -6)
 
     play.backButton = W.Button(sp, "Back to battle", 130, 24, function()
         play.showSetup = false
@@ -566,6 +578,25 @@ end
 function PV.RefreshSetup()
     local s = ns.db.settings
     if G.current then play.backButton:Show() else play.backButton:Hide() end
+    -- Quick Match
+    play.queueTc:SetText(QueueTcText())
+    local seek = G.seek
+    play.ratedQueue:SetText(seek and seek.rated and "Leave queue" or "Rated Queue")
+    play.casualQueue:SetText(seek and not seek.rated and "Leave queue" or "Casual Queue")
+    if seek then
+        local secs = floor(ns.Now() - (seek.since or ns.Now()))
+        play.queueNote:SetText(string.format("|cffffd100Searching the %s queue... %d:%02d|r",
+            seek.rated and "rated" or "casual", floor(secs / 60), secs % 60))
+    elseif not C.Joined() then
+        play.queueNote:SetText("|cffaaaaaaConnecting to the chess network...|r")
+    else
+        local r, c = 0, 0
+        for _, o in pairs(P.online) do
+            if o.status == "r" then r = r + 1 elseif o.status == "c" then c = c + 1 end
+        end
+        play.queueNote:SetText(string.format("|cffaaaaaa%d waiting rated  ·  %d waiting casual|r", r, c))
+    end
+    -- Challenge a player
     local tc = D.TIME_CONTROLS[s.tc] or D.TIME_CONTROLS[4]
     play.tcButton:SetText(tc.name)
     local ratedPossible = tc.base > 0
@@ -575,23 +606,16 @@ function PV.RefreshSetup()
         play.ratedCheck.label:SetText("Rated (counts for the ladder)")
     else
         play.ratedCheck:Disable()
-        play.ratedCheck.label:SetText("|cff808080Rated games need a clock|r")
+        play.ratedCheck.label:SetText("|cff808080Rated battles need a clock|r")
     end
     play.colorButton:SetText((s.color == "w" and "Play as White") or (s.color == "b" and "Play as Black") or "Random colour")
     play.aiButton:SetText("Computer: " .. AI.LEVELS[s.aiLevel].name)
-    play.seekButton:SetText(G.seek and "Searching... (cancel)" or "Find Match")
     if G.outgoing and not G.outgoing.q then
         play.challengeButton:SetText("Cancel")
-        play.setupNote:SetText("Waiting for " .. ns.ShortName(G.outgoing.to) .. " to answer...")
+        play.setupNote:SetText("|cffffd100Waiting for " .. ns.ShortName(G.outgoing.to) .. " to answer...|r")
     else
         play.challengeButton:SetText("Challenge")
-        if G.seek then
-            play.setupNote:SetText("Looking for an opponent who wants the same game.")
-        elseif not C.Joined() then
-            play.setupNote:SetText("|cffaaaaaaConnecting to the chess network...|r")
-        else
-            play.setupNote:SetText("")
-        end
+        play.setupNote:SetText("Type a name, or leave it empty to challenge your target.")
     end
 end
 

@@ -499,7 +499,7 @@ if want("visual") then
         check(Played(b, 540696) or Played(b, 540717), "Alliance player hears a human battle cry")
         local A = a.ns.Assets
         eq(A.ArmyFor(1, a.ns.Game.current), "Horde", "Horde player's white army is the Horde")
-        eq(A.ArmyFor(1, b.ns.Game.current), "Horde", "both screens agree: White is Canga's Horde")
+        eq(b.ns.Assets.ArmyFor(1, b.ns.Game.current), "Horde", "Keepingcalm (Alliance) sees Canga's pieces as the Horde")
         eq(A.ArmyFor(-1, a.ns.Game.current), "Alliance", "and Black is Keepingcalm's Alliance on Canga's screen")
 
         -- A game with captures, en passant, castling, check, promotion and mate.
@@ -743,27 +743,31 @@ if want("social") then
     Advance(20)
     local CA, JK = "Canga Prime", "Just Keepingcalm"
 
-    section("social: armies")
+    section("social: piece styles are Warcraft matchups, local to each screen")
     local A = a.ns.Assets
-    a.ns.Profile.SetArmy("Scourge")
-    eq(A.MyArmy(), "Horde", "a locked army cannot be chosen")
-    a.ns.Profile.me.w = 5 -- unlocks the Scourge (5 wins)
-    a.ns.Profile.SetArmy("Scourge")
-    eq(A.MyArmy(), "Scourge", "unlocked army chosen")
-    b.ns.Profile.me.w = 10
-    b.ns.Profile.SetArmy("Legion")
+    local P = a.ns.Profile
+    local D = a.ns.Data
+    for _, set in ipairs(D.PIECES) do check(P.IsUnlocked(set), "style free from the start: " .. set.name) end
+    for _, th in ipairs(D.THEMES) do check(P.IsUnlocked(th), "battlefield free from the start: " .. th.name) end
+    for _, b in ipairs(D.BADGES) do check(b.title ~= nil, "feat awards a title: " .. b.name) end
+    P.SetPieces("kaldorei")
+    eq(P.PieceSet().id, "kaldorei", "style chosen straight away")
+    eq(A.MyArmy(), "Kaldorei", "Canga leads the Kaldorei")
     a.ns.db.settings.color = "w"
     a.ns.Game.Invite(JK, { rated = false }); Advance(1)
     b.ns.Game.AnswerLatest(true); Advance(2)
     local ga, gb = a.ns.Game.current, b.ns.Game.current
-    eq(A.ArmyFor(1, ga), "Scourge", "Canga sees his Scourge as White")
-    eq(A.ArmyFor(-1, ga), "Legion", "Canga sees Keepingcalm's Legion as Black")
-    eq(b.ns.Assets.ArmyFor(1, gb), "Scourge", "Keepingcalm sees the Scourge too")
-    eq(b.ns.Assets.ArmyFor(-1, gb), "Legion", "and his own Legion")
-    -- spectator receives both armies
+    eq(A.ArmyFor(1, ga), "Kaldorei", "Canga's own pieces (White) are the Kaldorei on his screen")
+    eq(A.ArmyFor(-1, ga), "Legion", "his opponent's pieces are the Burning Legion")
+    eq(b.ns.Assets.ArmyFor(-1, gb), "Alliance", "Keepingcalm keeps his own style: his pieces are the Alliance")
+    eq(b.ns.Assets.ArmyFor(1, gb), "Horde", "and Canga's pieces are the Horde on his screen")
+    P.SwapLead("kaldorei")
+    eq(A.ArmyFor(1, ga), "Legion", "Swap sides: Canga now leads the Burning Legion")
+    eq(A.ArmyFor(-1, ga), "Kaldorei", "against the Kaldorei")
+    P.SwapLead("kaldorei")
+    -- spectators use their own style too
     w.ns.Game.Watch(CA); Advance(3)
-    eq(w.ns.Assets.ArmyFor(1, w.ns.Game.current), "Scourge", "spectator sees the Scourge")
-    eq(w.ns.Assets.ArmyFor(-1, w.ns.Game.current), "Legion", "spectator sees the Legion")
+    eq(w.ns.Game.current.mode, "spectate", "spectating")
     -- casual game: fool's mate, Keepingcalm (Black) wins
     a.ns.Game.Move("f2f3"); Advance(1)
     b.ns.Game.Move("e7e5"); Advance(1)
@@ -778,19 +782,14 @@ if want("social") then
     local h = a.ns.Ledger.HeadToHead(CA, JK)
     eq(h.l, 1, "head-to-head from Canga's side: 1 loss")
 
-    section("social: same army on both sides")
-    b.ns.Profile.me.w = 5
-    b.ns.Profile.SetArmy("Scourge")
-    a.ns.Game.Invite(JK, { rated = false }); Advance(1)
-    b.ns.Game.AnswerLatest(true); Advance(2)
-    eq(A.ArmyFor(-1, a.ns.Game.current), A.Rival("Scourge"), "Black gets the rival army on a clash")
-    a.ns.Game.Resign(); Advance(2)
-
-    section("social: AI games use my army against its rival")
-    a.ns.Game.StartAI(1, 1); Advance(1)
-    eq(A.ArmyFor(1, a.ns.Game.current), "Scourge", "my army in practice")
-    eq(A.ArmyFor(-1, a.ns.Game.current), "Keepers", "the Scourge's rival opposes it")
+    section("social: practice games use the chosen matchup")
+    a.ns.Game.StartAI(1, -1); Advance(1)
+    eq(A.ArmyFor(-1, a.ns.Game.current), "Kaldorei", "my pieces (Black here) are my side")
+    eq(A.ArmyFor(1, a.ns.Game.current), "Legion", "the computer gets the other side")
     a.ns.Game.Resign(); Advance(1)
+    P.SetPieces("classic")
+    eq(A.ArmyFor(1, nil), "Horde", "classic style falls back to the player's faction for names")
+    P.SetPieces("warcraft")
 
     section("social: leagues")
     local function SetRating(cl, name, r, games)
@@ -849,13 +848,13 @@ if want("social") then
     local card = a.ns.UI.profileCard
     check(card and card:IsShown(), "profile card opens")
     check(a.ns.Profile.players[JK].feats ~= nil, "their feats arrived")
-    eq(a.ns.Profile.players[JK].army, "Scourge", "their chosen army arrived")
+    eq(a.ns.Profile.players[JK].f, "Alliance", "their faction arrived")
     a.ns.UI.ShowProfile(CA)
     check(true, "own profile renders")
     a.ns.UI.ShowTab("collection")
-    a.ns.Tabs.coll.section = "armies"
+    a.ns.Tabs.coll.section = "pieces"
     a.ns.UI.Layout(); a.ns.UI.Refresh()
-    check(#a.ns.Tabs.coll.grids.armies.data == 9, "nine armies listed")
+    eq(#a.ns.Tabs.coll.grids.pieces.data, 6, "five Warcraft matchups and classic chess listed")
     for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
     net.forever = false
 end

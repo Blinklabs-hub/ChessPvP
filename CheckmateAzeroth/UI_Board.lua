@@ -48,7 +48,7 @@ local function SetPiece(view, piece, g, setOverride)
     local size = view.size
     local portrait, army
     if set.warcraft then
-        army = A.ArmyFor(white and 1 or -1, g)
+        army = A.ArmyFor(white and 1 or -1, g, set)
         portrait = A.Portrait(army, t)
     end
 

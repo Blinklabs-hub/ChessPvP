@@ -194,7 +194,7 @@ local function Refresh()
     local known = P.players[name]
     local v = L.Any(name)
     local rated = L.Get(name)
-    local army = me and A.MyArmy() or (known and known.army) or (known and known.f)
+    local army = me and A.MyFaction() or (known and known.f)
     local info = army and A.ARMIES[army]
 
     -- Header
@@ -220,7 +220,7 @@ local function Refresh()
         f.league:Hide()
         f.leagueText:SetText("|cffaaaaaaUnranked - plays any league until " .. D.PLACEMENT_GAMES .. " rated battles|r")
     end
-    f.army:SetText(info and ("Leads " .. "|c" .. W.Hex(info.color) .. info.title .. "|r") or "|cffaaaaaaArmy unknown|r")
+    f.army:SetText(info and ("|c" .. W.Hex(info.color) .. info.title .. "|r") or "|cffaaaaaaFaction unknown|r")
 
     -- Stats
     if rated then
