@@ -6,25 +6,22 @@ T = 1000 -- virtual clock (seconds)
 local timers = {}
 local netQueue = {}
 clients = {}
--- forever: names have surnames, UnitName/UnitFullName return the surname as 2nd value.
--- senderFormat: how CHAT_MSG_ADDON reports the sender ("realm" = Name-Realm, "plain" = Name,
--- "surname" = "Name Surname-Realm", "surnameonly" = "Name Surname").
-net = { dropRate = 0, log = false, sent = 0, forever = false, senderFormat = "realm" }
+-- forever = true simulates WoW Forever as observed in game (/chess debug):
+--   UnitName/UnitFullName("player") -> "First", "Surname"; GetUnitName -> "First Surname";
+--   CHAT_MSG_ADDON senders arrive as "First Surname" (no realm);
+--   only the full "First Surname" works as a whisper target (either half can be shared).
+-- Otherwise retail: senders "Name-Realm", whispers to "Name" or "Name-Realm".
+net = { dropRate = 0, log = false, sent = 0, forever = false }
 
 local function SenderName(c)
-    local f = net.senderFormat
-    if f == "plain" then return c.name end
-    if f == "surname" then return c.name .. " " .. c.surname .. "-" .. REALM end
-    if f == "surnameonly" then return c.name .. " " .. c.surname end
+    if net.forever then return c.name .. " " .. c.surname end
     return c.full
 end
 
--- Whisper targets the server accepts: the first name, or Name-Realm (retail style).
 local function MatchesTarget(c, target)
     target = tostring(target):lower()
-    if target == c.name:lower() then return true end
-    if target == c.full:lower() then return net.allowRealmWhisper ~= false end
-    return false
+    if net.forever then return target == (c.name .. " " .. c.surname):lower() end
+    return target == c.name:lower() or target == c.full:lower()
 end
 
 local function readFile(path)
@@ -97,8 +94,8 @@ local function deliver(client, ...)
     end
 end
 
-function NewClient(name, savedDB)
-    local client = { name = name, surname = name .. "son", full = name .. "-" .. REALM, events = {}, frames = {}, joined = false, chat = {}, filters = {} }
+function NewClient(name, savedDB, surname)
+    local client = { name = name, surname = surname or (name .. "son"), full = name .. "-" .. REALM, events = {}, frames = {}, joined = false, chat = {}, filters = {} }
     local env = {}
     client.env = env
     setmetatable(env, { __index = _G })

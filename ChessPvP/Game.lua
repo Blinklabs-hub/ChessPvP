@@ -439,16 +439,24 @@ end
 ------------------------------------------------------------------------
 -- Challenges
 ------------------------------------------------------------------------
--- Turns whatever the player typed ("bob", "Bob Smith", "Bob-Realm") into "Bob-Realm".
+local function Capitalise(word)
+    if string.match(word, "^%a+$") then -- plain ASCII only; leave accented names alone
+        return string.upper(string.sub(word, 1, 1)) .. string.lower(string.sub(word, 2))
+    end
+    return word
+end
+
+-- Turns whatever the player typed into an identity:
+--   retail  "bob" / "Bob-Realm"                    -> "Bob-Realm"
+--   Forever "just keepingcalm" / "Just-Keepingcalm" -> "Just Keepingcalm"
 local function NormalizeName(name)
     local full = ns.FullName(name)
     if not full then return nil end
-    local n, r = string.match(full, "^([^-]+)-(.*)$")
-    if string.match(n, "^%a+$") then
-        -- Plain ASCII: fix the capitalisation of the character name.
-        n = string.upper(string.sub(n, 1, 1)) .. string.lower(string.sub(n, 2))
+    if ns.isForever then
+        return (string.gsub(full, "%S+", Capitalise))
     end
-    return n .. "-" .. r
+    local n, r = string.match(full, "^([^-]+)-(.*)$")
+    return Capitalise(n) .. "-" .. r
 end
 
 local SameName = ns.SameName

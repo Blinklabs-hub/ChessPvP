@@ -344,4 +344,31 @@ function P.OnlineList()
     return rows
 end
 
+-- On Forever a typed single word ("Keepingcalm") may be either half of a two-part name.
+-- If exactly one known player matches, that player is meant.
+ns.ResolveSingleName = function(word)
+    word = string.lower(word)
+    local found
+    local function Consider(name)
+        if found == name then return true end
+        for part in string.gmatch(name, "%S+") do
+            if string.lower(part) == word then
+                if found then return false end -- ambiguous
+                found = name
+                return true
+            end
+        end
+        return true
+    end
+    for name in pairs(P.online) do
+        if not Consider(name) then return nil end
+    end
+    if P.players then
+        for name in pairs(P.players) do
+            if not Consider(name) then return nil end
+        end
+    end
+    return found
+end
+
 ns.On("CHESS_READY", InitProfile)

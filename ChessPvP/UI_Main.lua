@@ -509,7 +509,7 @@ local function BuildPlay(page)
         end
         local name = nameBox:GetText() or ""
         if name == "" and UnitExists("target") and UnitIsPlayer("target") then
-            name = ns.UnitFirstName("target") or ""
+            name = ns.UnitPlayerName("target") or ""
         end
         if name == "" then
             ns.Print("type a character name, or target a player first.")

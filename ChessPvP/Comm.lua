@@ -39,9 +39,8 @@ local function TrySend(q)
         target = C.ChannelId()
         if target == 0 then return "drop" end
     else
-        -- Same-realm players are whispered by their plain first name, which works on every
-        -- client (Forever shows surnames, but whispers go to the first name).
-        target = ns.ShortName(q.target)
+        -- Retail: plain name for our realm, Name-Realm otherwise. Forever: "First Surname".
+        target = ns.WhisperTarget(q.target)
         -- Recorded before sending: the "player not found" reply can arrive at any moment.
         recentWhispers[string.lower(target)] = ns.Now()
     end

@@ -319,61 +319,86 @@ end
 
 ------------------------------------------------------------------------
 if want("forever") then
-    -- Forever: surnames, surname returned where retail returns a realm, whispers by first name.
-    for _, fmt in ipairs({ "realm", "plain", "surname", "surnameonly" }) do
-        section("forever names, sender format '" .. fmt .. "'")
-        net.forever, net.senderFormat, net.allowRealmWhisper = true, fmt, false
-        local a = NewClient("Muke")
-        local b = NewClient("Keepingcalm")
-        eq(a.ns.me, "Muke-TestRealm", "own identity ignores the surname")
-        eq(a.ns.realm, "TestRealm", "realm read from the realm API")
-        Advance(20)
-        check(a.ns.Profile.online["Keepingcalm-TestRealm"] ~= nil, "lobby key is Name-Realm")
+    -- Names as seen in game: "Canga Prime" and "Just Keepingcalm". A third player shares
+    -- the first name "Just", so first names alone are ambiguous.
+    section("forever: identities")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    local c = NewClient("Just", nil, "Other")
+    eq(a.ns.me, "Canga Prime", "own identity is the full two-part name")
+    eq(b.ns.me, "Just Keepingcalm", "friend identity")
+    Advance(20)
+    check(a.ns.Profile.online["Just Keepingcalm"] ~= nil, "lobby lists 'Just Keepingcalm'")
+    check(a.ns.Profile.online["Just Other"] ~= nil, "lobby lists 'Just Other' separately")
 
-        -- Challenge via target (the path from the bug report)
-        a.target = b
-        a.ns.UI.Show()
-        a.ns.UI.ShowTab("play")
-        a.ns.Game.Invite(a.ns.UnitFirstName("target"))
+    local function Duel(label, challenge)
+        challenge()
         Advance(1)
-        check(b.ns.Game.LatestInvite() ~= nil, "challenge by target arrives")
+        check(b.ns.Game.LatestInvite() ~= nil, label .. ": challenge arrives")
+        check(c.ns.Game.LatestInvite() == nil, label .. ": the other 'Just' is not challenged")
         b.ns.Game.AnswerLatest(true)
         Advance(1)
         local ga, gb = a.ns.Game.current, b.ns.Game.current
-        check(ga and gb and ga.id == gb.id and ga.state == "active", "game starts")
+        check(ga and gb and ga.id == gb.id and ga.state == "active", label .. ": game starts")
         local w = (ga.myColor == 1) and a or b
         local k = (ga.myColor == 1) and b or a
         w.ns.Game.Move("f2f3"); Advance(1)
         k.ns.Game.Move("e7e5"); Advance(1)
         w.ns.Game.Move("g2g4"); Advance(1)
         k.ns.Game.Move("d8h4"); Advance(1)
-        eq(ga.reason, "checkmate", "game completes")
-        eq(gb.reason, "checkmate", "game completes on both sides")
-
-        -- Typed names with a surname, wrong case
-        a.ns.Game.Invite("keepingcalm keepingcalmson")
-        Advance(1)
-        check(b.ns.Game.LatestInvite() ~= nil, "typed 'first surname' works")
-        b.ns.Game.AnswerLatest(false)
-        Advance(1)
-
-        -- Offline player gets detected
-        a.ns.Game.Invite("Ghost")
-        Advance(2)
-        eq(a.ns.Game.outgoing, nil, "offline player detected")
-        RemoveClient(a)
-        RemoveClient(b)
+        eq(ga.reason, "checkmate", label .. ": game completes")
+        eq(gb.reason, "checkmate", label .. ": game completes on both sides")
     end
 
-    section("forever: profile saved under the old broken key is migrated")
-    net.forever, net.senderFormat = true, "realm"
-    local old = { chars = { ["Muke-Mukeson"] = { rating = 1337, peak = 1400, w = 9, l = 1, d = 0 } }, realms = { Mukeson = { players = {} } } }
-    local c = NewClient("Muke", old)
-    eq(c.ns.Profile.me.rating, 1337, "rating kept after migration")
-    eq(c.env.ChessPvPDB.chars["Muke-Mukeson"], nil, "old key removed")
-    eq(c.env.ChessPvPDB.realms.Mukeson, nil, "bogus realm cache removed")
-    RemoveClient(c)
-    net.forever, net.senderFormat, net.allowRealmWhisper = false, "realm", nil
+    section("forever: challenge paths")
+    a.target = b
+    Duel("by target", function() a.ns.Game.Invite(a.ns.UnitPlayerName("target")) end)
+    a.target = nil
+    Duel("from lobby", function()
+        local row
+        for _, r in ipairs(a.ns.Profile.OnlineList()) do
+            if r.name == "Just Keepingcalm" then row = r end
+        end
+        a.ns.Game.Invite(row.name) -- what the Lobby's Challenge button does
+    end)
+    Duel("typed lower case", function() a.ns.Game.Invite("just keepingcalm") end)
+    Duel("typed with hyphen", function() a.ns.Game.Invite("Just-Keepingcalm") end)
+    Duel("typed surname only (unique)", function() a.ns.Game.Invite("keepingcalm") end)
+
+    section("forever: ambiguous and offline names")
+    a.ns.Game.Invite("Just") -- two players are called Just: cannot be resolved
+    Advance(2)
+    check(b.ns.Game.LatestInvite() == nil and c.ns.Game.LatestInvite() == nil, "ambiguous first name reaches nobody")
+    eq(a.ns.Game.outgoing, nil, "ambiguous name reported as not online")
+    a.ns.Game.Invite("Ghost Writer")
+    Advance(2)
+    eq(a.ns.Game.outgoing, nil, "offline player detected")
+
+    section("forever: spectating with two-part names")
+    a.ns.Game.Invite("Just Keepingcalm"); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(1)
+    c.ns.Game.Watch("Canga Prime"); Advance(3)
+    local gw = c.ns.Game.current
+    check(gw and gw.mode == "spectate", "spectating works")
+    a.ns.Game.Resign(); Advance(2)
+    RemoveClient(a); RemoveClient(b); RemoveClient(c)
+
+    section("forever: profiles from 1.0.0 / 1.0.1 are migrated")
+    local old = { chars = {
+        ["Canga-Prime"] = { rating = 1337, peak = 1400, w = 9, l = 1, d = 0, games = 10 },
+        ["Canga-TestRealm"] = { rating = 1210, peak = 1210, w = 1, l = 0, d = 0, games = 1 },
+    }, realms = { Prime = { players = {} }, TestRealm = { players = { ["Just-TestRealm"] = { r = 1200, w = 0, l = 0, d = 0, seen = 0 } } } } }
+    local m = NewClient("Canga", old, "Prime")
+    eq(m.ns.Profile.me.rating, 1337, "the profile with most games is kept")
+    eq(m.env.ChessPvPDB.chars["Canga-Prime"], nil, "1.0.0 key removed")
+    eq(m.env.ChessPvPDB.chars["Canga-TestRealm"], nil, "1.0.1 key removed")
+    eq(m.ns.Profile.GetPlayer("Just-TestRealm"), nil, "old ladder cache cleared")
+    RemoveClient(m)
+    local again = NewClient("Canga", m.env.ChessPvPDB, "Prime")
+    eq(again.ns.Profile.me.rating, 1337, "migration only runs once")
+    RemoveClient(again)
+    net.forever = false
 end
 
 ------------------------------------------------------------------------
