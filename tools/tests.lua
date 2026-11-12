@@ -230,7 +230,7 @@ if want("online") or TEST_FILTER == "debug" then
     check(ga.state == "active" and gb.state == "active", "game still running")
 
     section("online: reload and resume")
-    local aliceDB = DeepCopy(a.env.CheckmateAzerothDB)
+    local aliceDB = DeepCopy(a.env.FlightpathLegendsDB)
     RemoveClient(a)
     -- Bob plays a move while Alice is offline... it is white's turn after 10 plies
     local bobIsWhite = gb.myColor == 1
@@ -447,11 +447,11 @@ if want("forever") then
     }, realms = { Prime = { players = {} }, TestRealm = { players = { ["Just-TestRealm"] = { r = 1200, w = 0, l = 0, d = 0, seen = 0 } } } } }
     local m = NewClient("Canga", old, "Prime")
     eq(m.ns.Profile.me.w, 9, "the profile with most games is kept")
-    eq(m.env.CheckmateAzerothDB.chars["Canga-Prime"], nil, "1.0.0 key removed")
-    eq(m.env.CheckmateAzerothDB.chars["Canga-TestRealm"], nil, "1.0.1 key removed")
+    eq(m.env.FlightpathLegendsDB.chars["Canga-Prime"], nil, "1.0.0 key removed")
+    eq(m.env.FlightpathLegendsDB.chars["Canga-TestRealm"], nil, "1.0.1 key removed")
     eq(m.ns.Profile.GetPlayer("Just-TestRealm"), nil, "old ladder cache cleared")
     RemoveClient(m)
-    local again = NewClient("Canga", m.env.CheckmateAzerothDB, "Prime")
+    local again = NewClient("Canga", m.env.FlightpathLegendsDB, "Prime")
     eq(again.ns.Profile.me.w, 9, "migration only runs once")
     RemoveClient(again)
     net.forever = false
@@ -989,11 +989,11 @@ if want("status") then
     check(a.ns.Game.LatestInvite() ~= nil, "challenges arrive again")
     a.ns.Game.AnswerLatest(false); Advance(1)
     -- slash commands and the addon menu
-    a.env.SlashCmdList["CHECKMATEAZEROTH"]("dnd")
+    a.env.SlashCmdList["FLIGHTPATHLEGENDS"]("dnd")
     eq(UI.Status(), "dnd", "/checkmate dnd")
-    a.env.SlashCmdList["CHECKMATEAZEROTH"]("online")
+    a.env.SlashCmdList["FLIGHTPATHLEGENDS"]("online")
     eq(UI.Status(), "online", "/checkmate online")
-    a.env.CheckmateAzeroth_OnAddonCompartmentClick("CheckmateAzeroth", "RightButton")
+    a.env.FlightpathLegends_OnAddonCompartmentClick("FlightpathLegends", "RightButton")
     check(UI.statusMenu:IsShown(), "right-click on the addon menu icon opens the status menu too")
     -- the dot follows queue and battle states
     a.ns.Game.StartSeek(600, 0, false, true)

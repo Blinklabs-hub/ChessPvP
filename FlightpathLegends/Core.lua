@@ -1,10 +1,10 @@
--- Checkmate: Azeroth - core namespace, utilities, saved variables and slash commands.
+-- Flightpath Legends - core namespace, utilities, saved variables and slash commands.
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
 ns.VERSION = "1.3.1"
-ns.PROTO = 2 -- network protocol version; bump when messages change incompatibly
-CheckmateAzeroth = ns -- exposed for debugging and the addon compartment
+ns.PROTO = 3 -- network protocol version; bump when messages change incompatibly
+FlightpathLegends = ns -- exposed for debugging and the addon compartment
 
 ------------------------------------------------------------------------
 -- Internal event bus (used both for WoW events and addon events)
@@ -206,12 +206,13 @@ local SETTING_DEFAULTS = {
 
 ns.RegisterEvent("ADDON_LOADED", function(name)
     if name ~= ADDON then return end
-    -- Saved data from the addon's old name (ChessPvP) is adopted once.
-    if type(CheckmateAzerothDB) ~= "table" then
-        CheckmateAzerothDB = type(ChessPvPDB) == "table" and ChessPvPDB or {}
+    -- Saved data from the addon's old names (Checkmate: Azeroth, ChessPvP) is adopted once.
+    if type(FlightpathLegendsDB) ~= "table" then
+        FlightpathLegendsDB = (type(CheckmateAzerothDB) == "table" and CheckmateAzerothDB)
+            or (type(ChessPvPDB) == "table" and ChessPvPDB) or {}
     end
-    ChessPvPDB = nil
-    local db = CheckmateAzerothDB
+    CheckmateAzerothDB, ChessPvPDB = nil, nil
+    local db = FlightpathLegendsDB
     db.settings = db.settings or {}
     for k, v in pairs(SETTING_DEFAULTS) do
         if db.settings[k] == nil then db.settings[k] = v end
@@ -297,10 +298,13 @@ local function Help()
     ns.Print("  /chess debug - show name and connection details (for bug reports)")
 end
 
-SLASH_CHECKMATEAZEROTH1 = "/checkmate"
-SLASH_CHECKMATEAZEROTH2 = "/chess"
-SLASH_CHECKMATEAZEROTH3 = "/cma"
-SlashCmdList["CHECKMATEAZEROTH"] = function(msg)
+SLASH_FLIGHTPATHLEGENDS1 = "/fpl"
+SLASH_FLIGHTPATHLEGENDS2 = "/flightpath"
+SLASH_FLIGHTPATHLEGENDS3 = "/legends"
+SLASH_FLIGHTPATHLEGENDS4 = "/chess"
+SLASH_FLIGHTPATHLEGENDS5 = "/checkmate"
+SLASH_FLIGHTPATHLEGENDS6 = "/battleship"
+SlashCmdList["FLIGHTPATHLEGENDS"] = function(msg)
     msg = msg or ""
     local cmd, rest = string.match(msg, "^%s*(%S*)%s*(.-)%s*$")
     cmd = string.lower(cmd or "")
@@ -365,7 +369,7 @@ SlashCmdList["CHECKMATEAZEROTH"] = function(msg)
 end
 
 -- Addon compartment (minimap addon menu): left-click opens, right-click sets your status.
-function CheckmateAzeroth_OnAddonCompartmentClick(_, button)
+function FlightpathLegends_OnAddonCompartmentClick(_, button)
     if button == "RightButton" then
         ns.UI.ShowStatusMenu(nil)
     else

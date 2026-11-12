@@ -1,11 +1,11 @@
--- Checkmate: Azeroth - network transport. Addon messages over whispers (games) and a hidden channel (ladder, lobby).
+-- Flightpath Legends - network transport. Addon messages over whispers (games) and a hidden channel (ladder, lobby).
 local _, ns = ...
 
 local C = {}
 ns.Comm = C
 
-local PREFIX = "CheckmateAz"
-local CHANNEL = "CheckmateAzNet"
+local PREFIX = "FPLegends"
+local CHANNEL = "FPLegendsNet"
 C.PREFIX, C.CHANNEL = PREFIX, CHANNEL
 
 C.handlers = {} -- [command] = function(sender, dist, parts)
@@ -146,21 +146,21 @@ end
 -- Receiving
 ------------------------------------------------------------------------
 -- The addon's old name used another prefix: tell the player when an old version reaches us.
-local OLD_PREFIX = "ChessPvP"
+local OLD_PREFIXES = { ChessPvP = "ChessPvP", CheckmateAz = "Checkmate: Azeroth" }
 local warnedOld = {}
-local function OldVersion(sender)
+local function OldVersion(sender, prefix)
     if ns.IsSecret(sender) or type(sender) ~= "string" then return end
     local name = ns.FullName(sender)
     if not name or warnedOld[name] then return end
-    warnedOld[name] = true
-    ns.Print("|cffff8040" .. ns.ShortName(name) .. " is using an old version (ChessPvP). They need to install Checkmate: Azeroth " ..
-        ns.VERSION .. " to play you:|r github.com/Blinklabs-hub/CheckmateAzeroth/releases")
+    warnedOld[name] = prefix
+    ns.Print("|cffff8040" .. ns.ShortName(name) .. " is using an old version (" .. tostring(OLD_PREFIXES[warnedOld[name]] or "old") .. "). They need to install Flightpath Legends " ..
+        ns.VERSION .. " to play you:|r github.com/Blinklabs-hub/FlightpathLegends/releases")
 end
 
 ns.RegisterEvent("CHAT_MSG_ADDON", function(prefix, text, dist, sender)
     if ns.IsSecret(prefix) then return end
-    if prefix == OLD_PREFIX then
-        OldVersion(sender)
+    if OLD_PREFIXES[prefix] then
+        OldVersion(sender, prefix)
         return
     end
     if prefix ~= PREFIX then return end
@@ -274,6 +274,6 @@ ns.On("CHESS_READY", function()
     local register = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or RegisterAddonMessagePrefix
     if register then
         pcall(register, PREFIX)
-        pcall(register, OLD_PREFIX)
+        for old in pairs(OLD_PREFIXES) do pcall(register, old) end
     end
 end)

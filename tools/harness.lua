@@ -101,7 +101,7 @@ function NewClient(name, savedDB, surname)
     setmetatable(env, { __index = _G })
     env._G = env
     env.unpack = table.unpack
-    env.CheckmateAzerothDB = savedDB
+    env.FlightpathLegendsDB = savedDB
     env.UIParent = NewObj(client, "UIParent")
     env.GameTooltip = NewObj(client, "Tooltip")
     env.UISpecialFrames = {}
@@ -229,14 +229,14 @@ function NewClient(name, savedDB, surname)
     for _, file in ipairs(FILES) do
         local chunk, err = load(readFile(ADDON_DIR .. "/" .. file), "@" .. file, "t", env)
         if not chunk then error(err) end
-        chunk("CheckmateAzeroth", ns)
+        chunk("FlightpathLegends", ns)
     end
     table.insert(clients, client)
     client.fire = function(ev, ...)
         local list = client.events[ev]
         if list then for _, f in ipairs(list) do f.__scripts.OnEvent(f, ev, ...) end end
     end
-    client.fire("ADDON_LOADED", "CheckmateAzeroth")
+    client.fire("ADDON_LOADED", "FlightpathLegends")
     client.fire("PLAYER_LOGIN")
     client.fire("PLAYER_ENTERING_WORLD")
     return client

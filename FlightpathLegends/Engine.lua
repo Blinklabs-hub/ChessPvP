@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - chess rules engine (10x12 mailbox board, full legal move generation).
+-- Flightpath Legends - chess rules engine (10x12 mailbox board, full legal move generation).
 local _, ns = ...
 
 local E = {}

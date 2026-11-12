@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - static data - rank titles, board themes, piece sets and badges.
+-- Flightpath Legends - static data - rank titles, board themes, piece sets and badges.
 local _, ns = ...
 
 local D = {}

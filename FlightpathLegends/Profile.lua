@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - player profile (rating, stats, badges, unlocks) and the realm leaderboard cache.
+-- Flightpath Legends - player profile (rating, stats, badges, unlocks) and the realm leaderboard cache.
 local _, ns = ...
 
 local P = {}

@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - Warcraft look and feel - game art lookups (with safe fallbacks), the two armies,
+-- Flightpath Legends - Warcraft look and feel - game art lookups (with safe fallbacks), the two armies,
 -- sounds, and a small tween engine for animations.
 local ADDON, ns = ...
 
@@ -432,7 +432,7 @@ local driver = CreateFrame("Frame")
 -- An animation error should never break the game, but should still be visible.
 function A.ReportError(err)
     local handler = geterrorhandler and geterrorhandler()
-    if handler then pcall(handler, "Checkmate: Azeroth animation: " .. tostring(err)) end
+    if handler then pcall(handler, "Flightpath Legends animation: " .. tostring(err)) end
 end
 
 local function Step(_, elapsed)

@@ -1,4 +1,4 @@
-// Generates Checkmate: Azeroth textures: piece fill/outline layers, markers and the logo (32-bit TGA),
+// Generates Flightpath Legends textures: piece fill/outline layers, markers and the logo (32-bit TGA),
 // plus a PNG preview of a board for visual checking.
 const fs = require("fs");
 const path = require("path");

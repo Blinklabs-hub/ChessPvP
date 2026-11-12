@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - game sessions - online play, computer and pass-and-play games, clocks,
+-- Flightpath Legends - game sessions - online play, computer and pass-and-play games, clocks,
 -- challenges, matchmaking, spectating and the lobby/ladder announcements.
 local _, ns = ...
 
@@ -706,7 +706,7 @@ local DECLINE_TEXT = {
     declined = "declined your challenge.",
     busy = "is already in a game.",
     dnd = "is not accepting challenges right now.",
-    version = "is using a different version of Checkmate: Azeroth.",
+    version = "is using a different version of Flightpath Legends.",
     league = "is too far from your league for a rated battle. Try a casual one.",
 }
 
@@ -1282,7 +1282,7 @@ ns.On("CHESS_TICK", function()
     if o and now > o.expires then
         G.outgoing = nil
         if not o.q then
-            ns.Print("no answer from " .. ns.ShortName(o.to) .. " (they may not have Checkmate: Azeroth installed).")
+            ns.Print("no answer from " .. ns.ShortName(o.to) .. " (they may not have Flightpath Legends installed).")
         end
         ns.Fire("CHESS_INVITE_CHANGED")
     end

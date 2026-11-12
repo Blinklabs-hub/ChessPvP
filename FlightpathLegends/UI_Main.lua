@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - the main window - frame, tabs, resizing and responsive layout, folding the
+-- Flightpath Legends - the main window - frame, tabs, resizing and responsive layout, folding the
 -- side panel during battles, challenge popup, toasts, launcher and event wiring.
 local _, ns = ...
 
@@ -171,7 +171,7 @@ local function Build()
     local s = ns.db.settings
     s.scale = 1
 
-    main = CreateFrame("Frame", "CheckmateAzerothFrame", UIParent)
+    main = CreateFrame("Frame", "FlightpathLegendsFrame", UIParent)
     main:SetFrameStrata("MEDIUM")
     main:SetToplevel(true)
     main:SetClampedToScreen(true)
@@ -192,9 +192,9 @@ local function Build()
     W.Background(main, 0.05, 0.04, 0.04, 0.97)
     W.Tile(main, "dialogBg", 0.95)
     W.Chrome(main, "goldBorder", 6, 28)
-    table.insert(UISpecialFrames, "CheckmateAzerothFrame") -- closes with Escape
+    table.insert(UISpecialFrames, "FlightpathLegendsFrame") -- closes with Escape
 
-    local title = W.Title(main, 24, "Checkmate: Azeroth")
+    local title = W.Title(main, 24, "Flightpath Legends")
     title:SetPoint("TOPLEFT", PAD, -14)
 
     -- Your character card (armory style), top right. Click for your full profile.
@@ -397,7 +397,7 @@ local function RefreshInvite()
         return
     end
     if not invitePopup then
-        local f = CreateFrame("Frame", "CheckmateAzerothInvite", UIParent)
+        local f = CreateFrame("Frame", "FlightpathLegendsInvite", UIParent)
         f:SetSize(400, 112)
         f:SetPoint("TOP", UIParent, "TOP", 0, -140)
         f:SetFrameStrata("DIALOG")
@@ -554,7 +554,7 @@ end
 
 local menu
 local function BuildMenu()
-    local f = CreateFrame("Frame", "CheckmateAzerothStatusMenu", UIParent)
+    local f = CreateFrame("Frame", "FlightpathLegendsStatusMenu", UIParent)
     f:SetSize(240, 96)
     f:SetFrameStrata("DIALOG")
     f:SetClampedToScreen(true)
@@ -562,7 +562,7 @@ local function BuildMenu()
     W.Background(f, 0.05, 0.04, 0.04, 0.97)
     W.Tile(f, "dialogBg", 0.95)
     W.Chrome(f, "goldBorder", 4, 20)
-    table.insert(UISpecialFrames, "CheckmateAzerothStatusMenu")
+    table.insert(UISpecialFrames, "FlightpathLegendsStatusMenu")
     local title = W.Title(f, 15, "Your status")
     title:SetPoint("TOPLEFT", 10, -8)
     f.options = {}
@@ -645,7 +645,7 @@ function UI.UpdateLauncher()
         return
     end
     if not launcher then
-        local b = CreateFrame("Button", "CheckmateAzerothLauncher", UIParent)
+        local b = CreateFrame("Button", "FlightpathLegendsLauncher", UIParent)
         b:SetSize(36, 36)
         b:SetFrameStrata("MEDIUM")
         b:SetClampedToScreen(true)
@@ -689,7 +689,7 @@ function UI.UpdateLauncher()
             end
         end)
         W.Tooltip(b, function(_, tip)
-            tip:SetText("Checkmate: Azeroth", 1, 0.82, 0)
+            tip:SetText("Flightpath Legends", 1, 0.82, 0)
             tip:AddLine(UI.StatusText())
             tip:AddLine(" ")
             tip:AddLine("Left-click to open. Right-click to set your status.", 1, 1, 1)

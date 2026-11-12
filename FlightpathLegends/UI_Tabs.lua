@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - Lobby, Ladder, Collection and Settings tabs (cards and tiles, responsive).
+-- Flightpath Legends - Lobby, Ladder, Collection and Settings tabs (cards and tiles, responsive).
 local _, ns = ...
 
 local T = {}
@@ -184,7 +184,7 @@ function T.RefreshLobby()
         if not C.Joined() then
             text = "Connecting to the chess network..."
         else
-            text = "No other Checkmate: Azeroth players are online right now.\nChallenge a friend by name from the Battle tab, or practise against the computer."
+            text = "No other Flightpath Legends players are online right now.\nChallenge a friend by name from the Battle tab, or practise against the computer."
         end
         lobby.emptyText:SetText(text)
         lobby.empty:Show()
@@ -997,7 +997,7 @@ function T.BuildSettings(page)
     local reset = W.Button(ui, "Reset window size and position", 240, 24, function() ns.UI.ResetPosition() end)
     reset:SetPoint("TOPLEFT", 14, -62)
 
-    local about = Section(page, "About Checkmate: Azeroth " .. ns.VERSION, 392, 0, 300, 332)
+    local about = Section(page, "About Flightpath Legends " .. ns.VERSION, 392, 0, 300, 332)
     settings.about = about
     local text = W.Label(about, "GameFontHighlightSmall",
         "Ratings use the Elo system and start at " .. D.START_RATING .. ". Rated battles always use a clock.\n\n"

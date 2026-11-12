@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - player profile card (click a player in the Lobby or Ladder).
+-- Flightpath Legends - player profile card (click a player in the Lobby or Ladder).
 local _, ns = ...
 
 local UI = ns.UI
@@ -36,7 +36,7 @@ local function StatBox(parent, title)
 end
 
 local function Build()
-    local f = CreateFrame("Frame", "CheckmateAzerothProfile", UIParent)
+    local f = CreateFrame("Frame", "FlightpathLegendsProfile", UIParent)
     f:SetSize(420, 540)
     f:SetPoint("CENTER", 220, 0)
     f:SetFrameStrata("DIALOG")
@@ -50,7 +50,7 @@ local function Build()
     W.Background(f, 0.05, 0.04, 0.04, 0.97)
     W.Tile(f, "dialogBg", 0.95)
     W.Chrome(f, "goldBorder", 6, 28)
-    table.insert(UISpecialFrames, "CheckmateAzerothProfile")
+    table.insert(UISpecialFrames, "FlightpathLegendsProfile")
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
 

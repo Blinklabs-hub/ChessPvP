@@ -1,4 +1,4 @@
--- Checkmate: Azeroth - witnessed ratings.
+-- Flightpath Legends - witnessed ratings.
 --
 -- Nobody's rating is taken from what they say about themselves. Instead every rated game
 -- produces statements broadcast by each player ("game X between W and B has started" and
