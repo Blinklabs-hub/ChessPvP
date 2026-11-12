@@ -290,9 +290,17 @@ local function ShareRecent(minGap)
     Share(OwnRecent(12))
 end
 
+-- A newcomer's request is always answered (after a random delay so replies spread out);
+-- requests arriving while a reply is already pending share that one reply.
+local replyPending = false
 ns.Comm.handlers.LQ = function(sender, dist)
-    if dist ~= "CHANNEL" then return end
-    ns.After(2 + math.random() * 20, function() ShareRecent(15) end)
+    if dist ~= "CHANNEL" or replyPending then return end
+    replyPending = true
+    ns.After(2 + math.random() * 20, function()
+        replyPending = false
+        lastShare = -1000
+        ShareRecent()
+    end)
 end
 
 ns.On("CHESS_CHANNEL_READY", function()
