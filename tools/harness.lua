@@ -110,7 +110,11 @@ function NewClient(name, savedDB, surname)
     env.NUM_CHAT_WINDOWS = 2
     env.ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
     env.SOUNDKIT = { IG_ABILITY_ICON_DROP = 1, READY_CHECK = 2 }
-    env.PlaySound = function() end
+    client.sounds, client.warnings, client.flashes = {}, {}, 0
+    env.PlaySound = function(id) table.insert(client.sounds, id) end
+    env.RaidWarningFrame = {}
+    env.RaidNotice_AddMessage = function(_, text) table.insert(client.warnings, text) end
+    env.FlashClientIcon = function() client.flashes = client.flashes + 1 end
     env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) table.insert(client.chat, msg); if net.log then print("[" .. name .. "] " .. msg) end end }
     env.CreateFrame = function(kind) return NewObj(client, kind) end
     env.GetTime = function() return T end

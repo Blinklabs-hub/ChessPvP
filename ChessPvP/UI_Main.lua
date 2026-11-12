@@ -1082,7 +1082,19 @@ local function RefreshInvite()
             if f.id then G.AnswerInvite(f.id, false) end
         end)
         f.decline:SetPoint("BOTTOMLEFT", f, "BOTTOM", 6, 8)
+        -- Countdown so it is clear how long the challenge stays open.
+        local accum = 0
+        f:SetScript("OnUpdate", function(self, elapsed)
+            accum = accum + elapsed
+            if accum < 0.25 then return end
+            accum = 0
+            local cur = self.id and G.incoming[self.id]
+            if cur then
+                self.title:SetText(string.format("Chess challenge  |cffaaaaaa(%ds)|r", math.max(0, math.ceil(cur.expires - ns.Now()))))
+            end
+        end)
         invitePopup = f
+        UI.invitePopup = f
     end
     invitePopup.id = inv.id
     local e = P.GetPlayer(inv.from)
@@ -1220,6 +1232,11 @@ end)
 ns.On("CHESS_GAME_STARTED", function(g)
     if g.mode == "online" then
         ns.Print("game started against " .. ns.ShortName(g.opp) .. ". You play " .. ((g.myColor == 1) and "White." or "Black."))
+        if RaidNotice_AddMessage and RaidWarningFrame then
+            pcall(RaidNotice_AddMessage, RaidWarningFrame, "Chess game vs " .. ns.ShortName(g.opp) .. " has started!", { r = 1, g = 0.82, b = 0 })
+        end
+        if FlashClientIcon then pcall(FlashClientIcon) end
+        ns.Sound("invite")
         UI.ShowTab("play")
     end
 end)
@@ -1250,6 +1267,19 @@ ns.On("CHESS_GAME_OVER", function(g)
     elseif g.mode == "online" then
         ns.Print("game ended without a result (" .. (D.REASON_TEXT[g.reason] or "aborted") .. ").")
     end
+end)
+
+-- A new challenge: besides the popup, make sure it is noticed.
+ns.On("CHESS_INVITE", function(inv)
+    local who = ns.ShortName(inv.from)
+    ns.Print(string.format("|cffffd100%s challenges you|r to %s (%s). Click Accept on the popup or type /chess accept.",
+        who, TimeControlName(inv.base, inv.inc), inv.rated and "rated" or "casual"))
+    -- Big text in the middle of the screen, like a raid warning.
+    if RaidNotice_AddMessage and RaidWarningFrame then
+        pcall(RaidNotice_AddMessage, RaidWarningFrame, "Chess challenge from " .. who .. "!", { r = 1, g = 0.82, b = 0 })
+    end
+    -- Flash the WoW icon on the taskbar when the game is in the background.
+    if FlashClientIcon then pcall(FlashClientIcon) end
 end)
 
 ns.On("CHESS_INVITE_CHANGED", function()

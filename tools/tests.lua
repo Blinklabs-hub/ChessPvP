@@ -382,6 +382,61 @@ if want("forever") then
     local gw = c.ns.Game.current
     check(gw and gw.mode == "spectate", "spectating works")
     a.ns.Game.Resign(); Advance(2)
+    c.ns.Game.StopWatching(); Advance(1)
+
+    section("forever: notifications, both directions")
+    local function ChatHas(cl, pattern)
+        for _, m in ipairs(cl.chat) do if m:find(pattern) then return true end end
+        return false
+    end
+    local function Reset(cl) cl.chat, cl.warnings, cl.sounds, cl.flashes = {}, {}, {}, 0 end
+    for _, pair in ipairs({ { a, b }, { b, a } }) do
+        local from, to = pair[1], pair[2]
+        local label = from.ns.me .. " -> " .. to.ns.me
+        to.ns.UI.Show(); to.ns.UI.Toggle() -- window closed: notifications must not depend on it
+        Reset(from); Reset(to)
+        from.ns.Game.Invite(to.ns.me)
+        Advance(1)
+        local popup = to.ns.UI.invitePopup
+        check(popup and popup:IsShown(), label .. ": popup shown")
+        check(popup and popup.text:GetText():find(from.ns.me, 1, true), label .. ": popup names the challenger")
+        check(ChatHas(to, "challenges you"), label .. ": chat message")
+        check(#to.warnings == 1 and to.warnings[1]:find(from.ns.me, 1, true), label .. ": centre-screen warning")
+        check(to.flashes >= 1, label .. ": taskbar flash")
+        check(#to.sounds >= 1, label .. ": sound")
+        check(ChatHas(from, "challenge sent"), label .. ": challenger told it was sent")
+        Advance(2)
+        check(popup.title:GetText():find("%(%d+s%)"), label .. ": countdown shown")
+        -- Accept with the popup's button
+        popup.accept:Click()
+        Advance(1)
+        check(not popup:IsShown(), label .. ": popup closes on accept")
+        check(ChatHas(from, "game started against"), label .. ": challenger told the game started")
+        check(from.flashes >= 1 and #from.warnings >= 1, label .. ": challenger alerted (flash + warning)")
+        check(ChatHas(to, "game started against"), label .. ": accepter told the game started")
+        from.ns.Game.Resign(); Advance(2)
+        -- Decline
+        Reset(from)
+        from.ns.Game.Invite(to.ns.me); Advance(1)
+        to.ns.UI.invitePopup.decline:Click(); Advance(1)
+        check(ChatHas(from, "declined"), label .. ": challenger told about decline")
+        check(not to.ns.UI.invitePopup:IsShown(), label .. ": popup closes on decline")
+        -- No answer
+        Reset(from)
+        from.ns.Game.Invite(to.ns.me); Advance(62)
+        check(ChatHas(from, "no answer"), label .. ": challenger told about no answer")
+        check(not to.ns.UI.invitePopup:IsShown(), label .. ": popup closes when it expires")
+        -- Challenger cancels
+        from.ns.Game.Invite(to.ns.me); Advance(1)
+        from.ns.Game.CancelInvite(); Advance(1)
+        check(not to.ns.UI.invitePopup:IsShown(), label .. ": popup closes when cancelled")
+    end
+    -- Busy player
+    Reset(a)
+    a.ns.Game.Invite(b.ns.me); Advance(1); b.ns.Game.AnswerLatest(true); Advance(1)
+    c.ns.Game.Invite(a.ns.me); Advance(1)
+    check(ChatHas(c, "already in a game"), "challenging a busy player says so")
+    a.ns.Game.Resign(); Advance(2)
     RemoveClient(a); RemoveClient(b); RemoveClient(c)
 
     section("forever: profiles from 1.0.0 / 1.0.1 are migrated")

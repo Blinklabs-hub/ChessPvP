@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "1.0.2"
+ns.VERSION = "1.0.3"
 ns.PROTO = 1 -- network protocol version; bump when messages change incompatibly
 ChessPvP = ns -- exposed for debugging and the addon compartment
 
