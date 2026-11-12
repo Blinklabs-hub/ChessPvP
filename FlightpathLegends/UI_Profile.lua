@@ -156,7 +156,7 @@ local function Build()
     -- Actions
     f.ratedBtn = W.Button(f, "Rated Battle", 120, 26, function()
         G.Invite(f.target, { rated = true })
-        UI.ShowTab("play")
+        UI.Refresh()
     end)
     f.ratedBtn:SetPoint("BOTTOMLEFT", 14, 14)
     W.Tooltip(f.ratedBtn, function(_, tip)
@@ -174,7 +174,7 @@ local function Build()
         else
             G.Invite(f.target, { game = game })
         end
-        UI.ShowTab(ns.Tabs.PLAY_TAB[game])
+        UI.Refresh()
     end)
     f.casualBtn:SetPoint("LEFT", f.ratedBtn, "RIGHT", 6, 0)
     f.watchBtn = W.Button(f, "Watch", 70, 26, function()

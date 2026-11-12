@@ -1,6 +1,7 @@
--- Flightpath Legends - the main window: header, sidebar (Home, the games and their pages,
--- How to play, Settings), resizing and responsive layout, folding the sidebar and side panel
--- away during battles, challenge popup, toasts, launcher and event wiring.
+-- Flightpath Legends - the game window: just the game being played (board, players, turn banner,
+-- a side panel that folds away), resizing and responsive layout. Everything else (finding a game,
+-- browsing players, leaderboards, settings) lives in the finder (UI_Finder.lua).
+-- Also: the How to play window, challenge popup, toasts, launcher and event wiring.
 local _, ns = ...
 
 local UI = {}
@@ -11,11 +12,11 @@ local BV, BS = ns.BattleView, ns.Battleship
 local FV, FR = ns.FourView, ns.FourRow
 local VV, VB = ns.VaultView, ns.Vault
 local HV, HA = ns.ArmyView, ns.Army
+local FD = ns.Finder
 local floor, max, min = math.floor, math.max, math.min
 
 local PAD = 12
-local HEAD = 60 -- title row with the character card
-local NAV_W = 178 -- the sidebar
+local HEAD = 40 -- the game window's title bar
 local MIN_BOARD, MAX_BOARD = 300, 1000
 
 local main
@@ -24,37 +25,15 @@ local currentTab = "play"
 local collapsed = false
 local size = { w = 0, h = 0 } -- current window size (tracked here, not read back from frames)
 
--- game: tab only shown for that game ("chess", "bs", "c4", "vb"); shared tabs have none.
+-- The game pages: the game window shows one of them.
 local TABS = {
-    { id = "games", text = "Home", build = T.BuildGames, refresh = T.RefreshGames, layout = T.LayoutGames },
     { id = "play", game = "chess", text = "Battle", build = PV.Build, refresh = PV.Refresh },
     { id = "bsplay", game = "bs", text = "Battle", build = BV.Build, refresh = BV.Refresh },
-    { id = "lobby", game = "chess", text = "Lobby", build = T.lobbies.chess.Build, refresh = T.lobbies.chess.Refresh, layout = T.lobbies.chess.Layout },
-    { id = "bslobby", game = "bs", text = "Lobby", build = T.lobbies.bs.Build, refresh = T.lobbies.bs.Refresh, layout = T.lobbies.bs.Layout },
-    { id = "live", game = "chess", text = "Live Battles", build = T.lives.chess.Build, refresh = T.lives.chess.Refresh, layout = T.lives.chess.Layout },
-    { id = "bslive", game = "bs", text = "Live Battles", build = T.lives.bs.Build, refresh = T.lives.bs.Refresh, layout = T.lives.bs.Layout },
-    { id = "ladder", game = "chess", text = "Ladder", build = T.BuildLadder, refresh = T.RefreshLadder, layout = T.LayoutLadder },
-    { id = "admirals", game = "bs", text = "Admirals", build = T.BuildAdmirals, refresh = T.RefreshAdmirals, layout = T.LayoutAdmirals },
-    { id = "collection", game = "chess", text = "Collection", build = T.collections.chess.Build, refresh = T.collections.chess.Refresh, layout = T.collections.chess.Layout },
-    { id = "bscollection", game = "bs", text = "Collection", build = T.collections.bs.Build, refresh = T.collections.bs.Refresh, layout = T.collections.bs.Layout },
     { id = "c4play", game = "c4", text = "Game", build = FV.Build, refresh = FV.Refresh },
-    { id = "c4lobby", game = "c4", text = "Lobby", build = T.lobbies.c4.Build, refresh = T.lobbies.c4.Refresh, layout = T.lobbies.c4.Layout },
-    { id = "c4live", game = "c4", text = "Live Games", build = T.lives.c4.Build, refresh = T.lives.c4.Refresh, layout = T.lives.c4.Layout },
-    { id = "c4board", game = "c4", text = "Champions", build = T.BuildTavern, refresh = T.RefreshTavern, layout = T.LayoutTavern },
-    { id = "c4collection", game = "c4", text = "Collection", build = T.collections.c4.Build, refresh = T.collections.c4.Refresh, layout = T.collections.c4.Layout },
     { id = "vbplay", game = "vb", text = "Game", build = VV.Build, refresh = VV.Refresh },
-    { id = "vblobby", game = "vb", text = "Lobby", build = T.lobbies.vb.Build, refresh = T.lobbies.vb.Refresh, layout = T.lobbies.vb.Layout },
-    { id = "vblive", game = "vb", text = "Live Games", build = T.lives.vb.Build, refresh = T.lives.vb.Refresh, layout = T.lives.vb.Layout },
-    { id = "vbboard", game = "vb", text = "Safecrackers", build = T.boards.vb.Build, refresh = T.boards.vb.Refresh, layout = T.boards.vb.Layout },
-    { id = "vbcollection", game = "vb", text = "Collection", build = T.collections.vb.Build, refresh = T.collections.vb.Refresh, layout = T.collections.vb.Layout },
     { id = "haplay", game = "ha", text = "Battle", build = HV.Build, refresh = HV.Refresh },
-    { id = "halobby", game = "ha", text = "Lobby", build = T.lobbies.ha.Build, refresh = T.lobbies.ha.Refresh, layout = T.lobbies.ha.Layout },
-    { id = "halive", game = "ha", text = "Live Battles", build = T.lives.ha.Build, refresh = T.lives.ha.Refresh, layout = T.lives.ha.Layout },
-    { id = "haboard", game = "ha", text = "Generals", build = T.boards.ha.Build, refresh = T.boards.ha.Refresh, layout = T.boards.ha.Layout },
-    { id = "hacollection", game = "ha", text = "Collection", build = T.collections.ha.Build, refresh = T.collections.ha.Refresh, layout = T.collections.ha.Layout },
-    { id = "settings", text = "Settings", build = T.BuildSettings, refresh = T.RefreshSettings, layout = T.LayoutSettings },
 }
--- The same kind of tab in each game.
+-- Every page of every game: play pages are in the game window, the rest in the finder.
 local KIND = {
     play = "play", bsplay = "play", c4play = "play", vbplay = "play", haplay = "play",
     lobby = "lobby", bslobby = "lobby", c4lobby = "lobby", vblobby = "lobby", halobby = "lobby",
@@ -69,7 +48,7 @@ local TAB_FOR = {
     vb = { play = "vbplay", lobby = "vblobby", live = "vblive", board = "vbboard", coll = "vbcollection" },
     ha = { play = "haplay", lobby = "halobby", live = "halive", board = "haboard", coll = "hacollection" },
 }
-local KINDS_ORDER = { "play", "lobby", "live", "board", "coll" }
+UI.KIND, UI.TAB_FOR = KIND, TAB_FOR
 local TAB_BY_ID = {}
 for _, t in ipairs(TABS) do TAB_BY_ID[t.id] = t end
 
@@ -82,37 +61,28 @@ UI.Game = Game
 
 local function IsPlayTab(id) return KIND[id] == "play" end
 
-local function TabVisible(tab)
-    return tab.game == nil or tab.game == Game()
-end
-
 ------------------------------------------------------------------------
 -- Layout
 ------------------------------------------------------------------------
-local function TabsVisible()
-    return not (IsPlayTab(currentTab) and collapsed)
+local function PanelsShown()
+    return not collapsed
 end
 
 local function ContentTop()
     return HEAD + 4
 end
 
--- Left edge of the page (right of the sidebar while it is shown).
-local function ContentLeft()
-    return PAD + (TabsVisible() and (NAV_W + 10) or 0)
-end
-
 local function ShowSide()
     return not collapsed
 end
 
--- Window size that exactly fits a board of boardPx in the play tab.
+-- Window size that exactly fits a board of boardPx in the chess page.
 local function PlaySizeFor(boardPx)
-    local w = ContentLeft() + boardPx + PV.GAP + PV.HANDLE + PAD
+    local w = PAD + boardPx + PV.GAP + PV.HANDLE + PAD
     if ShowSide() then w = w + PV.GAP + PV.SIDE end
     local h = ContentTop() + PV.STRIP * 2 + PV.GAP * 2 + boardPx + PAD
     if ShowSide() then
-        -- The setup panel needs a minimum height.
+        -- The side panel needs a minimum height.
         h = max(h, ContentTop() + PV.SETUP_H + PAD)
     end
     return w, h
@@ -120,7 +90,7 @@ end
 
 -- Largest board that fits the window size.
 local function BoardFor(w, h)
-    local availW = w - ContentLeft() - PAD - PV.GAP - PV.HANDLE - (ShowSide() and (PV.GAP + PV.SIDE) or 0)
+    local availW = w - PAD * 2 - PV.GAP - PV.HANDLE - (ShowSide() and (PV.GAP + PV.SIDE) or 0)
     local availH = h - ContentTop() - PV.STRIP * 2 - PV.GAP * 2 - PAD
     return max(MIN_BOARD, min(MAX_BOARD, floor(min(availW, availH))))
 end
@@ -135,10 +105,10 @@ local PAGES = {
 }
 local function PageSizeFor(pg, cellPx)
     local w, h = pg.view.SizeFor(cellPx, ShowSide())
-    return w + ContentLeft() + PAD, h + ContentTop() + PAD
+    return w + PAD * 2, h + ContentTop() + PAD
 end
 local function PageCellFor(pg, w, h)
-    return pg.view.CellFor(w - ContentLeft() - PAD, h - ContentTop() - PAD, ShowSide())
+    return pg.view.CellFor(w - PAD * 2, h - ContentTop() - PAD, ShowSide())
 end
 
 local function SetMinSize()
@@ -146,10 +116,8 @@ local function SetMinSize()
     local pg = PAGES[currentTab]
     if pg then
         minW, minH = PageSizeFor(pg, pg.min)
-    elseif currentTab == "play" then
-        minW, minH = PlaySizeFor(MIN_BOARD)
     else
-        minW, minH = ContentLeft() + 600, 480
+        minW, minH = PlaySizeFor(MIN_BOARD)
     end
     if main.SetResizeBounds then
         pcall(main.SetResizeBounds, main, minW, minH, 2400, 1600)
@@ -163,35 +131,17 @@ function UI.Layout()
     if not built then return end
     local w, h = size.w, size.h
     local top = ContentTop()
-    -- The player line beside the title only when there is room for it.
-    -- The character card shrinks with the window and hides when there is no room.
-    local cardW = min(440, w - 300)
-    if cardW >= 180 then
-        main.me:SetWidth(cardW)
-        main.me.name:SetWidth(cardW - 52 - 70)
-        main.me.line:SetWidth(cardW - 52 - 50)
-        main.me:Show()
-    else
-        main.me:Hide()
-    end
-    local left = ContentLeft()
     for i = 1, #TABS do
         local page = main.pages[TABS[i].id]
         page:ClearAllPoints()
-        page:SetPoint("TOPLEFT", main, "TOPLEFT", left, -top)
-        page:SetSize(max(10, w - left - PAD), max(10, h - top - PAD))
+        page:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -top)
+        page:SetSize(max(10, w - PAD * 2), max(10, h - top - PAD))
     end
-    if TabsVisible() then main.nav:Show() else main.nav:Hide() end
-    UI.LayoutNav()
     local pg = PAGES[currentTab]
     if pg then
         pg.view.Layout(PageCellFor(pg, w, h), ShowSide())
-    elseif currentTab == "play" then
-        PV.Layout(BoardFor(w, h), ShowSide())
     else
-        local tab
-        for i = 1, #TABS do if TABS[i].id == currentTab then tab = TABS[i] end end
-        if tab and tab.layout then tab.layout(max(10, w - ContentLeft() - PAD), max(10, h - top - PAD)) end
+        PV.Layout(BoardFor(w, h), ShowSide())
     end
 end
 
@@ -204,7 +154,7 @@ local function ApplySize(w, h)
     UI.Layout()
 end
 
--- In the play tab the window hugs the board exactly.
+-- The window hugs the board exactly.
 local function SnapToBoard()
     local pg = PAGES[currentTab]
     if pg then
@@ -212,7 +162,6 @@ local function SnapToBoard()
         ApplySize(w, h)
         return
     end
-    if currentTab ~= "play" then return end
     local w, h = PlaySizeFor(BoardFor(size.w, size.h))
     ApplySize(w, h)
 end
@@ -224,26 +173,21 @@ local function SaveGeometry()
     local pg = PAGES[currentTab]
     if pg then
         s[pg.key] = PageCellFor(pg, size.w, size.h)
-    elseif currentTab == "play" then
-        s.boardPx = BoardFor(size.w, size.h)
     else
-        s.tabSize = { size.w, size.h }
+        s.boardPx = BoardFor(size.w, size.h)
     end
 end
 
--- Resizes the window for the current tab and mode.
+-- Resizes the window for the current game and mode.
 local function FitForTab()
     local s = ns.db.settings
     local pg = PAGES[currentTab]
     if pg then
         local w, h = PageSizeFor(pg, s[pg.key] or pg.def)
         ApplySize(w, h)
-    elseif currentTab == "play" then
+    else
         local w, h = PlaySizeFor(s.boardPx or 448)
         ApplySize(w, h)
-    else
-        local ts = s.tabSize or { 760, 560 }
-        ApplySize(ts[1], ts[2])
     end
 end
 
@@ -251,7 +195,7 @@ function UI.IsCollapsed()
     return collapsed
 end
 
--- Folds the side panel and tabs away (or brings them back); the board keeps its size.
+-- Folds the side panel away (or brings it back); the board keeps its size.
 function UI.SetCollapsed(v)
     v = v and true or false
     if v == collapsed then return end
@@ -262,8 +206,27 @@ function UI.SetCollapsed(v)
 end
 
 ------------------------------------------------------------------------
--- Window
+-- The game window
 ------------------------------------------------------------------------
+local function HeaderButton(parent, icon, tip, onClick)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(26, 26)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetAllPoints()
+    W.SetIcon(b.icon, icon)
+    b.ring = b:CreateTexture(nil, "OVERLAY")
+    b.ring:SetPoint("CENTER")
+    b.ring:SetSize(34, 34)
+    b.ring:SetTexture(W.TEX .. "token_ring")
+    b.ring:SetVertexColor(0.85, 0.7, 0.3)
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 0.9, 0.5, 0.2)
+    b:SetScript("OnClick", function() ns.Sound("click"); onClick() end)
+    W.Tooltip(b, function(_, t) t:SetText(tip, 1, 0.82, 0) end)
+    return b
+end
+
 local function Build()
     if built then return end
     built = true
@@ -293,64 +256,33 @@ local function Build()
     W.Chrome(main, "goldBorder", 6, 28)
     table.insert(UISpecialFrames, "FlightpathLegendsFrame") -- closes with Escape
 
-    local title = W.Title(main, 24, "Flightpath Legends")
-    title:SetPoint("TOPLEFT", PAD, -6)
-    -- Where you are: "Four in a Row  >  Lobby"
-    main.crumbIcon = main:CreateTexture(nil, "ARTWORK")
-    main.crumbIcon:SetSize(18, 18)
-    main.crumbIcon:SetPoint("TOPLEFT", PAD, -36)
-    main.crumb = W.Title(main, 14)
-    main.crumb:SetPoint("LEFT", main.crumbIcon, "RIGHT", 6, 0)
-    main.crumb:SetWordWrap(false)
-    -- a gold line under the header
+    -- title bar: the game, and who it is against
+    local bar = main:CreateTexture(nil, "BORDER")
+    bar:SetPoint("TOPLEFT", 4, -4)
+    bar:SetPoint("TOPRIGHT", -4, -4)
+    bar:SetHeight(HEAD - 8)
+    bar:SetColorTexture(0.16, 0.11, 0.05, 0.9)
     local rule = main:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(0.6, 0.48, 0.2, 0.7)
+    rule:SetColorTexture(0.6, 0.48, 0.2, 0.8)
     rule:SetHeight(1)
-    rule:SetPoint("TOPLEFT", PAD, -(HEAD - 2))
-    rule:SetPoint("TOPRIGHT", -PAD, -(HEAD - 2))
-
-    -- Your character card (armory style), top right. Click for your full profile.
-    local card = CreateFrame("Button", nil, main)
-    card:SetSize(340, 46)
-    card:SetPoint("TOPRIGHT", -38, -5)
-    main.me = card
-    card.portrait = W.Portrait(card, 46)
-    card.portrait:SetPoint("LEFT", 0, 0)
-    card.statusDot = card:CreateTexture(nil, "OVERLAY")
-    card.statusDot:SetSize(12, 12)
-    card.statusDot:SetPoint("BOTTOMRIGHT", card.portrait, "BOTTOMRIGHT", 0, 1)
-    card.statusDot:SetTexture(W.TEX .. "dot")
-    card:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    card.name = W.Title(card, 16)
-    card.name:SetPoint("TOPLEFT", 52, -5)
-    card.name:SetWordWrap(false)
-    card.line = W.Label(card, "GameFontHighlightSmall")
-    card.line:SetPoint("BOTTOMLEFT", 52, 6)
-    card.line:SetWordWrap(false)
-    card.rating = W.Title(card, 20)
-    card.rating:SetPoint("TOPRIGHT", -2, -4)
-    card.rating:SetJustifyH("RIGHT")
-    card.league = card:CreateTexture(nil, "ARTWORK")
-    card.league:SetSize(20, 20)
-    card.league:SetPoint("BOTTOMRIGHT", -2, 3)
-    card.rank = card:CreateTexture(nil, "ARTWORK")
-    card.rank:SetSize(20, 20)
-    card.rank:SetPoint("RIGHT", card.league, "LEFT", -3, 0)
-    local hl = card:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints()
-    hl:SetColorTexture(1, 0.85, 0.4, 0.07)
-    card:SetScript("OnClick", function(self, button)
-        if button == "RightButton" then UI.ShowStatusMenu(self) else UI.ShowProfile(ns.me) end
-    end)
-    W.Tooltip(card, function(_, tip)
-        tip:SetText("Your profile", 1, 0.82, 0)
-        tip:AddLine(UI.StatusText())
-        tip:AddLine("Click to see your records, battles and feats.", 1, 1, 1)
-        tip:AddLine("Right-click to set your status.", 0.7, 0.7, 0.7)
-    end)
-
+    rule:SetPoint("TOPLEFT", 4, -(HEAD - 4))
+    rule:SetPoint("TOPRIGHT", -4, -(HEAD - 4))
+    main.gameIcon = main:CreateTexture(nil, "ARTWORK")
+    main.gameIcon:SetSize(24, 24)
+    main.gameIcon:SetPoint("TOPLEFT", PAD, -8)
+    main.title = W.Title(main, 18)
+    main.title:SetPoint("LEFT", main.gameIcon, "RIGHT", 8, 0)
+    main.title:SetWordWrap(false)
     local close = CreateFrame("Button", nil, main, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
+    main.finderButton = HeaderButton(main, "Interface\\Icons\\inv_misc_eye_01", "Find a Game, Browse, Legends", function()
+        if FD.IsShown() then FD.Hide() else FD.Show() end
+    end)
+    main.finderButton:SetPoint("TOPRIGHT", -40, -7)
+    main.helpButton = HeaderButton(main, "Interface\\Icons\\inv_misc_questionmark", "How to play", function()
+        UI.ShowHelp(TAB_BY_ID[currentTab] and TAB_BY_ID[currentTab].game or Game())
+    end)
+    main.helpButton:SetPoint("RIGHT", main.finderButton, "LEFT", -12, 0)
 
     main.pages = {}
     for i = 1, #TABS do
@@ -360,7 +292,6 @@ local function Build()
         main.pages[tab.id] = page
         tab.build(page)
     end
-    UI.BuildNav()
 
     -- Resize grip (bottom-right corner).
     local grip = CreateFrame("Button", nil, main)
@@ -404,7 +335,7 @@ local function Build()
             if currentTab == "play" then PV.UpdateClocks() end
             -- the other games' timers tick every 0.3s
             local pg = PAGES[currentTab]
-            local m = pg and G.Module(Game())
+            local m = pg and G.Module(TAB_BY_ID[currentTab].game)
             if m and m.current and m.current.phase ~= "over" then
                 bsAccum = (bsAccum or 0) + 1
                 if bsAccum >= 3 then bsAccum = 0; pg.view.Refresh() end
@@ -420,48 +351,29 @@ local function Build()
     FitForTab()
 end
 
+-- Who the game on a page is against (for the title bar).
+local function Opponent(game)
+    if game == "chess" then
+        local g = G.current
+        if not g then return nil end
+        if g.mode == "spectate" then return ns.ShortName(g.white or "?") .. " vs " .. ns.ShortName(g.black or "?") end
+        return "vs " .. (g.mode == "ai" and ("Computer (" .. ns.AI.LEVELS[g.aiLevel or 1].name .. ")") or ns.ShortName(g.opp or "?"))
+    end
+    local m = G.Module(game)
+    local s = m and m.current
+    if not s then return nil end
+    if s.mode == "spectate" then return "watching " .. ns.ShortName(s.host or "?") .. " vs " .. ns.ShortName(s.guest or "?") end
+    return "vs " .. (s.mode == "ai" and s.oppName or ns.ShortName(s.opp or "?"))
+end
+
 function UI.Refresh()
+    if FD.IsShown() then FD.Refresh() end
     if not built or not main:IsShown() or not P.me then return end
-    local p = P.me
     local tabDef = TAB_BY_ID[currentTab]
-    if tabDef and tabDef.game then
-        W.SetIcon(main.crumbIcon, D.GameIcon(tabDef.game))
-        main.crumb:SetText(D.GAMES[tabDef.game].name .. "  |cff8a7a5a>|r  |cffffffff" .. (KIND[currentTab] == "play" and "Play" or tabDef.text) .. "|r")
-    else
-        W.SetIcon(main.crumbIcon, currentTab == "settings" and "Interface\\Icons\\trade_engineering" or "Interface\\Icons\\inv_misc_map_01")
-        main.crumb:SetText(tabDef and tabDef.text or "")
-    end
-    UI.RefreshNav()
-    local card, info = main.me, A.MyCharInfo()
-    card.portrait:SetPlayer(ns.me, info, A.MyFaction())
-    local bsMode = Game() ~= "chess"
-    if bsMode then
-        card.name:SetText(W.ClassName(ns.me, info) .. "  " .. P.GameTitleText(P.MyTitleId(Game()), Game()))
-    else
-        card.name:SetText(W.ClassName(ns.me, info) .. "  |cffaaaaaa" .. P.TitleText(P.MyTitleId(), p.rating, P.RatedGames()) .. "|r")
-    end
-    card.line:SetText(A.CharLine(info) .. (info.guild and ("  |cff40ff40<" .. info.guild .. ">|r") or ""))
-    if bsMode then
-        local rec = ns.Ledger.Record(ns.me, Game())
-        local draws = D.GAMES[Game()].draws
-        if rec then
-            card.rating:SetText(string.format("|cff40ff40%d|r-|cffff5040%d|r", rec.w, rec.l) .. (draws and string.format("-|cffd0d0d0%d|r", rec.d) or ""))
-        else
-            card.rating:SetText(draws and "|cffaaaaaa0-0-0|r" or "|cffaaaaaa0-0|r")
-        end
-    else
-        card.rating:SetText(p.rating)
-    end
-    card.statusDot:SetVertexColor(unpack(UI.StatusColor()))
-    local li = G.LeagueIndex(ns.me)
-    if li > 0 and not bsMode then W.SetLeagueIcon(card.league, li) else card.league:Hide() end
-    if P.RatedGames() >= D.PLACEMENT_GAMES and not bsMode then
-        local idx = 1
-        for i = 1, #D.RANKS do if p.rating >= D.RANKS[i].min then idx = i end end
-        W.SetRankIcon(card.rank, idx)
-    else
-        card.rank:Hide()
-    end
+    local game = tabDef and tabDef.game or Game()
+    W.SetIcon(main.gameIcon, D.GameIcon(game))
+    local opp = Opponent(game)
+    main.title:SetText(D.GAMES[game].name .. (opp and ("   |cffaaaaaa" .. opp .. "|r") or ""))
     for i = 1, #TABS do
         local tab = TABS[i]
         if tab.id == currentTab then
@@ -473,192 +385,113 @@ function UI.Refresh()
     end
 end
 
--- Switches between the games (the tab stays the same kind where possible).
+-- Chooses the game the finder shows (Browse and Legends switch to the same page of it).
 function UI.SetGame(game)
     if not ns.db then return end
     if not (game and D.GAMES[game]) then game = "chess" end
-    local s = ns.db.settings
-    if s.game == game and built then
-        UI.ShowTab(TAB_FOR[game].play)
+    ns.db.settings.game = game
+    if FD.IsShown() then
+        local kind = KIND[FD.Current()]
+        if kind and kind ~= "play" then FD.Show(TAB_FOR[game][kind]) else FD.Refresh() end
+    end
+end
+
+-- Opens the finder on a game's Find page (after a game, "New Game" comes here).
+function UI.NewGame(game)
+    if game then ns.db.settings.game = game end
+    FD.Show("games")
+end
+
+function UI.OpenFinder()
+    FD.Show()
+end
+
+function UI.IsVisibleTab(id)
+    if IsPlayTab(id) then return built and main:IsShown() and currentTab == id end
+    return FD.IsVisible(id)
+end
+
+-- Whether a game of any kind is in progress (for us: playing or watching).
+local function AnyGameActive()
+    local g = G.current
+    if g and g.state == "active" then return "play" end
+    for _, key in ipairs(D.GAME_ORDER) do
+        local m = G.Module(key)
+        if m and m.Active() then return TAB_FOR[key].play end
+    end
+    return nil
+end
+
+-- Shows a page: a game page opens the game window, anything else the finder.
+function UI.ShowTab(id, force)
+    if not ns.db or not P.me then return end
+    if not IsPlayTab(id) then
+        FD.Show(id)
         return
     end
-    s.game = game
-    local target = currentTab
-    if KIND[target] then target = TAB_FOR[game][KIND[target]] end
-    if built then
-        collapsed = false
-        UI.ShowTab(target, true)
-    end
+    local tab = TAB_BY_ID[id]
+    if tab and tab.game then ns.db.settings.game = tab.game end
+    Build()
+    local changed = id ~= currentTab or force
+    currentTab = id
+    if not main:IsShown() then main:Show() end
+    -- no game running: the side panel comes back
+    if collapsed and not AnyGameActive() then collapsed = false; changed = true end
+    if changed then FitForTab() end
+    UI.Refresh()
 end
 
-------------------------------------------------------------------------
--- Sidebar: Home, each game (the chosen one opens to show its pages), How to play, Settings
-------------------------------------------------------------------------
-local function NavItem(parent, height, indent, big)
-    local b = CreateFrame("Button", nil, parent)
-    b:SetHeight(height)
-    b.sel = b:CreateTexture(nil, "BACKGROUND", nil, 1)
-    b.sel:SetAllPoints()
-    b.sel:SetColorTexture(0.55, 0.4, 0.1, 0.45)
-    b.sel:Hide()
-    b.bar = b:CreateTexture(nil, "BORDER")
-    b.bar:SetPoint("TOPLEFT")
-    b.bar:SetPoint("BOTTOMLEFT")
-    b.bar:SetWidth(3)
-    b.bar:SetColorTexture(1, 0.82, 0.2, 1)
-    b.bar:Hide()
-    local hl = b:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints()
-    hl:SetColorTexture(1, 0.85, 0.4, 0.1)
-    b.icon = b:CreateTexture(nil, "ARTWORK")
-    local isz = big and 22 or 16
-    b.icon:SetSize(isz, isz)
-    b.icon:SetPoint("LEFT", 6 + indent, 0)
-    if big then
-        b.text = W.Title(b, 15)
+-- Opens the addon: the game in progress if there is one, otherwise the finder.
+function UI.Show()
+    if not ns.db or not P.me then return end
+    local active = AnyGameActive()
+    if active then UI.ShowTab(active) else FD.Show() end
+end
+
+function UI.Toggle()
+    if not ns.db or not P.me then return end
+    local active = AnyGameActive()
+    if active then
+        Build()
+        if main:IsShown() then main:Hide() else UI.ShowTab(active) end
     else
-        b.text = W.Label(b, "GameFontHighlight")
-    end
-    b.text:SetPoint("LEFT", b.icon, "RIGHT", 7, 0)
-    b.text:SetPoint("RIGHT", -14, 0)
-    b.text:SetWordWrap(false)
-    b.dot = b:CreateTexture(nil, "OVERLAY")
-    b.dot:SetTexture(W.TEX .. "dot")
-    b.dot:SetSize(8, 8)
-    b.dot:SetPoint("RIGHT", -6, 0)
-    b.dot:SetVertexColor(0.3, 1, 0.3)
-    b.dot:Hide()
-    function b:SetSelected(on, strong)
-        if on then self.sel:Show() else self.sel:Hide() end
-        if on and strong then self.bar:Show() else self.bar:Hide() end
-    end
-    return b
-end
-
-local SUB_ICON = {
-    play = "Interface\\Icons\\ability_warrior_charge",
-    lobby = "Interface\\Icons\\inv_misc_groupneedmore",
-    live = "Interface\\Icons\\ability_eyeoftheowl",
-    board = "Interface\\Icons\\achievement_pvp_a_14",
-    coll = "Interface\\Icons\\inv_misc_book_09",
-}
-
-function UI.BuildNav()
-    local nav = CreateFrame("Frame", nil, main)
-    nav:SetWidth(NAV_W)
-    nav:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -(HEAD + 4))
-    nav:SetPoint("BOTTOMLEFT", main, "BOTTOMLEFT", PAD, PAD)
-    W.Gradient(nav, { 0.12, 0.09, 0.06, 0.96 }, { 0.06, 0.05, 0.04, 0.96 })
-    W.Background(nav, 0, 0, 0, 0, { 0.5, 0.4, 0.16, 0.8 })
-    main.nav = nav
-    UI.nav = nav
-    nav.items = {}
-
-    local home = NavItem(nav, 30, 0, true)
-    home.text:SetText("Home")
-    W.SetIcon(home.icon, "Interface\\Icons\\inv_misc_map_01")
-    home:SetScript("OnClick", function() ns.Sound("click"); UI.ShowTab("games") end)
-    nav.home = home
-
-    nav.gamesHead = W.Label(nav, "GameFontDisableSmall", "GAMES")
-    nav.games, nav.subs = {}, {}
-    for _, key in ipairs(D.GAME_ORDER) do
-        local g = NavItem(nav, 30, 0, true)
-        g.text:SetText(D.GAMES[key].name)
-        W.SetIcon(g.icon, D.GameIcon(key))
-        g:SetScript("OnClick", function()
-            ns.Sound("click")
-            UI.SetGame(key)
-            UI.ShowTab(TAB_FOR[key].play)
-        end)
-        nav.games[key] = g
-        nav.subs[key] = {}
-        for _, kind in ipairs(KINDS_ORDER) do
-            local id = TAB_FOR[key][kind]
-            local sb = NavItem(nav, 24, 14, false)
-            sb.text:SetText(kind == "play" and "Play" or TAB_BY_ID[id].text)
-            W.SetIcon(sb.icon, SUB_ICON[kind])
-            sb:SetScript("OnClick", function() ns.Sound("click"); UI.ShowTab(id) end)
-            sb.id = id
-            nav.subs[key][kind] = sb
-        end
-    end
-
-    local help = NavItem(nav, 26, 0, false)
-    help.text:SetText("How to play")
-    W.SetIcon(help.icon, "Interface\\Icons\\inv_misc_questionmark")
-    help:SetScript("OnClick", function() ns.Sound("click"); UI.ShowHelp(Game()) end)
-    nav.help = help
-    local settings = NavItem(nav, 26, 0, false)
-    settings.text:SetText("Settings")
-    W.SetIcon(settings.icon, "Interface\\Icons\\trade_engineering")
-    settings:SetScript("OnClick", function() ns.Sound("click"); UI.ShowTab("settings") end)
-    nav.settings = settings
-end
-
-function UI.LayoutNav()
-    local nav = main and main.nav
-    if not nav then return end
-    local y = -6
-    local function Put(item, h)
-        item:ClearAllPoints()
-        item:SetPoint("TOPLEFT", nav, "TOPLEFT", 2, y)
-        item:SetPoint("TOPRIGHT", nav, "TOPRIGHT", -2, y)
-        item:Show()
-        y = y - h
-    end
-    Put(nav.home, 32)
-    y = y - 6
-    nav.gamesHead:ClearAllPoints()
-    nav.gamesHead:SetPoint("TOPLEFT", nav, "TOPLEFT", 10, y)
-    y = y - 16
-    local current = Game()
-    for _, key in ipairs(D.GAME_ORDER) do
-        Put(nav.games[key], 31)
-        for _, kind in ipairs(KINDS_ORDER) do
-            local sb = nav.subs[key][kind]
-            if key == current then Put(sb, 24) else sb:Hide() end
-        end
-        if key == current then y = y - 4 end
-    end
-    nav.settings:ClearAllPoints()
-    nav.settings:SetPoint("BOTTOMLEFT", nav, "BOTTOMLEFT", 2, 4)
-    nav.settings:SetPoint("BOTTOMRIGHT", nav, "BOTTOMRIGHT", -2, 4)
-    nav.help:ClearAllPoints()
-    nav.help:SetPoint("BOTTOMLEFT", nav.settings, "TOPLEFT", 0, 2)
-    nav.help:SetPoint("BOTTOMRIGHT", nav.settings, "TOPRIGHT", 0, 2)
-end
-
--- Whether we have an unfinished game of a kind (shown as a green dot in the sidebar).
-local function InProgress(key)
-    if key == "chess" then
-        local g = G.current
-        return g and g.state == "active" and g.mode ~= "spectate"
-    end
-    local m = G.Module(key)
-    return m and m.Active() and m.current and m.current.mode ~= "spectate"
-end
-
-function UI.RefreshNav()
-    local nav = main and main.nav
-    if not nav then return end
-    UI.LayoutNav()
-    nav.home:SetSelected(currentTab == "games", true)
-    nav.settings:SetSelected(currentTab == "settings", true)
-    nav.help.text:SetText("How to play: " .. D.GAMES[Game()].name)
-    local current = Game()
-    for _, key in ipairs(D.GAME_ORDER) do
-        local g = nav.games[key]
-        g:SetSelected(key == current and currentTab ~= "games" and currentTab ~= "settings", false)
-        g.text:SetTextColor(key == current and 1 or 0.85, key == current and 0.85 or 0.72, key == current and 0.3 or 0.45)
-        if InProgress(key) then g.dot:Show() else g.dot:Hide() end
-        for _, kind in ipairs(KINDS_ORDER) do
-            local sb = nav.subs[key][kind]
-            sb:SetSelected(sb.id == currentTab, true)
-        end
+        FD.Toggle()
     end
 end
 
+function UI.ResetPosition()
+    if not ns.db then return end
+    Build()
+    local s = ns.db.settings
+    s.pos, s.boardPx, s.tabSize, s.finderPos, s.finderSize = nil, nil, nil, nil, nil
+    main:ClearAllPoints()
+    main:SetPoint("CENTER")
+    FitForTab()
+    if FD.frame then
+        FD.frame:ClearAllPoints()
+        FD.frame:SetPoint("CENTER", -60, 20)
+    end
+    UI.Show()
+end
+
+-- For the test suite.
+function UI.Debug()
+    return { board = PV.play.board, banner = PV.play.banner, size = size, collapsed = collapsed,
+        tabsVisible = PanelsShown(), boardPx = built and BoardFor(size.w, size.h) }
+end
+
+-- Test hook: simulates the user dragging the resize grip to (w, h).
+function UI.DebugResize(w, h)
+    Build()
+    size.w, size.h = w, h
+    UI.Layout()
+    SnapToBoard()
+    SaveGeometry()
+end
+
+------------------------------------------------------------------------
+-- How to play
+------------------------------------------------------------------------
 -- The How to play window (one per screen, shows the chosen game's rules).
 local helpFrame
 function UI.ShowHelp(game)
@@ -707,63 +540,6 @@ function UI.ShowHelp(game)
     local h = helpFrame.text.GetStringHeight and helpFrame.text:GetStringHeight()
     helpFrame.child:SetHeight(max(10, (h or 400) + 10))
     helpFrame:Show()
-end
-
-function UI.IsVisibleTab(id)
-    return built and main:IsShown() and currentTab == id
-end
-
-function UI.ShowTab(id, force)
-    -- a game-specific tab switches the game too
-    for i = 1, #TABS do
-        if TABS[i].id == id and TABS[i].game and TABS[i].game ~= Game() then ns.db.settings.game = TABS[i].game end
-    end
-    local changed = id ~= currentTab or force
-    currentTab = id
-    UI.Show()
-    if changed then
-        if id ~= "play" then collapsed = false end
-        FitForTab()
-    end
-    UI.Refresh()
-end
-
-function UI.Show()
-    if not ns.db or not P.me then return end
-    Build()
-    if not main:IsShown() then main:Show() end
-end
-
-function UI.Toggle()
-    if not ns.db or not P.me then return end
-    Build()
-    if main:IsShown() then main:Hide() else main:Show() end
-end
-
-function UI.ResetPosition()
-    if not ns.db then return end
-    Build()
-    local s = ns.db.settings
-    s.pos, s.boardPx, s.tabSize = nil, nil, nil
-    main:ClearAllPoints()
-    main:SetPoint("CENTER")
-    FitForTab()
-    main:Show()
-end
-
--- For the test suite.
-function UI.Debug()
-    return { board = PV.play.board, banner = PV.play.banner, size = size, collapsed = collapsed,
-        tabsVisible = TabsVisible(), boardPx = built and BoardFor(size.w, size.h) }
-end
-
--- Test hook: simulates the user dragging the resize grip to (w, h).
-function UI.DebugResize(w, h)
-    Build()
-    size.w, size.h = w, h
-    UI.Layout()
-    SnapToBoard()
-    SaveGeometry()
 end
 
 ------------------------------------------------------------------------
@@ -1142,8 +918,9 @@ ns.On("BS_STARTED", function(s)
         if FlashClientIcon then pcall(FlashClientIcon) end
     end
     collapsed = false
-    UI.SetGame("bs")
+    ns.db.settings.game = "bs"
     UI.ShowTab("bsplay")
+    FD.Hide()
 end)
 
 ns.On("BS_CHANGED", function()
@@ -1161,8 +938,9 @@ ns.On("FR_STARTED", function(s)
         if FlashClientIcon then pcall(FlashClientIcon) end
     end
     collapsed = false
-    UI.SetGame("c4")
+    ns.db.settings.game = "c4"
     UI.ShowTab("c4play")
+    FD.Hide()
     if ns.db.settings.autoCollapse and s.mode ~= "spectate" and built then UI.SetCollapsed(true) end
 end)
 
@@ -1181,8 +959,9 @@ ns.On("VB_STARTED", function(s)
         if FlashClientIcon then pcall(FlashClientIcon) end
     end
     collapsed = false
-    UI.SetGame("vb")
+    ns.db.settings.game = "vb"
     UI.ShowTab("vbplay")
+    FD.Hide()
 end)
 
 ns.On("VB_CHANGED", function()
@@ -1200,8 +979,9 @@ ns.On("HA_STARTED", function(s)
         if FlashClientIcon then pcall(FlashClientIcon) end
     end
     collapsed = false
-    UI.SetGame("ha")
+    ns.db.settings.game = "ha"
     UI.ShowTab("haplay")
+    FD.Hide()
 end)
 
 ns.On("HA_CHANGED", function()
@@ -1241,8 +1021,9 @@ ns.On("CHESS_GAME_STARTED", function(g)
             pcall(RaidNotice_AddMessage, RaidWarningFrame, "Chess game vs " .. ns.ShortName(g.opp) .. " has started!", { r = 1, g = 0.82, b = 0 })
         end
         if FlashClientIcon then pcall(FlashClientIcon) end
-        UI.ShowTab("play")
     end
+    UI.ShowTab("play")
+    FD.Hide()
     local play = PV.play
     if play.banner then play.banner:Hide() end
     if play.board then play.board:ClearFx() end
@@ -1327,7 +1108,7 @@ local function RefreshSoon()
     dirty = true
     ns.After(1, function()
         dirty = false
-        if built and main:IsShown() and currentTab ~= "play" then UI.Refresh() end
+        if FD.IsShown() then FD.Refresh() end
     end)
 end
 ns.On("CHESS_LOBBY_CHANGED", RefreshSoon)

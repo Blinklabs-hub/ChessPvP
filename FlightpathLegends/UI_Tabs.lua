@@ -132,7 +132,7 @@ local function MakeLobby(game)
             row.challenge = W.Button(row, "Challenge", 90, 24, function()
                 if row.item then
                     G.Invite(row.item.name, { game = game })
-                    ns.UI.ShowTab(PLAY_TAB[game])
+                    ns.UI.Refresh()
                 end
             end)
             row.challenge:SetPoint("RIGHT", -8, 0)
@@ -144,6 +144,18 @@ local function MakeLobby(game)
                 end
             end)
             row.watch:SetPoint("RIGHT", row.challenge, "LEFT", -4, 0)
+            row.seek = {}
+            for i = 1, #D.GAME_ORDER do
+                local t = row:CreateTexture(nil, "ARTWORK")
+                t:SetSize(20, 20)
+                local ring = row:CreateTexture(nil, "OVERLAY")
+                ring:SetSize(26, 26)
+                ring:SetPoint("CENTER", t)
+                ring:SetTexture(W.TEX .. "token_ring")
+                ring:SetVertexColor(0.85, 0.7, 0.3)
+                t.ring = ring
+                row.seek[i] = t
+            end
             row:SetScript("OnClick", function(r) if r.item then ns.UI.ShowProfile(r.item.name) end end)
             W.Tooltip(row, function(r, tip)
                 if not r.item then return false end
@@ -155,10 +167,15 @@ local function MakeLobby(game)
                 self.name:SetWidth(max(80, statusX - 64))
                 self.sub:SetWidth(max(80, statusX - 84))
                 self.statusIcon:ClearAllPoints()
-                self.statusIcon:SetPoint("LEFT", self, "LEFT", statusX, 0)
+                self.statusIcon:SetPoint("LEFT", self, "LEFT", statusX, 9)
                 self.status:ClearAllPoints()
                 self.status:SetPoint("LEFT", self.statusIcon, "RIGHT", 4, 0)
+                -- status on top, the games they are queued for underneath
                 self.status:SetWidth(max(60, w - statusX - 190))
+                for i, t in ipairs(self.seek) do
+                    t:ClearAllPoints()
+                    t:SetPoint("CENTER", self, "LEFT", statusX + 10 + (i - 1) * 26, -11)
+                end
             end
         end, function(row, item)
             local faction = item.f and A.ARMIES[item.f]
@@ -182,6 +199,24 @@ local function MakeLobby(game)
             local seeking = D.SEEK_GAME[item.status] ~= nil
             W.SetStatusIcon(row.statusIcon, seeking and "s" or item.status)
             row.status:SetText(StatusLine(item, game))
+            -- the games they are queued for: lit icons, then empty slots
+            local list = item.seeking or {}
+            for i, t in ipairs(row.seek) do
+                local key = list[i]
+                if key then
+                    W.SetIcon(t, D.GameIcon(key))
+                    t:SetAlpha(1); t.ring:SetAlpha(1)
+                    t:SetDesaturated(key ~= game)
+                else
+                    t:SetTexture(W.TEX .. "dot")
+                    t:SetVertexColor(0.15, 0.12, 0.08, 0.9)
+                    t:SetTexCoord(0, 1, 0, 1)
+                    t:SetSize(10, 10)
+                    t:Show()
+                    t.ring:SetAlpha(0)
+                end
+                if key then t:SetSize(20, 20); t:SetVertexColor(1, 1, 1) end
+            end
             if item.status == "g" then
                 row.watch:Show()
                 row.challenge:Disable()
@@ -919,138 +954,6 @@ T.boards = {
 T.tavern = T.boards.c4.state
 T.BuildTavern, T.LayoutTavern, T.RefreshTavern = T.boards.c4.Build, T.boards.c4.Layout, T.boards.c4.Refresh
 T.vaultboard = T.boards.vb.state
-
-------------------------------------------------------------------------
--- Games: pick which game to play (a card per game)
-------------------------------------------------------------------------
-local games = { cards = {} }
-T.games = games
-
--- Players looking for / playing a game right now.
-local function Activity(key)
-    local looking, playing = 0, 0
-    local seek = D.GAMES[key].seek
-    for _, o in pairs(P.online) do
-        if o.status == "g" and (o.battle and o.battle.game or "chess") == key then
-            playing = playing + 1
-        elseif o.status == seek or (key == "chess" and o.status == "c") then
-            looking = looking + 1
-        end
-    end
-    return looking, playing
-end
-
--- Whether we have an unfinished game of this kind.
-local function InProgress(key)
-    if key == "chess" then
-        local g = G.current
-        return g and g.state == "active" and g.mode ~= "spectate"
-    end
-    local m = G.Module(key)
-    return m and m.Active() and m.current.mode ~= "spectate"
-end
-
-function T.BuildGames(page)
-    games.page = page
-    games.title = W.Title(page, 20, "Choose a game")
-    games.title:SetPoint("TOPLEFT", 4, -4)
-    games.hint = W.Label(page, "GameFontDisableSmall", "Each game has its own lobby, leaderboard, titles and feats. Pick one here or in the sidebar.")
-    games.hint:SetPoint("LEFT", games.title, "RIGHT", 12, -2)
-    for i, key in ipairs(D.GAME_ORDER) do
-        local g = D.GAMES[key]
-        local card = CreateFrame("Button", nil, page)
-        card.key = key
-        W.Gradient(card, { 0.16, 0.12, 0.08, 0.96 }, { 0.07, 0.05, 0.04, 0.96 })
-        card.edge = W.Background(card, 0, 0, 0, 0, { 0.55, 0.43, 0.18, 0.9 })
-        card.glow = card:CreateTexture(nil, "BORDER", nil, 2)
-        card.glow:SetAllPoints()
-        card.glow:SetTexture(W.TEX .. "burst")
-        card.glow:SetBlendMode("ADD")
-        card.glow:SetVertexColor(1, 0.8, 0.3, 0.25)
-        card.glow:Hide()
-        local hl = card:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints()
-        hl:SetColorTexture(1, 0.85, 0.4, 0.07)
-        card.icon = card:CreateTexture(nil, "ARTWORK")
-        card.icon:SetSize(64, 64)
-        card.icon:SetPoint("TOPLEFT", 12, -12)
-        W.SetIcon(card.icon, D.GameIcon(key))
-        card.iconRing = card:CreateTexture(nil, "OVERLAY")
-        card.iconRing:SetPoint("CENTER", card.icon)
-        card.iconRing:SetSize(76, 76)
-        card.iconRing:SetTexture(W.TEX .. "token_ring")
-        card.iconRing:SetVertexColor(0.85, 0.7, 0.3)
-        card.name = W.Title(card, 20, g.name)
-        card.name:SetPoint("TOPLEFT", 88, -12)
-        card.blurb = W.Label(card, "GameFontHighlightSmall", g.blurb)
-        card.blurb:SetPoint("TOPLEFT", 88, -38)
-        card.blurb:SetJustifyV("TOP")
-        card.blurb:SetSpacing(2)
-        card.record = W.Label(card, "GameFontHighlightSmall")
-        card.record:SetPoint("BOTTOMLEFT", 12, 34)
-        card.record:SetWordWrap(false)
-        card.activity = W.Label(card, "GameFontHighlightSmall")
-        card.activity:SetPoint("BOTTOMLEFT", 12, 14)
-        card.activity:SetWordWrap(false)
-        card.play = W.Button(card, "Play", 96, 26, function() T.OpenGame(key) end)
-        card.play:SetPoint("BOTTOMRIGHT", -10, 10)
-        card.help = W.Button(card, "How to play", 96, 22, function() ns.UI.ShowHelp(key) end)
-        card.help:SetPoint("BOTTOMRIGHT", card.play, "TOPRIGHT", 0, 4)
-        card:SetScript("OnClick", function() T.OpenGame(key) end)
-        games.cards[i] = card
-    end
-end
-
-function T.OpenGame(key)
-    ns.Sound("click")
-    ns.UI.SetGame(key)
-    ns.UI.ShowTab(D.GAMES[key].play)
-end
-
-function T.LayoutGames(w, h)
-    local cols = w >= 560 and 2 or 1
-    local rows = math.ceil(#games.cards / cols)
-    local gap = 10
-    local top = 34
-    local cw = floor((w - gap * (cols - 1)) / cols)
-    local ch = max(124, min(170, floor((h - top - gap * (rows - 1)) / rows)))
-    for i, card in ipairs(games.cards) do
-        local c, r = (i - 1) % cols, floor((i - 1) / cols)
-        card:ClearAllPoints()
-        card:SetPoint("TOPLEFT", games.page, "TOPLEFT", c * (cw + gap), -(top + r * (ch + gap)))
-        card:SetSize(cw, ch)
-        card.blurb:SetWidth(max(80, cw - 100 - 104))
-        card.record:SetWidth(max(80, cw - 130))
-        card.activity:SetWidth(max(80, cw - 130))
-    end
-end
-
-function T.RefreshGames()
-    local current = ns.UI.Game()
-    for _, card in ipairs(games.cards) do
-        local key = card.key
-        if key == "chess" then
-            local v = L.Get(ns.me)
-            local casual = L.Casual(ns.me)
-            local text = string.format("Rating |cffffffff%d|r", P.me.rating)
-            if v then text = text .. string.format("   rated |cff40ff40%d|r-|cffff5040%d|r-|cffaaaaaa%d|r", v.w, v.l, v.d) end
-            if casual then text = text .. string.format("   casual |cff40ff40%d|r-|cffff5040%d|r-|cffaaaaaa%d|r", casual.cw, casual.cl, casual.cd) end
-            card.record:SetText(text)
-        else
-            card.record:SetText(T.GameRecordLine(key, L.Record(ns.me, key), key == "bs" and "No battles yet" or nil))
-        end
-        local looking, playing = Activity(key)
-        local word = D.GAMES[key].word
-        card.activity:SetText(string.format("|cffffd100%d|r looking for a %s  ·  |cffff9040%d|r playing", looking, word, playing))
-        local mine = InProgress(key)
-        if key == current then
-            card.glow:Show()
-        else
-            card.glow:Hide()
-        end
-        card.play:SetText(mine and "Resume" or "Play")
-    end
-end
 
 ------------------------------------------------------------------------
 -- Collection

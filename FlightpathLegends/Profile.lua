@@ -487,7 +487,7 @@ function P.OnlineList()
                 r = v and v.r or (e and e.r) or D.START_RATING, verified = v ~= nil,
                 t = e and e.t or "", bt = e and e.bt, ft = e and e.ft, vt = e and e.vt, at = e and e.at, f = e and e.f, ch = e and e.ch, battle = o.battle,
                 bs = ns.Ledger.Battleship(name), c4 = ns.Ledger.FourRow(name),
-                g = v and v.games or 0, casual = ns.Ledger.Casual(name),
+                g = v and v.games or 0, casual = ns.Ledger.Casual(name), seeking = o.seeking,
             }
         end
     end

@@ -313,11 +313,14 @@ SLASH_FPLVAULT2 = "/vaultbreaker"
 SLASH_FPLARMY1 = "/army"
 SLASH_FPLARMY2 = "/hiddenarmy"
 
--- /chess, /battleship, /four and /vault open that game; anything after them works like /fpl.
+-- /chess, /battleship, /four, /vault and /army open that game (its window if one is being
+-- played, otherwise the finder); anything after them works like /fpl.
 local function OpenGame(game, msg)
     if (msg or ""):match("^%s*$") then
-        ns.UI.Show()
-        ns.UI.SetGame(game)
+        if not ns.db then return end
+        local m = ns.Game.Module(game)
+        local active = (game == "chess" and ns.Game.current and ns.Game.current.state == "active") or (m and m.Active())
+        if active then ns.UI.ShowTab(ns.UI.TAB_FOR[game].play) else ns.UI.NewGame(game) end
     else
         if ns.db then ns.db.settings.game = game end
         SlashCmdList["FLIGHTPATHLEGENDS"](msg)

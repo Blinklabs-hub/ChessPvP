@@ -374,8 +374,7 @@ local function BuildGamePanel(gp)
     end)
     view.resign:SetPoint("BOTTOMLEFT", 0, 0)
     view.newButton = W.Button(gp, "New Game", 130, 26, function()
-        view.showSetup = true
-        ns.UI.Refresh()
+        ns.UI.NewGame("vb")
     end)
     view.newButton:SetPoint("BOTTOMLEFT", 0, 0)
 end
@@ -400,8 +399,7 @@ local function BuildBanner(parent)
     banner.sub:SetSpacing(3)
     banner.again = W.Button(banner, "New Game", 110, 22, function()
         banner:Hide()
-        view.showSetup = true
-        ns.UI.Refresh()
+        ns.UI.NewGame("vb")
     end)
     banner.again:SetPoint("BOTTOMRIGHT", banner, "BOTTOM", -4, 10)
     banner.close = W.Button(banner, "Close", 110, 22, function() banner:Hide() end)
@@ -788,7 +786,7 @@ end
 function VV.RefreshSetup()
     if VB.current and VB.current.phase ~= "over" then view.backButton:Show() else view.backButton:Hide() end
     local seek = G.seek
-    if seek and seek.game == "vb" then
+    if seek and G.Seeking("vb") then
         local secs = floor(ns.Now() - (seek.since or ns.Now()))
         view.findButton:SetText(string.format("Searching... %d:%02d  (cancel)", floor(secs / 60), secs % 60))
     else

@@ -697,7 +697,7 @@ if want("ui") then
     UI.SetCollapsed(false)
     d = UI.Debug()
     check(not d.collapsed and d.tabsVisible, "arrow brings the panels back")
-    eq(d.size.w, foldedW + c.ns.PlayView.SIDE + c.ns.PlayView.GAP + 188, "window widens by exactly the side panel and the sidebar")
+    eq(d.size.w, foldedW + c.ns.PlayView.SIDE + c.ns.PlayView.GAP, "window widens by exactly the side panel")
     UI.SetCollapsed(true)
 
     section("ui: resizing scales the board and the window hugs it")
@@ -1241,14 +1241,13 @@ if want("bsui") then
     a.faction, b.faction = "Horde", "Alliance"
     Advance(25)
     local UI = a.ns.UI
-    UI.Show()
-    UI.SetGame("bs")
+    UI.ShowTab("bsplay")
     local d = UI.Debug()
     local v = a.ns.BattleView.view
-    check(UI.IsVisibleTab("bsplay"), "Battleship opens on its Battle tab")
+    check(UI.IsVisibleTab("bsplay"), "Battleship opens in the game window")
     eq(UI.Game(), "bs", "game is Battleship")
-    UI.SetGame("chess")
-    check(UI.IsVisibleTab("play"), "switching back shows the chess board")
+    UI.ShowTab("play")
+    check(UI.IsVisibleTab("play"), "the game window shows the chess board")
     UI.ShowTab("admirals")
     eq(UI.Game(), "bs", "opening the Admirals tab switches to Battleship")
     UI.ShowTab("ladder")
@@ -1684,9 +1683,8 @@ if want("c4ui") then
     a.faction, b.faction = "Horde", "Alliance"
     Advance(25)
     local UI, T, P = a.ns.UI, a.ns.Tabs, a.ns.Profile
-    UI.Show()
-    UI.SetGame("c4")
-    check(UI.IsVisibleTab("c4play"), "Four in a Row opens on its Game tab")
+    UI.ShowTab("c4play")
+    check(UI.IsVisibleTab("c4play"), "Four in a Row opens in the game window")
     eq(UI.Game(), "c4", "game is Four in a Row")
     UI.ShowTab("c4lobby")
     UI.SetGame("bs")
@@ -2008,23 +2006,53 @@ if want("vbui") then
     Advance(25)
     local UI, T = a.ns.UI, a.ns.Tabs
     UI.Show()
-    UI.ShowTab("games")
-    check(UI.IsVisibleTab("games"), "the Games tab opens")
-    eq(#T.games.cards, 5, "a card for each game")
+    local FD = a.ns.Finder
+    check(FD.IsShown(), "opening the addon with no game running shows the finder")
+    check(UI.IsVisibleTab("games"), "on Find a Game")
+    local F = FD.find
+    eq(#F.buttons, 5, "a round button for each game")
     local names = {}
-    for _, card in ipairs(T.games.cards) do names[#names + 1] = card.name:GetText() end
+    for _, btn in ipairs(F.buttons) do names[#names + 1] = btn.name:GetText() end
     eq(table.concat(names, ","), "Chess,Battleship,Four in a Row,Vault Breaker,Hidden Army", "in order")
-    T.games.cards[3].play:Click()
-    eq(UI.Game(), "c4", "Play on a card switches the game")
-    check(UI.IsVisibleTab("c4play"), "and opens it")
+    local q = FD.QueueSet()
+    for k in pairs(q) do q[k] = nil end
+    F.buttons[3]:Click()
+    eq(UI.Game(), "c4", "clicking a game chooses it")
+    check(q.c4, "and ticks it")
+    check(F.buttons[3].tick:IsShown() and F.buttons[3].glow:IsShown(), "the chosen game is ticked and glows")
+    check(not F.buttons[1].tick:IsShown(), "unticked games show no tick")
+    F.buttons[4]:Click()
+    check(q.c4 and q.vb, "several games can be ticked")
+    F.queue:Click()
+    local G = a.ns.Game
+    check(G.Seeking("c4") and G.Seeking("vb") and not G.Seeking("chess"), "Find Opponent queues for every ticked game")
+    check(F.listing:IsShown(), "Your Listing appears")
+    -- someone queued for Battleship and Vault Breaker: the shared game is played
+    b.ns.Game.StartSeek(0, 0, false, true, { "bs", "vb" })
+    Advance(30)
+    check(a.ns.Vault.Busy() and b.ns.Vault.Busy(), "two players with a game in common are paired on it")
+    check(UI.IsVisibleTab("vbplay"), "the game opens in its own window")
+    check(not FD.IsShown(), "and the finder steps aside")
+    a.ns.Vault.Resign(); Advance(2)
     UI.ShowTab("games")
-    check(T.games.cards[3].glow:IsShown(), "the current game's card glows")
-    check(not T.games.cards[1].glow:IsShown(), "the others do not")
-    T.games.cards[4].play:Click()
-    check(UI.IsVisibleTab("vbplay"), "Vault Breaker opens on its Game tab")
-    eq(UI.Game(), "vb", "game is Vault Breaker")
-    UI.ShowTab("games")
-    eq(UI.Game(), "vb", "the Games tab keeps the current game")
+    check(not F.listing:IsShown(), "no listing once the queue is over")
+
+    section("finder: browse and legends")
+    FD.frame.tabs.browse:Click()
+    check(UI.IsVisibleTab("vblobby"), "Browse shows the chosen game's players")
+    FD.frame.kindDrop:Select("live")
+    check(UI.IsVisibleTab("vblive"), "the second dropdown switches to live games")
+    FD.frame.gameDrop:Select("chess")
+    check(UI.IsVisibleTab("live"), "the game dropdown switches game, same page")
+    eq(UI.Game(), "chess", "and chooses the game")
+    FD.frame.tabs.legends:Click()
+    check(UI.IsVisibleTab("ladder"), "Legends shows the leaderboard")
+    FD.frame.kindDrop:Select("coll")
+    check(UI.IsVisibleTab("collection"), "and titles and feats")
+    FD.frame.gameDrop:Select("ha")
+    check(UI.IsVisibleTab("hacollection"), "for any game")
+    FD.frame.tabs.settings:Click()
+    check(UI.IsVisibleTab("settings"), "Settings has its own tab")
     UI.ShowTab("vbboard")
     eq(UI.Game(), "vb", "the Safecrackers board belongs to Vault Breaker")
     UI.SetGame("chess")
@@ -2093,8 +2121,8 @@ if want("vbui") then
     check(av.banner:IsShown(), "the winner sees the banner")
     eq(av.banner.title:GetText(), "Vault Cracked!", "Vault Cracked!")
     Advance(5)
-    UI.ShowTab("games"); UI.Refresh()
-    check(T.games.cards[4].record:GetText():find("1|r won") ~= nil, "the Games tab shows the Vault Breaker record")
+    UI.ShowTab("games"); UI.SetGame("vb"); UI.Refresh()
+    check(a.ns.Finder.find.card.record:GetText():find("40ff401|r") ~= nil, "the finder card shows the Vault Breaker record")
 
     section("vault breaker ui: titles")
     local P = a.ns.Profile
@@ -2324,39 +2352,24 @@ end
 
 ------------------------------------------------------------------------
 if want("nav") then
-    section("sidebar: Home, games, pages, How to play, Settings")
+    section("how to play")
     local a = NewClient("Canga", nil, "Prime")
     Advance(25)
-    local UI, T = a.ns.UI, a.ns.Tabs
-    UI.Show()
-    local nav = UI.nav
-    check(nav ~= nil, "the window has a sidebar")
-    local n = 0
-    for _ in pairs(nav.games) do n = n + 1 end
-    eq(n, 5, "a sidebar entry for each game")
-    nav.games.ha:Click()
-    check(UI.IsVisibleTab("haplay"), "clicking a game opens it")
-    eq(UI.Game(), "ha", "and selects it")
-    check(nav.subs.ha.lobby:IsShown(), "the chosen game shows its pages")
-    check(not nav.subs.chess.lobby:IsShown(), "other games' pages are folded away")
-    nav.subs.ha.board:Click()
-    check(UI.IsVisibleTab("haboard"), "the Generals page opens from the sidebar")
-    check(nav.subs.ha.board.bar:IsShown(), "and is marked as the current page")
-    nav.home:Click()
-    check(UI.IsVisibleTab("games"), "Home shows every game")
-    nav.settings:Click()
-    check(UI.IsVisibleTab("settings"), "Settings opens")
-    nav.help:Click()
+    local UI, FD = a.ns.UI, a.ns.Finder
+    UI.ShowTab("haplay")
+    local mainHelp = a.ns.UI.helpFrame
+    UI.ShowHelp("ha")
     check(UI.helpFrame and UI.helpFrame:IsShown(), "How to play opens")
     eq(UI.helpFrame.title:GetText(), "How to play: Hidden Army", "for the chosen game")
     check(UI.helpFrame.text:GetText():find("Sapper") ~= nil, "with its rules")
     UI.helpFrame:Hide()
-    UI.ShowTab("games")
-    T.games.cards[3].help:Click()
-    eq(UI.helpFrame.title:GetText(), "How to play: Four in a Row", "each Home card has its own How to play")
+    UI.ShowHelp("c4")
+    eq(UI.helpFrame.title:GetText(), "How to play: Four in a Row", "each game has its own rules")
     for _, key in ipairs(a.ns.Data.GAME_ORDER) do
         check((a.ns.Data.GAMES[key].rules or "") ~= "", a.ns.Data.GAMES[key].name .. " has rules")
     end
+    UI.helpFrame:Hide()
+    local nav = nil
 
     section("hidden army ui: deploying and moving")
     local HA, v = a.ns.Army, a.ns.ArmyView.view
@@ -2397,9 +2410,9 @@ if want("nav") then
     local small = a.ns.db.settings.haCell
     check(big and small and big > small, "a bigger window means a bigger battlefield (" .. tostring(big) .. " > " .. tostring(small) .. ")")
     UI.SetCollapsed(true)
-    check(not nav:IsShown(), "the sidebar folds away with the side panel")
+    check(not v.side:IsShown(), "the side panel folds away")
     UI.SetCollapsed(false)
-    check(nav:IsShown(), "and comes back")
+    check(v.side:IsShown(), "and comes back")
     HA.Resign(); Advance(2)
     check(v.banner:IsShown(), "the result banner appears")
     eq(#a.errors, 0, "no Lua errors")

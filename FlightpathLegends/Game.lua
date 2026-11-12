@@ -236,7 +236,8 @@ function G.Announce(force)
         battle = table.concat({ cur.rated and "r" or "c", cur.base, cur.inc, #cur.moves }, ",")
     end
     C.Presence("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(),
-        char, guild, battle, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"), P.MyTitleId("ha"))
+        char, guild, battle, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"), P.MyTitleId("ha"),
+        G.seek and table.concat(G.seek.list or { G.seek.game }, ",") or "")
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -254,6 +255,13 @@ C.handlers.PF = function(sender, dist, parts)
     if parts[18] and #parts[18] <= 24 then P.players[sender].at = parts[18] end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
+    -- the games they are queued for
+    local seeking
+    for key in string.gmatch(parts[19] or "", "[%w]+") do
+        if D.GAMES[key] then seeking = seeking or {}; seeking[#seeking + 1] = key end
+    end
+    if not seeking and D.SEEK_GAME[status] then seeking = { D.SEEK_GAME[status] } end
+    P.online[sender].seeking = seeking
     local kind, base, inc, moves = string.match(parts[14] or "", "^([rcbfva]),(%d+),(%d+),(%d+)$")
     if kind and opp then
         P.online[sender].battle = { rated = kind == "r", game = D.KIND_GAME[kind] or "chess",
@@ -696,7 +704,7 @@ C.handlers.IV = function(sender, dist, parts)
     if inv.game ~= "chess" then inv.rated = false end
     if q then
         local s = G.seek
-        if s and (s.game or "chess") == inv.game and (inv.game ~= "chess" or G.SeekCompatible(s, sender, base, inc, rated, false)) then
+        if s and G.Seeking(inv.game) and (inv.game ~= "chess" or G.SeekCompatible(s, sender, base, inc, rated, false)) then
             AcceptInvite(inv)
         else
             C.Whisper(sender, "DC", gid, "noseek")
@@ -811,21 +819,39 @@ end)
 -- Matchmaking
 ------------------------------------------------------------------------
 -- Joins the rated or casual queue. any = true accepts any time control.
-function G.StartSeek(base, inc, rated, any, game)
+-- Joins the random-opponent queue. games: one game key, or a list of them (any of these
+-- games will do; the first one both players want is played). base/inc/rated/any are chess options.
+function G.StartSeek(base, inc, rated, any, games)
     if OnlineBusy() then
         ns.Print("finish your current game first.")
         return
     end
     if not C.Joined() then
-        ns.Print("still connecting to the chess network - try again in a few seconds.")
+        ns.Print("still connecting to the network - try again in a few seconds.")
         return
     end
-    game = G.GameKey(game)
-    if game ~= "chess" then rated, any, base, inc = false, true, 0, 0 end
+    if type(games) ~= "table" then games = { games } end
+    local set, list = {}, {}
+    for _, key in ipairs(D.GAME_ORDER) do
+        for _, g in ipairs(games) do
+            if G.GameKey(g) == key and not set[key] then set[key] = true; list[#list + 1] = key end
+        end
+    end
+    if #list == 0 then set.chess = true; list = { "chess" } end
+    if not set.chess then rated, any, base, inc = false, true, 0, 0 end
     if base == 0 and not any then rated = false end
-    G.seek = { base = base, inc = inc, rated = rated and true or false, any = any and true or false, next = 0, since = ns.Now(), game = game }
+    G.seek = { base = base, inc = inc, rated = rated and true or false, any = any and true or false, next = 0, since = ns.Now(),
+        game = list[1], games = set, list = list }
     G.Announce()
     ns.Fire("CHESS_INVITE_CHANGED")
+end
+
+-- Whether we are queued for a game.
+function G.Seeking(game)
+    local s = G.seek
+    if not s then return false end
+    if s.games then return s.games[game] == true end
+    return (s.game or "chess") == game
 end
 
 function G.StopSeek()
@@ -875,11 +901,22 @@ C.handlers.SK = function(sender, dist, parts)
     local s = G.seek
     if not s or G.outgoing or OnlineBusy() then return end
     local base, inc, rated, any = tonumber(parts[2]), tonumber(parts[3]), parts[4] == "1", parts[5] == "1"
-    local game = G.GameKey(parts[6])
-    if not base or not inc or game ~= (s.game or "chess") then return end
-    local ok, b, i = true, 0, 0
-    if game == "chess" then ok, b, i = G.SeekCompatible(s, sender, base, inc, rated, any) end
-    if not ok then return end
+    if not base or not inc then return end
+    local theirs = {}
+    for key in string.gmatch(parts[6] or "chess", "[%w]+") do theirs[G.GameKey(key)] = true end
+    -- the first game in the list that both of us want (chess only if the clocks agree)
+    local game, b, i
+    for _, key in ipairs(D.GAME_ORDER) do
+        if not game and theirs[key] and G.Seeking(key) then
+            if key == "chess" then
+                local ok, cb, ci = G.SeekCompatible(s, sender, base, inc, rated, any)
+                if ok then game, b, i = key, cb, ci end
+            else
+                game, b, i = key, 0, 0
+            end
+        end
+    end
+    if not game then return end
     -- Both sides see each other's request; the alphabetically first name sends the challenge.
     if ns.me < sender then
         G.Invite(sender, { base = b, inc = i, rated = s.rated, color = "r", q = true, game = game })
@@ -1379,7 +1416,7 @@ ns.On("CHESS_TICK", function()
     local s = G.seek
     if s and now >= s.next and C.Joined() then
         s.next = now + 12
-        C.Broadcast("SK", s.base, s.inc, s.rated and 1 or 0, s.any and 1 or 0, s.game or "chess")
+        C.Broadcast("SK", s.base, s.inc, s.rated and 1 or 0, s.any and 1 or 0, table.concat(s.list or { s.game or "chess" }, ","))
     end
 
     if C.Joined() and now >= nextAnnounce and nextAnnounce > 0 then

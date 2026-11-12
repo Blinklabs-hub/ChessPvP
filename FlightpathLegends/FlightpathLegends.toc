@@ -30,5 +30,6 @@ UI_FourRow.lua
 UI_Vault.lua
 UI_Army.lua
 UI_Tabs.lua
+UI_Finder.lua
 UI_Main.lua
 UI_Profile.lua

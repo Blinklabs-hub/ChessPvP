@@ -134,6 +134,90 @@ function W.FitBanner(turn, width, baseSize)
     end
 end
 
+-- A dropdown: a field showing the current choice with a yellow arrow; click for a menu.
+-- items() returns { { value =, text =, icon = } }, onSelect(value) is called on a choice.
+local openMenu
+function W.Dropdown(parent, width, items, onSelect)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(width, 26)
+    W.Background(b, 0.04, 0.03, 0.03, 0.95, { 0.55, 0.43, 0.18, 0.9 })
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetSize(18, 18)
+    b.icon:SetPoint("LEFT", 6, 0)
+    b.icon:Hide()
+    b.text = W.Label(b, "GameFontHighlight")
+    b.text:SetPoint("LEFT", 8, 0)
+    b.text:SetPoint("RIGHT", -28, 0)
+    b.text:SetWordWrap(false)
+    b.arrow = b:CreateTexture(nil, "OVERLAY")
+    b.arrow:SetSize(22, 22)
+    b.arrow:SetPoint("RIGHT", -3, 0)
+    b.arrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 0.85, 0.4, 0.08)
+    function b:SetValue(text, icon)
+        self.text:SetText(text or "")
+        self.text:ClearAllPoints()
+        if icon then
+            W.SetIcon(self.icon, icon)
+            self.text:SetPoint("LEFT", 28, 0)
+        else
+            self.icon:Hide()
+            self.text:SetPoint("LEFT", 8, 0)
+        end
+        self.text:SetPoint("RIGHT", -28, 0)
+    end
+    function b:Select(value)
+        if openMenu then openMenu:Hide() end
+        onSelect(value)
+    end
+    b:SetScript("OnClick", function(self)
+        ns.Sound("click")
+        if openMenu and openMenu:IsShown() and openMenu.owner == self then openMenu:Hide() return end
+        if not openMenu then
+            openMenu = CreateFrame("Frame", nil, UIParent)
+            openMenu:SetFrameStrata("FULLSCREEN_DIALOG")
+            openMenu:EnableMouse(true)
+            W.Background(openMenu, 0.04, 0.03, 0.03, 0.97, { 0.6, 0.48, 0.2, 1 })
+            openMenu.rows = {}
+        end
+        local m = openMenu
+        m.owner = self
+        local list = items()
+        for i, it in ipairs(list) do
+            local r = m.rows[i]
+            if not r then
+                r = CreateFrame("Button", nil, m)
+                r:SetHeight(22)
+                r.icon = r:CreateTexture(nil, "ARTWORK")
+                r.icon:SetSize(16, 16)
+                r.icon:SetPoint("LEFT", 6, 0)
+                r.text = W.Label(r, "GameFontHighlight")
+                local h2 = r:CreateTexture(nil, "HIGHLIGHT")
+                h2:SetAllPoints()
+                h2:SetColorTexture(1, 0.85, 0.4, 0.15)
+                m.rows[i] = r
+            end
+            r:ClearAllPoints()
+            r:SetPoint("TOPLEFT", m, "TOPLEFT", 3, -3 - (i - 1) * 22)
+            r:SetPoint("TOPRIGHT", m, "TOPRIGHT", -3, -3 - (i - 1) * 22)
+            r.text:ClearAllPoints()
+            if it.icon then W.SetIcon(r.icon, it.icon); r.text:SetPoint("LEFT", 28, 0) else r.icon:Hide(); r.text:SetPoint("LEFT", 8, 0) end
+            r.text:SetText(it.text)
+            local value = it.value
+            r:SetScript("OnClick", function() self:Select(value) end)
+            r:Show()
+        end
+        for i = #list + 1, #m.rows do m.rows[i]:Hide() end
+        m:ClearAllPoints()
+        m:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
+        m:SetSize(self:GetWidth() or 160, #list * 22 + 6)
+        m:Show()
+    end)
+    return b
+end
+
 function W.Button(parent, text, w, h, onClick)
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     b:SetSize(w, h or 22)
