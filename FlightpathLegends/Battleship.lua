@@ -290,6 +290,14 @@ function BS.Busy()
     return s ~= nil and s.phase ~= "over" and s.mode == "online"
 end
 
+-- Moves so far (for the Live Battles list).
+function BS.MoveCount(s) return #s.myLog + #s.theirLog end
+
+function BS.DropSpectator(sender, id)
+    local s = BS.current
+    if s and s.id == id and s.spectators then s.spectators[sender] = nil end
+end
+
 function BS.Active()
     local s = BS.current
     return s ~= nil and s.phase ~= "over"

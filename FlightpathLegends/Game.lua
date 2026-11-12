@@ -5,10 +5,35 @@ local _, ns = ...
 local G = {}
 ns.Game = G
 
--- The game a message is about: "chess", "bs" (Battleship) or "c4" (Four in a Row).
+-- The game a message is about: "chess" or a key of Data.GAMES ("bs", "c4", "vb").
 function G.GameKey(v)
-    if v == "bs" or v == "c4" then return v end
+    if v and ns.Data.GAMES[v] then return v end
     return "chess"
+end
+
+-- The module that runs a game's online sessions (nil for chess).
+function G.Module(game)
+    local g = ns.Data.GAMES[game]
+    return g and g.module and ns[g.module] or nil
+end
+
+-- The non-chess game we are busy with online, if any: module, game key.
+function G.BusyModule()
+    for _, key in ipairs(ns.Data.GAME_ORDER) do
+        local m = G.Module(key)
+        if m and m.Busy() then return m, key end
+    end
+    return nil
+end
+
+-- Every non-chess game module.
+function G.Modules()
+    local out = {}
+    for _, key in ipairs(ns.Data.GAME_ORDER) do
+        local m = G.Module(key)
+        if m then out[#out + 1] = m end
+    end
+    return out
 end
 
 local E, AI, P, C, D = ns.Engine, ns.AI, ns.Profile, ns.Comm, ns.Data
@@ -174,11 +199,10 @@ local announceQueued = false
 local function MyStatus()
     local g = G.current
     if g and g.state == "active" and g.mode == "online" then return "g", g.opp end
-    if ns.Battleship and ns.Battleship.Busy() then return "g", ns.Battleship.current.opp end
-    if ns.FourRow and ns.FourRow.Busy() then return "g", ns.FourRow.current.opp end
+    local m = G.BusyModule()
+    if m then return "g", m.current.opp end
     if G.seek then
-        if G.seek.game == "bs" then return "b", "" end
-        if G.seek.game == "c4" then return "f", "" end
+        if (G.seek.game or "chess") ~= "chess" then return D.GAMES[G.seek.game].seek, "" end
         return G.seek.rated and "r" or "c", ""
     end
     if ns.db.settings.dnd then return "d", "" end
@@ -205,17 +229,14 @@ function G.Announce(force)
     local char, guild = ns.Assets.PackChar(ns.Assets.MyCharInfo())
     -- While in a battle, what kind it is (for the Live Battles tab).
     local cur, battle = G.current, ""
-    local bsCur = ns.Battleship and ns.Battleship.Busy() and ns.Battleship.current
-    local frCur = ns.FourRow and ns.FourRow.Busy() and ns.FourRow.current
-    if status == "g" and bsCur then
-        battle = table.concat({ "b", 0, 0, #bsCur.myLog + #bsCur.theirLog }, ",")
-    elseif status == "g" and frCur then
-        battle = table.concat({ "f", 0, 0, #frCur.moves }, ",")
+    local busy, busyGame = G.BusyModule()
+    if status == "g" and busy then
+        battle = table.concat({ D.GAMES[busyGame].kind, 0, 0, busy.MoveCount(busy.current) }, ",")
     elseif status == "g" and cur then
         battle = table.concat({ cur.rated and "r" or "c", cur.base, cur.inc, #cur.moves }, ",")
     end
     C.Presence("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(),
-        char, guild, battle, P.MyTitleId("bs"), P.MyTitleId("c4"))
+        char, guild, battle, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"))
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -229,11 +250,12 @@ C.handlers.PF = function(sender, dist, parts)
     if ch then P.players[sender].ch = ch end
     if parts[15] and #parts[15] <= 24 then P.players[sender].bt = parts[15] end
     if parts[16] and #parts[16] <= 24 then P.players[sender].ft = parts[16] end
+    if parts[17] and #parts[17] <= 24 then P.players[sender].vt = parts[17] end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
-    local kind, base, inc, moves = string.match(parts[14] or "", "^([rcbf]),(%d+),(%d+),(%d+)$")
+    local kind, base, inc, moves = string.match(parts[14] or "", "^([rcbfv]),(%d+),(%d+),(%d+)$")
     if kind and opp then
-        P.online[sender].battle = { rated = kind == "r", game = (kind == "b" and "bs") or (kind == "f" and "c4") or "chess",
+        P.online[sender].battle = { rated = kind == "r", game = D.KIND_GAME[kind] or "chess",
             base = tonumber(base), inc = tonumber(inc), moves = tonumber(moves) }
     end
     ns.Fire("CHESS_LOBBY_CHANGED")
@@ -403,8 +425,7 @@ end
 local function OnlineBusy()
     local g = G.current
     if g and g.state == "active" and g.mode == "online" then return true end
-    if ns.FourRow and ns.FourRow.Busy() then return true end
-    return ns.Battleship ~= nil and ns.Battleship.Busy()
+    return G.BusyModule() ~= nil
 end
 G.OnlineBusy = OnlineBusy
 
@@ -597,8 +618,7 @@ local function AcceptInvite(inv)
         C.Whisper(inv.from, "AC", inv.id, P.me.rating, P.MyTitleId())
         for _, other in pairs(G.incoming) do C.Whisper(other.from, "DC", other.id, "busy") end
         G.incoming = {}
-        if inv.game == "c4" then ns.FourRow.StartOnline(inv.id, inv.from, myColor == 1)
-        else ns.Battleship.StartOnline(inv.id, inv.from, myColor == 1) end
+        G.Module(inv.game).StartOnline(inv.id, inv.from, myColor == 1)
         ns.Fire("CHESS_INVITE_CHANGED")
         return
     end
@@ -719,8 +739,7 @@ C.handlers.AC = function(sender, dist, parts)
     if o.game ~= "chess" then
         for _, other in pairs(G.incoming) do C.Whisper(other.from, "DC", other.id, "busy") end
         G.incoming = {}
-        if o.game == "c4" then ns.FourRow.StartOnline(o.id, sender, o.myColor == 1)
-        else ns.Battleship.StartOnline(o.id, sender, o.myColor == 1) end
+        G.Module(o.game).StartOnline(o.id, sender, o.myColor == 1)
         ns.Fire("CHESS_INVITE_CHANGED")
         return
     end
@@ -882,7 +901,7 @@ C.handlers.PQ = function(sender, dist)
         if P.me.badges[D.BADGES[i].id] then list[#list + 1] = i end
     end
     local char, guild = ns.Assets.PackChar(ns.Assets.MyCharInfo())
-    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild, P.MyTitleId("bs"), P.MyTitleId("c4"))
+    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"))
 end
 
 C.handlers.PR = function(sender, dist, parts)
@@ -904,6 +923,7 @@ C.handlers.PR = function(sender, dist, parts)
     if ch then e.ch = ch end
     if parts[7] and #parts[7] <= 24 then e.bt = parts[7] end
     if parts[8] and #parts[8] <= 24 then e.ft = parts[8] end
+    if parts[9] and #parts[9] <= 24 then e.vt = parts[9] end
     e.profileAt = ns.ServerTime()
     ns.Fire("CHESS_PROFILE_INFO", sender)
 end
@@ -1191,12 +1211,9 @@ end
 
 C.handlers.SP = function(sender, dist)
     if dist ~= "WHISPER" then return end
-    if ns.Battleship and ns.Battleship.Busy() then
-        if not ns.Battleship.HandleWatchRequest(sender) then C.Whisper(sender, "SN") end
-        return
-    end
-    if ns.FourRow and ns.FourRow.Busy() then
-        if not ns.FourRow.HandleWatchRequest(sender) then C.Whisper(sender, "SN") end
+    local busy = G.BusyModule()
+    if busy then
+        if not busy.HandleWatchRequest(sender) then C.Whisper(sender, "SN") end
         return
     end
     local g = G.current
@@ -1224,9 +1241,7 @@ C.handlers.SX = function(sender, dist, parts)
         g.spectators[sender] = nil
         g.spectatorCount = g.spectatorCount - 1
     end
-    local bs = ns.Battleship and ns.Battleship.current
-    if bs and bs.id == parts[2] and bs.spectators then bs.spectators[sender] = nil end
-    if ns.FourRow then ns.FourRow.DropSpectator(sender, parts[2]) end
+    for _, m in ipairs(G.Modules()) do m.DropSpectator(sender, parts[2]) end
 end
 
 C.handlers.SN = function(sender, dist)

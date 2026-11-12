@@ -284,6 +284,9 @@ function FR.Busy()
     return s ~= nil and s.phase ~= "over" and s.mode == "online"
 end
 
+-- Moves so far (for the Live Games list).
+function FR.MoveCount(s) return #s.moves end
+
 function FR.Active()
     local s = FR.current
     return s ~= nil and s.phase ~= "over"

@@ -193,16 +193,57 @@ D.BADGES = {
         check = function(p, s) return s.mode == "c4" and not s.vsAI and s.outcome == "draw" end },
     { id = "c4_ai", game = "c4", title = "the Machinist", name = "Machinist", points = 10, desc = "Beat the Master computer at Four in a Row.",
         check = function(p, s) return s.mode == "c4" and s.vsAI and s.outcome == "win" and s.aiLevel >= 3 end },
+
+    -- Vault Breaker (game = "vb")
+    { id = "vb_play", game = "vb", title = "the Locksmith", name = "First Vault", points = 5, desc = "Finish a game of Vault Breaker against another player.",
+        check = function(p, s) return s.mode == "vb" and not s.vsAI end },
+    { id = "vb_win1", game = "vb", title = "the Safecracker", name = "Cracked It", points = 10, desc = "Win a game of Vault Breaker against another player.",
+        check = function(p, s) return s.mode == "vb" and not s.vsAI and s.outcome == "win" end },
+    { id = "vb_win10", game = "vb", title = "Vault Master", name = "Vault Master", points = 15, desc = "Win 10 games of Vault Breaker.",
+        check = function(p) return (p.vbw or 0) >= 10 end, progress = function(p) return p.vbw or 0, 10 end },
+    { id = "vb_win50", game = "vb", title = "Grand Safecracker of Gadgetzan", name = "Grand Safecracker", points = 50, desc = "Win 50 games of Vault Breaker.",
+        check = function(p) return (p.vbw or 0) >= 50 end, progress = function(p) return p.vbw or 0, 50 end },
+    { id = "vb_streak5", game = "vb", title = "the Uncrackable", name = "Uncrackable", points = 25, desc = "Win 5 games of Vault Breaker in a row.",
+        check = function(p) return (p.vbBest or 0) >= 5 end, progress = function(p) return p.vbBest or 0, 5 end },
+    { id = "vb_quick", game = "vb", title = "the Mind Reader", name = "Mind Reader", points = 15, desc = "Crack a vault in 4 guesses or fewer.",
+        check = function(p, s) return s.mode == "vb" and not s.vsAI and s.cracked and s.rounds <= 4 end },
+    { id = "vb_lucky", game = "vb", title = "the Lucky Guess", name = "Lucky Guess", points = 20, desc = "Crack a vault in 2 guesses or fewer.",
+        check = function(p, s) return s.mode == "vb" and not s.vsAI and s.cracked and s.rounds <= 2 end },
+    { id = "vb_last", game = "vb", title = "the Last Tumbler", name = "The Last Tumbler", points = 15, desc = "Crack a vault with your tenth and final guess.",
+        check = function(p, s) return s.mode == "vb" and not s.vsAI and s.cracked and s.rounds == 10 end },
+    { id = "vb_draw", game = "vb", title = "the Matched Wit", name = "Matched Wits", points = 5, desc = "Draw a game of Vault Breaker against another player.",
+        check = function(p, s) return s.mode == "vb" and not s.vsAI and s.outcome == "draw" end },
+    { id = "vb_ai", game = "vb", title = "the Gnomish Engineer", name = "Gnomish Engineer", points = 10, desc = "Beat the Master computer at Vault Breaker.",
+        check = function(p, s) return s.mode == "vb" and s.vsAI and s.outcome == "win" and s.aiLevel >= 3 end },
 }
 
--- The games of Flightpath Legends. kind: witnessed-record kind, seek: lobby status while queued,
--- noTitle: what players without a title are called in that game.
+-- The games of Flightpath Legends.
+--   kind: witnessed-record kind (chess also uses "c" for casual), seek: lobby status while queued,
+--   module: the namespace table that runs online games (not chess), noTitle: what players
+--   without a title are called, word: what one match is called, draws: whether it can be drawn.
 D.GAMES = {
-    chess = { name = "Chess", kind = "r", seek = "r" },
-    bs = { name = "Battleship", kind = "b", seek = "b", noTitle = "Landlubber" },
-    c4 = { name = "Four in a Row", kind = "f", seek = "f", noTitle = "Tavern Regular" },
+    chess = { name = "Chess", kind = "r", seek = "r", word = "battle", draws = true, play = "play",
+        icon = "achievement_leader_king_varian_wrynn",
+        blurb = "Horde against Alliance on a battlefield board. Rated with leagues and ranks, or casual." },
+    bs = { name = "Battleship", kind = "b", seek = "b", module = "Battleship", noTitle = "Landlubber", word = "battle", draws = false,
+        play = "bsplay", icon = "inv_garrison_dreadnaught", where = "at sea",
+        blurb = "Hide your Garrison fleet and sink theirs first. Ten by ten waters, one shot a turn." },
+    c4 = { name = "Four in a Row", kind = "f", seek = "f", module = "FourRow", noTitle = "Tavern Regular", word = "game", draws = true,
+        play = "c4play", icon = "inv_misc_coin_01", where = "at the tavern",
+        blurb = "Drop gold and silver coins into the tavern board. Four in a line wins." },
+    vb = { name = "Vault Breaker", kind = "v", seek = "v", module = "Vault", noTitle = "Apprentice Locksmith", word = "game", draws = true,
+        play = "vbplay", icon = "inv_misc_lockbox_1", where = "at the vaults",
+        blurb = "Lock a gnomish vault with four gems and crack theirs first. Gold pins, silver pins, ten guesses." },
 }
-D.GAME_ORDER = { "chess", "bs", "c4" }
+D.GAME_ORDER = { "chess", "bs", "c4", "vb" }
+-- Which game a witnessed-record kind or a lobby status belongs to.
+D.KIND_GAME, D.SEEK_GAME = { c = "chess" }, { c = "chess" }
+for key, g in pairs(D.GAMES) do D.KIND_GAME[g.kind] = key; D.SEEK_GAME[g.seek] = key end
+
+function D.GameIcon(game)
+    local g = D.GAMES[game]
+    return g and ("Interface\\Icons\\" .. g.icon) or nil
+end
 
 -- Badge icons (game icons). A table picks the icon by the player's faction.
 local function PvP(n) return { Alliance = string.format("achievement_pvp_a_%02d", n), Horde = string.format("achievement_pvp_h_%02d", n) } end
@@ -250,6 +291,16 @@ D.BADGE_ICONS = {
     c4_last = "inv_misc_bag_10",
     c4_draw = "inv_drink_01",
     c4_ai = "inv_misc_gear_08",
+    vb_play = "inv_misc_key_01",
+    vb_win1 = "inv_misc_lockbox_1",
+    vb_win10 = "inv_misc_key_03",
+    vb_win50 = "inv_misc_gem_diamond_02",
+    vb_streak5 = "inv_box_04",
+    vb_quick = "inv_misc_gem_sapphire_02",
+    vb_lucky = "inv_misc_gem_ruby_02",
+    vb_last = "inv_misc_key_05",
+    vb_draw = "inv_misc_gem_pearl_05",
+    vb_ai = "inv_misc_enggizmos_05",
 }
 
 function D.BadgeIcon(id, faction)

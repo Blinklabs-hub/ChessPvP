@@ -20,7 +20,7 @@ end
 
 local function StatBox(parent, title)
     local b = W.Card(parent)
-    b:SetSize(74, 78)
+    b:SetSize(86, 78)
     b.title = W.Label(b, "GameFontNormalSmall", title)
     b.title:SetPoint("TOP", 0, -6)
     b.big = W.Title(b, 20, nil, { 1, 1, 1 })
@@ -79,12 +79,22 @@ local function Build()
     f.rated:SetPoint("TOPLEFT", 14, -114)
     f.casual = StatBox(f, "Casual")
     f.casual:SetPoint("LEFT", f.rated, "RIGHT", 6, 0)
-    f.bs = StatBox(f, "Battleship")
-    f.bs:SetPoint("LEFT", f.casual, "RIGHT", 6, 0)
-    f.c4 = StatBox(f, "Four in a Row")
-    f.c4:SetPoint("LEFT", f.bs, "RIGHT", 6, 0)
+    -- the other games share one box: a line each with the game's icon
+    f.games = W.Card(f)
+    f.games:SetSize(124, 78)
+    f.games:SetPoint("LEFT", f.casual, "RIGHT", 6, 0)
+    f.games.title = W.Label(f.games, "GameFontNormalSmall", "Board games")
+    f.games.title:SetPoint("TOP", 0, -6)
+    f.games.lines = {}
+    for i = 1, 3 do
+        local fs = W.Label(f.games, "GameFontHighlightSmall")
+        fs:SetPoint("TOPLEFT", 8, -8 - i * 16)
+        fs:SetWidth(112)
+        fs:SetWordWrap(false)
+        f.games.lines[i] = fs
+    end
     f.h2h = StatBox(f, "Against you")
-    f.h2h:SetPoint("LEFT", f.c4, "RIGHT", 6, 0)
+    f.h2h:SetPoint("LEFT", f.games, "RIGHT", 6, 0)
     f.warn = W.Label(f, "GameFontHighlightSmall")
     f.warn:SetPoint("TOPLEFT", 16, -198)
     f.warn:SetWidth(390)
@@ -247,35 +257,31 @@ local function Refresh()
         f.casual.line1:SetText("|cffaaaaaaNo casual battles|r")
         f.casual.line2:SetText("")
     end
-    local bs = L.Battleship(name)
-    if bs then
-        f.bs.big:SetText(bs.bw + bs.bl)
-        f.bs.line1:SetText(string.format("|cff40ff40%d|r - |cffff5040%d|r", bs.bw, bs.bl))
-        f.bs.line2:SetText(WinRate(bs.bw, bs.bl, 0))
-    else
-        f.bs.big:SetText("|cff808080-|r")
-        f.bs.line1:SetText("|cffaaaaaaNo battles|r")
-        f.bs.line2:SetText("")
-    end
-    local c4 = L.FourRow(name)
-    if c4 then
-        f.c4.big:SetText(c4.fw + c4.fl + c4.fd)
-        f.c4.line1:SetText(Record(c4.fw, c4.fl, c4.fd))
-        f.c4.line2:SetText(WinRate(c4.fw, c4.fl, c4.fd))
-    else
-        f.c4.big:SetText("|cff808080-|r")
-        f.c4.line1:SetText("|cffaaaaaaNo games|r")
-        f.c4.line2:SetText("")
+    local n = 0
+    for _, key in ipairs(D.GAME_ORDER) do
+        if key ~= "chess" then
+            n = n + 1
+            local rec = L.Record(name, key)
+            local text
+            if rec then
+                text = string.format("|cff40ff40%d|r-|cffff5040%d|r", rec.w, rec.l)
+                if D.GAMES[key].draws then text = text .. string.format("-|cffaaaaaa%d|r", rec.d) end
+            else
+                text = "|cff808080-|r"
+            end
+            local line = f.games.lines[n]
+            if line then line:SetText("|T" .. D.GameIcon(key) .. ":14:14|t " .. text) end
+        end
     end
     if me then
         f.h2h:Hide()
     else
         -- head to head in the game being shown
-        local h = L.HeadToHead(ns.me, name, (game == "bs" and "b") or (game == "c4" and "f") or "chess")
+        local h = L.HeadToHead(ns.me, name, game == "chess" and "chess" or D.GAMES[game].kind)
         f.h2h:Show()
         f.h2h.big:SetText(h.w + h.l + h.d)
         f.h2h.line1:SetText(Record(h.w, h.l, h.d))
-        f.h2h.line2:SetText("|cffaaaaaa" .. ((game == "bs" and "at sea") or (game == "c4" and "at the tavern") or "at chess") .. "|r")
+        f.h2h.line2:SetText("|cffaaaaaa" .. (D.GAMES[game].where or "at chess") .. "|r")
     end
     if v and v.disputed > 0 then
         f.warn:SetText(v.disputed .. " disputed result(s): the players reported different outcomes.")
@@ -293,6 +299,8 @@ local function Refresh()
             row.opp:SetText("vs " .. ns.ShortName(e.opp))
             if e.game == "b" then
                 row.kind:SetText("|cff9ac8ffBattleship|r")
+            elseif e.game == "v" then
+                row.kind:SetText("|cffc080ffVault Breaker|r")
             elseif e.game == "f" then
                 row.kind:SetText("|cffffd040Four in a Row|r")
             elseif e.rated then
@@ -367,7 +375,7 @@ local function Refresh()
         else
             f.ratedBtn:Hide()
             f.casualBtn:SetPoint("BOTTOMLEFT", 14, 14)
-            f.casualBtn:SetText(game == "c4" and "Challenge" or "Battle")
+            f.casualBtn:SetText(game == "bs" and "Battle" or "Challenge")
         end
         if G.LeagueOK(name) then f.ratedBtn:Enable() else f.ratedBtn:Disable() end
         local o = P.online[name]

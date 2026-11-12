@@ -2,8 +2,8 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "2.2.0"
-ns.PROTO = 4 -- network protocol version; bump when messages change incompatibly
+ns.VERSION = "2.3.0"
+ns.PROTO = 5 -- network protocol version; bump when messages change incompatibly
 FlightpathLegends = ns -- exposed for debugging and the addon compartment
 
 ------------------------------------------------------------------------
@@ -289,7 +289,7 @@ end)
 ------------------------------------------------------------------------
 local function Help()
     ns.Print("commands:")
-    ns.Print("  /fpl - open or close Flightpath Legends  (/chess, /battleship, /four open a game)")
+    ns.Print("  /fpl - open or close Flightpath Legends  (/chess, /battleship, /four, /vault open a game)")
     ns.Print("  /fpl challenge <name> - challenge a player (or your target)")
     ns.Print("  /fpl accept | decline - answer the latest challenge")
     ns.Print("  /fpl resign - resign the current game")
@@ -308,8 +308,10 @@ SLASH_FPLBATTLESHIP2 = "/bs"
 SLASH_FPLFOURROW1 = "/four"
 SLASH_FPLFOURROW2 = "/connect4"
 SLASH_FPLFOURROW3 = "/c4"
+SLASH_FPLVAULT1 = "/vault"
+SLASH_FPLVAULT2 = "/vaultbreaker"
 
--- /chess, /battleship and /four open that game; anything after them works like /fpl.
+-- /chess, /battleship, /four and /vault open that game; anything after them works like /fpl.
 local function OpenGame(game, msg)
     if (msg or ""):match("^%s*$") then
         ns.UI.Show()
@@ -322,6 +324,7 @@ end
 SlashCmdList["FPLCHESS"] = function(msg) OpenGame("chess", msg) end
 SlashCmdList["FPLBATTLESHIP"] = function(msg) OpenGame("bs", msg) end
 SlashCmdList["FPLFOURROW"] = function(msg) OpenGame("c4", msg) end
+SlashCmdList["FPLVAULT"] = function(msg) OpenGame("vb", msg) end
 
 SlashCmdList["FLIGHTPATHLEGENDS"] = function(msg)
     msg = msg or ""
@@ -344,9 +347,11 @@ SlashCmdList["FLIGHTPATHLEGENDS"] = function(msg)
     elseif cmd == "decline" then
         ns.Game.AnswerLatest(false)
     elseif cmd == "resign" then
-        if ns.Battleship.Active() then ns.Battleship.Resign()
-        elseif ns.FourRow.Active() then ns.FourRow.Resign()
-        else ns.Game.Resign() end
+        local resigned = false
+        for _, m in ipairs(ns.Game.Modules()) do
+            if not resigned and m.Active() then m.Resign(); resigned = true end
+        end
+        if not resigned then ns.Game.Resign() end
     elseif cmd == "dnd" then
         ns.UI.SetDND(true)
     elseif cmd == "online" then

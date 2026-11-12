@@ -8,6 +8,7 @@ ns.UI = UI
 local G, P, C, D, A, W, Board, PV, T = ns.Game, ns.Profile, ns.Comm, ns.Data, ns.Assets, ns.W, ns.Board, ns.PlayView, ns.Tabs
 local BV, BS = ns.BattleView, ns.Battleship
 local FV, FR = ns.FourView, ns.FourRow
+local VV, VB = ns.VaultView, ns.Vault
 local floor, max, min = math.floor, math.max, math.min
 
 local PAD = 12
@@ -21,8 +22,9 @@ local currentTab = "play"
 local collapsed = false
 local size = { w = 0, h = 0 } -- current window size (tracked here, not read back from frames)
 
--- game: tab only shown for that game ("chess" / "bs"); shared tabs have none.
+-- game: tab only shown for that game ("chess", "bs", "c4", "vb"); shared tabs have none.
 local TABS = {
+    { id = "games", text = "Games", build = T.BuildGames, refresh = T.RefreshGames, layout = T.LayoutGames },
     { id = "play", game = "chess", text = "Battle", build = PV.Build, refresh = PV.Refresh },
     { id = "bsplay", game = "bs", text = "Battle", build = BV.Build, refresh = BV.Refresh },
     { id = "lobby", game = "chess", text = "Lobby", build = T.lobbies.chess.Build, refresh = T.lobbies.chess.Refresh, layout = T.lobbies.chess.Layout },
@@ -38,25 +40,31 @@ local TABS = {
     { id = "c4live", game = "c4", text = "Live Games", build = T.lives.c4.Build, refresh = T.lives.c4.Refresh, layout = T.lives.c4.Layout },
     { id = "c4board", game = "c4", text = "Champions", build = T.BuildTavern, refresh = T.RefreshTavern, layout = T.LayoutTavern },
     { id = "c4collection", game = "c4", text = "Collection", build = T.collections.c4.Build, refresh = T.collections.c4.Refresh, layout = T.collections.c4.Layout },
+    { id = "vbplay", game = "vb", text = "Game", build = VV.Build, refresh = VV.Refresh },
+    { id = "vblobby", game = "vb", text = "Lobby", build = T.lobbies.vb.Build, refresh = T.lobbies.vb.Refresh, layout = T.lobbies.vb.Layout },
+    { id = "vblive", game = "vb", text = "Live Games", build = T.lives.vb.Build, refresh = T.lives.vb.Refresh, layout = T.lives.vb.Layout },
+    { id = "vbboard", game = "vb", text = "Safecrackers", build = T.boards.vb.Build, refresh = T.boards.vb.Refresh, layout = T.boards.vb.Layout },
+    { id = "vbcollection", game = "vb", text = "Collection", build = T.collections.vb.Build, refresh = T.collections.vb.Refresh, layout = T.collections.vb.Layout },
     { id = "settings", text = "Settings", build = T.BuildSettings, refresh = T.RefreshSettings, layout = T.LayoutSettings },
 }
 -- The same kind of tab in each game.
 local KIND = {
-    play = "play", bsplay = "play", c4play = "play",
-    lobby = "lobby", bslobby = "lobby", c4lobby = "lobby",
-    live = "live", bslive = "live", c4live = "live",
-    ladder = "board", admirals = "board", c4board = "board",
-    collection = "coll", bscollection = "coll", c4collection = "coll",
+    play = "play", bsplay = "play", c4play = "play", vbplay = "play",
+    lobby = "lobby", bslobby = "lobby", c4lobby = "lobby", vblobby = "lobby",
+    live = "live", bslive = "live", c4live = "live", vblive = "live",
+    ladder = "board", admirals = "board", c4board = "board", vbboard = "board",
+    collection = "coll", bscollection = "coll", c4collection = "coll", vbcollection = "coll",
 }
 local TAB_FOR = {
     chess = { play = "play", lobby = "lobby", live = "live", board = "ladder", coll = "collection" },
     bs = { play = "bsplay", lobby = "bslobby", live = "bslive", board = "admirals", coll = "bscollection" },
     c4 = { play = "c4play", lobby = "c4lobby", live = "c4live", board = "c4board", coll = "c4collection" },
+    vb = { play = "vbplay", lobby = "vblobby", live = "vblive", board = "vbboard", coll = "vbcollection" },
 }
 
 local function Game()
     local g = ns.db and ns.db.settings.game
-    if g == "bs" or g == "c4" then return g end
+    if g and D.GAMES[g] then return g end
     return "chess"
 end
 UI.Game = Game
@@ -101,34 +109,30 @@ local function BoardFor(w, h)
     return max(MIN_BOARD, min(MAX_BOARD, floor(min(availW, availH))))
 end
 
--- Battleship page: window size for a square size, and the square size that fits.
-local function BsSizeFor(cellPx)
-    local w, h = BV.SizeFor(cellPx, ShowSide())
+-- Pages of the other games: each view has SizeFor(cell, side) and CellFor(w, h, side);
+-- key is where the chosen square size is saved.
+local PAGES = {
+    bsplay = { view = BV, key = "bsCell", def = 34, min = 20 },
+    c4play = { view = FV, key = "c4Cell", def = 56, min = 30 },
+    vbplay = { view = VV, key = "vbCell", def = 36, min = 24 },
+}
+local function PageSizeFor(pg, cellPx)
+    local w, h = pg.view.SizeFor(cellPx, ShowSide())
     return w + PAD * 2, h + ContentTop() + PAD
 end
-local function BsCellFor(w, h)
-    return BV.CellFor(w - PAD * 2, h - ContentTop() - PAD, ShowSide())
-end
-
--- Four in a Row page: window size for a hole size, and the hole size that fits.
-local function C4SizeFor(cellPx)
-    local w, h = FV.SizeFor(cellPx, ShowSide())
-    return w + PAD * 2, h + ContentTop() + PAD
-end
-local function C4CellFor(w, h)
-    return FV.CellFor(w - PAD * 2, h - ContentTop() - PAD, ShowSide())
+local function PageCellFor(pg, w, h)
+    return pg.view.CellFor(w - PAD * 2, h - ContentTop() - PAD, ShowSide())
 end
 
 local function SetMinSize()
     local minW, minH
-    if currentTab == "bsplay" then
-        minW, minH = BsSizeFor(20)
-    elseif currentTab == "c4play" then
-        minW, minH = C4SizeFor(30)
+    local pg = PAGES[currentTab]
+    if pg then
+        minW, minH = PageSizeFor(pg, pg.min)
     elseif currentTab == "play" then
         minW, minH = PlaySizeFor(MIN_BOARD)
     else
-        minW, minH = 620, 460
+        minW, minH = 640, 460
     end
     if main.SetResizeBounds then
         pcall(main.SetResizeBounds, main, minW, minH, 2400, 1600)
@@ -144,7 +148,7 @@ function UI.Layout()
     local top = ContentTop()
     -- The player line beside the title only when there is room for it.
     -- The character card shrinks with the window and hides when there is no room.
-    local cardW = min(360, w - 410)
+    local cardW = min(360, w - 290)
     if cardW >= 180 then
         main.me:SetWidth(cardW)
         main.me.name:SetWidth(cardW - 52 - 70)
@@ -153,6 +157,10 @@ function UI.Layout()
     else
         main.me:Hide()
     end
+    -- tab buttons share the width (up to 98px each)
+    local shown = 0
+    for i = 1, #TABS do if TabVisible(TABS[i]) then shown = shown + 1 end end
+    local tabW = max(70, min(98, floor((w - PAD * 2) / max(1, shown)) - 3))
     local x = PAD
     for i = 1, #TABS do
         local tab = TABS[i]
@@ -164,16 +172,16 @@ function UI.Layout()
         if TabsVisible() and TabVisible(tab) then
             b:ClearAllPoints()
             b:SetPoint("TOPLEFT", main, "TOPLEFT", x, -HEAD)
-            x = x + 101
+            b:SetWidth(tabW)
+            x = x + tabW + 3
             b:Show()
         else
             b:Hide()
         end
     end
-    if currentTab == "bsplay" then
-        BV.Layout(BsCellFor(w, h), ShowSide())
-    elseif currentTab == "c4play" then
-        FV.Layout(C4CellFor(w, h), ShowSide())
+    local pg = PAGES[currentTab]
+    if pg then
+        pg.view.Layout(PageCellFor(pg, w, h), ShowSide())
     elseif currentTab == "play" then
         PV.Layout(BoardFor(w, h), ShowSide())
     else
@@ -194,13 +202,9 @@ end
 
 -- In the play tab the window hugs the board exactly.
 local function SnapToBoard()
-    if currentTab == "bsplay" then
-        local w, h = BsSizeFor(BsCellFor(size.w, size.h))
-        ApplySize(w, h)
-        return
-    end
-    if currentTab == "c4play" then
-        local w, h = C4SizeFor(C4CellFor(size.w, size.h))
+    local pg = PAGES[currentTab]
+    if pg then
+        local w, h = PageSizeFor(pg, PageCellFor(pg, size.w, size.h))
         ApplySize(w, h)
         return
     end
@@ -213,10 +217,9 @@ local function SaveGeometry()
     local s = ns.db.settings
     local left, top = main:GetLeft(), main:GetTop()
     if left and top then s.pos = { "TOPLEFT", "BOTTOMLEFT", left, top } end
-    if currentTab == "bsplay" then
-        s.bsCell = BsCellFor(size.w, size.h)
-    elseif currentTab == "c4play" then
-        s.c4Cell = C4CellFor(size.w, size.h)
+    local pg = PAGES[currentTab]
+    if pg then
+        s[pg.key] = PageCellFor(pg, size.w, size.h)
     elseif currentTab == "play" then
         s.boardPx = BoardFor(size.w, size.h)
     else
@@ -227,11 +230,9 @@ end
 -- Resizes the window for the current tab and mode.
 local function FitForTab()
     local s = ns.db.settings
-    if currentTab == "bsplay" then
-        local w, h = BsSizeFor(s.bsCell or 34)
-        ApplySize(w, h)
-    elseif currentTab == "c4play" then
-        local w, h = C4SizeFor(s.c4Cell or 56)
+    local pg = PAGES[currentTab]
+    if pg then
+        local w, h = PageSizeFor(pg, s[pg.key] or pg.def)
         ApplySize(w, h)
     elseif currentTab == "play" then
         local w, h = PlaySizeFor(s.boardPx or 448)
@@ -290,34 +291,28 @@ local function Build()
 
     local title = W.Title(main, 24, "Flightpath Legends")
     title:SetPoint("TOPLEFT", PAD, -6)
-    -- Game switcher: Chess / Battleship
-    main.games = {}
-    local games = {
-        { id = "chess", text = "Chess", icon = "Interface\\Icons\\achievement_leader_king_varian_wrynn" },
-        { id = "bs", text = "Battleship", icon = "Interface\\Icons\\inv_garrison_dreadnaught" },
-        { id = "c4", text = "Four in a Row", icon = "Interface\\Icons\\inv_misc_coin_01" },
-    }
-    for i, gdef in ipairs(games) do
-        local b = CreateFrame("Button", nil, main)
-        b:SetSize(120, 22)
-        b:SetPoint("TOPLEFT", PAD + (i - 1) * 124, -32)
-        b.bg = W.Background(b, 0.1, 0.08, 0.05, 0.9, { 0.55, 0.43, 0.18, 0.9 })
-        b.icon = b:CreateTexture(nil, "ARTWORK")
-        b.icon:SetSize(18, 18)
-        b.icon:SetPoint("LEFT", 3, 0)
-        W.SetIcon(b.icon, gdef.icon)
-        b.text = W.Title(b, 13, gdef.text)
-        b.text:SetPoint("LEFT", 25, 0)
-        local hl = b:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints()
-        hl:SetColorTexture(1, 0.85, 0.4, 0.12)
-        b:SetScript("OnClick", function()
-            ns.Sound("click")
-            UI.SetGame(gdef.id)
-        end)
-        b.id = gdef.id
-        main.games[gdef.id] = b
-    end
+    -- The game being played (click to choose another in the Games tab).
+    local gl = CreateFrame("Button", nil, main)
+    gl:SetSize(220, 20)
+    gl:SetPoint("TOPLEFT", PAD, -33)
+    gl.icon = gl:CreateTexture(nil, "ARTWORK")
+    gl.icon:SetSize(18, 18)
+    gl.icon:SetPoint("LEFT", 0, 0)
+    gl.text = W.Title(gl, 14)
+    gl.text:SetPoint("LEFT", 24, 0)
+    gl.text:SetWordWrap(false)
+    local glHl = gl:CreateTexture(nil, "HIGHLIGHT")
+    glHl:SetAllPoints()
+    glHl:SetColorTexture(1, 0.85, 0.4, 0.08)
+    gl:SetScript("OnClick", function()
+        ns.Sound("click")
+        UI.ShowTab("games")
+    end)
+    W.Tooltip(gl, function(_, tip)
+        tip:SetText("Choose a game", 1, 0.82, 0)
+        tip:AddLine("Opens the Games tab.", 1, 1, 1)
+    end)
+    main.gameLabel = gl
 
     -- Your character card (armory style), top right. Click for your full profile.
     local card = CreateFrame("Button", nil, main)
@@ -415,13 +410,12 @@ local function Build()
         if accum >= 0.1 then
             accum = 0
             if currentTab == "play" then PV.UpdateClocks() end
-            if currentTab == "bsplay" and BS.current and BS.current.phase ~= "over" then
+            -- the other games' timers tick every 0.3s
+            local pg = PAGES[currentTab]
+            local m = pg and G.Module(Game())
+            if m and m.current and m.current.phase ~= "over" then
                 bsAccum = (bsAccum or 0) + 1
-                if bsAccum >= 3 then bsAccum = 0; BV.Refresh() end
-            end
-            if currentTab == "c4play" and FR.current and FR.current.phase ~= "over" then
-                bsAccum = (bsAccum or 0) + 1
-                if bsAccum >= 3 then bsAccum = 0; FV.Refresh() end
+                if bsAccum >= 3 then bsAccum = 0; pg.view.Refresh() end
             end
         end
     end)
@@ -437,15 +431,8 @@ end
 function UI.Refresh()
     if not built or not main:IsShown() or not P.me then return end
     local p = P.me
-    for id, b in pairs(main.games) do
-        if id == Game() then
-            b.bg:SetColorTexture(0.45, 0.32, 0.08, 0.95)
-            b.text:SetTextColor(1, 0.92, 0.6)
-        else
-            b.bg:SetColorTexture(0.1, 0.08, 0.05, 0.9)
-            b.text:SetTextColor(0.75, 0.62, 0.3)
-        end
-    end
+    W.SetIcon(main.gameLabel.icon, D.GameIcon(Game()))
+    main.gameLabel.text:SetText(D.GAMES[Game()].name .. "  |cff8a7a5a(change)|r")
     local card, info = main.me, A.MyCharInfo()
     card.portrait:SetPlayer(ns.me, info, A.MyFaction())
     local bsMode = Game() ~= "chess"
@@ -455,12 +442,14 @@ function UI.Refresh()
         card.name:SetText(W.ClassName(ns.me, info) .. "  |cffaaaaaa" .. P.TitleText(P.MyTitleId(), p.rating, P.RatedGames()) .. "|r")
     end
     card.line:SetText(A.CharLine(info) .. (info.guild and ("  |cff40ff40<" .. info.guild .. ">|r") or ""))
-    if Game() == "c4" then
-        local rec = ns.Ledger.FourRow(ns.me)
-        card.rating:SetText(rec and string.format("|cff40ff40%d|r-|cffff5040%d|r-|cffd0d0d0%d|r", rec.fw, rec.fl, rec.fd) or "|cffaaaaaa0-0-0|r")
-    elseif bsMode then
-        local rec = ns.Ledger.Battleship(ns.me)
-        card.rating:SetText(rec and string.format("|cff40ff40%d|r-|cffff5040%d|r", rec.bw, rec.bl) or "|cffaaaaaa0-0|r")
+    if bsMode then
+        local rec = ns.Ledger.Record(ns.me, Game())
+        local draws = D.GAMES[Game()].draws
+        if rec then
+            card.rating:SetText(string.format("|cff40ff40%d|r-|cffff5040%d|r", rec.w, rec.l) .. (draws and string.format("-|cffd0d0d0%d|r", rec.d) or ""))
+        else
+            card.rating:SetText(draws and "|cffaaaaaa0-0-0|r" or "|cffaaaaaa0-0|r")
+        end
     else
         card.rating:SetText(p.rating)
     end
@@ -490,7 +479,7 @@ end
 -- Switches between the games (the tab stays the same kind where possible).
 function UI.SetGame(game)
     if not ns.db then return end
-    if game ~= "bs" and game ~= "c4" then game = "chess" end
+    if not (game and D.GAMES[game]) then game = "chess" end
     local s = ns.db.settings
     if s.game == game and built then
         UI.ShowTab(TAB_FOR[game].play)
@@ -626,9 +615,10 @@ local function RefreshInvite()
     invitePopup.text:SetText(string.format("|c%s%s|r  %s |cffaaaaaa%d%s|r\n%s, %s - %s",
         color, ns.ShortName(inv.from), P.TitleText(inv.title, rating, games), rating, v and "" or "?",
         inv.game ~= "chess" and D.GAMES[inv.game].name or PV.TimeControlName(inv.base, inv.inc),
-        (inv.game == "c4" and "win/loss/draw") or (inv.game == "bs" and "win/loss") or (inv.rated and "|cffffd100rated|r" or "casual"),
+        (inv.game ~= "chess" and (D.GAMES[inv.game].draws and "win/loss/draw" or "win/loss")) or (inv.rated and "|cffffd100rated|r" or "casual"),
         (inv.game == "bs" and ((inv.theirColor == "w") and "you fire second" or "you fire first"))
             or (inv.game == "c4" and ((inv.theirColor == "w") and "you drop second (silver)" or "you drop first (gold)"))
+            or (inv.game == "vb" and "you both guess at once")
             or ((inv.theirColor == "w") and "you play Black" or "you play White")))
     invitePopup:Show()
 end
@@ -711,7 +701,7 @@ local STATUS = {
 function UI.Status()
     local g = G.current
     if g and g.state == "active" and g.mode == "online" then return "battle" end
-    if BS.Busy() or FR.Busy() then return "battle" end
+    if G.BusyModule() then return "battle" end
     if G.seek then return "seeking" end
     if ns.db and ns.db.settings.dnd then return "dnd" end
     return "online"
@@ -897,6 +887,8 @@ function UI.UpdateAlert()
     local s = BS.current
     if s and s.mode ~= "spectate" and ((s.phase == "battle" and s.myTurn) or (s.phase == "place" and not s.ready)) then myTurn = true end
     if FR.MyTurn() then myTurn = true end
+    local v = VB.current
+    if VB.CanGuess() or (v and v.phase == "set" and not v.ready and v.mode ~= "spectate") then myTurn = true end
     if myTurn and not (built and main:IsShown()) then launcher.alert:Show() else launcher.alert:Hide() end
 end
 
@@ -960,6 +952,33 @@ ns.On("FR_CHANGED", function()
     if built and main:IsShown() and currentTab == "c4play" then FV.Refresh() end
     UI.UpdateStatus()
     UI.UpdateAlert()
+end)
+
+ns.On("VB_STARTED", function(s)
+    if s.mode == "online" then
+        ns.Print("Vault Breaker game started against " .. ns.ShortName(s.opp) .. ". Lock your vault!")
+        if RaidNotice_AddMessage and RaidWarningFrame then
+            pcall(RaidNotice_AddMessage, RaidWarningFrame, "Vault Breaker vs " .. ns.ShortName(s.opp) .. ": lock your vault!", { r = 1, g = 0.82, b = 0 })
+        end
+        if FlashClientIcon then pcall(FlashClientIcon) end
+    end
+    collapsed = false
+    UI.SetGame("vb")
+    UI.ShowTab("vbplay")
+end)
+
+ns.On("VB_CHANGED", function()
+    if built and main:IsShown() and currentTab == "vbplay" then VV.Refresh() end
+    UI.UpdateStatus()
+    UI.UpdateAlert()
+end)
+
+ns.On("VB_OVER", function(s)
+    if s.mode == "online" and s.outcome and s.outcome ~= "abort" then
+        local text = (s.outcome == "win" and "you won") or (s.outcome == "loss" and "you lost") or
+            (s.outcome == "draw" and "the game was drawn") or "the game is disputed"
+        ns.Print(text .. " at Vault Breaker against " .. ns.ShortName(s.opp) .. ".")
+    end
 end)
 
 ns.On("FR_OVER", function(s)
@@ -1041,7 +1060,7 @@ ns.On("CHESS_INVITE", function(inv)
     local who = ns.ShortName(inv.from)
     ns.Print(string.format("|cffffd100%s challenges you|r to %s (%s). Click Accept on the popup or type /fpl accept.",
         who, inv.game ~= "chess" and D.GAMES[inv.game].name or ("chess, " .. PV.TimeControlName(inv.base, inv.inc)),
-        (inv.game == "c4" and "win/loss/draw") or (inv.game == "bs" and "win/loss") or (inv.rated and "rated" or "casual")))
+        (inv.game ~= "chess" and (D.GAMES[inv.game].draws and "win/loss/draw" or "win/loss")) or (inv.rated and "rated" or "casual")))
     if RaidNotice_AddMessage and RaidWarningFrame then
         pcall(RaidNotice_AddMessage, RaidWarningFrame, D.GAMES[inv.game or "chess"].name .. " challenge from " .. who .. "!", { r = 1, g = 0.82, b = 0 })
     end

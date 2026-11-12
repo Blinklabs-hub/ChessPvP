@@ -89,6 +89,23 @@ A.COINS = {
     { icon = "inv_misc_coin_01", ring = { 1, 0.8, 0.25 }, name = "Gold" },
     { icon = "inv_misc_coin_03", ring = { 0.82, 0.86, 0.92 }, name = "Silver" },
 }
+-- Vault Breaker: the six gems (each with a colour for its ring, so they stay easy to tell apart).
+A.GEMS = {
+    { icon = "inv_misc_gem_ruby_01", color = { 1, 0.25, 0.25 }, name = "Ruby" },
+    { icon = "inv_misc_gem_sapphire_01", color = { 0.3, 0.55, 1 }, name = "Sapphire" },
+    { icon = "inv_misc_gem_topaz_01", color = { 1, 0.85, 0.2 }, name = "Topaz" },
+    { icon = "inv_misc_gem_emerald_01", color = { 0.3, 0.95, 0.35 }, name = "Emerald" },
+    { icon = "inv_misc_gem_amethyst_01", color = { 0.75, 0.4, 1 }, name = "Amethyst" },
+    { icon = "inv_misc_gem_flamespessarite_01", color = { 1, 0.55, 0.15 }, name = "Spessarite" },
+}
+function A.GemIcon(n)
+    local g = A.GEMS[n]
+    if not g then return nil end
+    local path = Icon(g.icon)
+    if A.HasFile(path) then return path end
+    return nil
+end
+
 function A.CoinIcon(who)
     local c = A.COINS[who]
     if not c then return nil end
@@ -450,6 +467,15 @@ A.SOUNDS = {
     c4Start = { kits = { 25478, 8459 } }, -- the match begins
     c4Cheer = { files = { 567388, 567385, 567383 }, random = true }, -- the tavern crowd cheers
     c4Applause = { files = { 544894 } }, -- polite applause (a draw)
+    -- Vault Breaker
+    vbGem = { files = { 565450 }, kits = { 856 } }, -- a gem clicks into its socket
+    vbLock = { files = { 565409 }, kits = { 838 } }, -- the gearbox closes: vault sealed / guess locked in
+    vbGears = { files = { 565319, 565401 }, random = true, kits = { 856 } }, -- tumblers turn: pins come back
+    vbClick = { files = { 546260, 546262, 546264, 546266, 546268 }, random = true, kits = { 856 } }, -- clockwork clicks
+    vbOpen = { files = { 537918, 565313 }, kits = { 31578 } }, -- a vault unlocks
+    vbChest = { files = { 565749, 565636 }, random = true }, -- treasure: you cracked it
+    vbShut = { files = { 565478 }, kits = { 847 } }, -- an iron door slams: your vault was cracked
+    vbTurn = { files = { 565752 }, kits = { 8960 } }, -- a new round
 }
 
 A.RegisterArmySounds()

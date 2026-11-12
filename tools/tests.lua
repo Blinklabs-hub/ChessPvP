@@ -1362,7 +1362,7 @@ if want("bsui") then
     a.ns.UI.Refresh()
     check(#a.ns.Tabs.admirals.list.data >= 1, "the Admirals board lists the battle")
     a.ns.UI.ShowProfile("Just Keepingcalm"); Advance(3)
-    check(a.ns.UI.profileCard.bs.line1:GetText():find("1"), "the profile card shows the Battleship record")
+    check(a.ns.UI.profileCard.games.lines[1]:GetText():find("1|r") ~= nil, "the profile card shows the Battleship record")
     for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
     net.forever = false
 end
@@ -1604,9 +1604,17 @@ if want("fourrow") then
     eq(sa.outcome, "win", "the opponent wins")
     eq(sa.reason, "resign", "by resignation")
 
+    local oldId = sa.id
     a.ns.Game.Invite(JK, { game = "c4" }); Advance(1)
-    bcl.ns.Game.AnswerLatest(true); Advance(2)
+    for _ = 1, 20 do if bcl.ns.Game.LatestInvite() then break end Advance(0.5) end
+    bcl.ns.Game.AnswerLatest(true)
+    for _ = 1, 40 do
+        local x, y = a.ns.FourRow.current, bcl.ns.FourRow.current
+        if x and y and x.id ~= oldId and x.id == y.id then break end
+        Advance(0.5)
+    end
     sa, sb = a.ns.FourRow.current, bcl.ns.FourRow.current
+    check(sa.id ~= oldId and sa.id == sb.id, "a new game starts")
     local idle = sa.iFirst and a or bcl
     local other = (idle == a) and bcl or a
     local si = idle.ns.FourRow.current
@@ -1792,8 +1800,316 @@ if want("c4ui") then
     check(tav.me.line:GetText():find("1|r won") ~= nil, "the card shows the record")
     winner.ns.UI.ShowProfile(loser.ns.me); Advance(2)
     local card = winner.ns.UI.profileCard
-    eq(tostring(card.c4.big:GetText()), "1", "the profile card counts Four in a Row games")
+    check(card.games.lines[2]:GetText():find("inv_misc_coin_01") ~= nil and card.games.lines[2]:GetText():find("1|r") ~= nil, "the profile card counts Four in a Row games")
     check(card.casualBtn:GetText() == "Challenge", "the profile offers a Four in a Row challenge")
+    for _, cl in ipairs({ a, b }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
+if want("vault") then
+    section("vault breaker: rules")
+    local c = NewClient("Rules")
+    local VB = c.ns.Vault
+    local function pins(code, guess) local g, s = VB.Pins(code, guess); return g .. "+" .. s end
+    eq(pins("1234", "1234"), "4+0", "the right code is four gold pins")
+    eq(pins("1234", "4321"), "0+4", "all the right gems in the wrong slots")
+    eq(pins("1122", "1212"), "2+2", "repeated gems count once each")
+    eq(pins("1122", "1111"), "2+0", "extra copies of a gem earn nothing")
+    eq(pins("1234", "5656"), "0+0", "no right gems, no pins")
+    eq(pins("3315", "1335"), "2+2", "gold pins are taken before silver")
+    check(VB.Valid("1666") and not VB.Valid("1670") and not VB.Valid("123") and not VB.Valid(nil), "codes are four gems from 1 to 6")
+    eq(#VB.ALL, 1296, "1296 possible codes")
+    local seal = VB.Seal("2541", "salt")
+    check(VB.Verify(seal, "2541", "salt", { { guess = "1111", gold = 1, silver = 0 } }), "an honest vault passes the check")
+    check(not VB.Verify(seal, "2541", "salt", { { guess = "1111", gold = 0, silver = 0 } }), "a false pin is caught")
+    check(not VB.Verify(seal, "2542", "salt", {}), "a changed code does not match the seal")
+    local left = VB.Consistent({ { guess = "1122", gold = 0, silver = 0 } })
+    eq(#left, 256, "after 1122 gets no pins, 256 codes remain (4 gems x 4 slots)")
+
+    section("vault breaker: computer safecrackers")
+    local avg = {}
+    for level = 1, 3 do
+        local sum, worst = 0, 0
+        for game = 1, 6 do
+            local code = VB.ALL[(game * 211) % 1296 + 1]
+            local history, n = {}, 0
+            repeat
+                n = n + 1
+                local guess = VB.AIGuess(level, history)
+                local g, s = VB.Pins(code, guess)
+                history[#history + 1] = { guess = guess, gold = g, silver = s }
+            until g == 4 or n >= 12
+            sum = sum + n
+            if n > worst then worst = n end
+        end
+        avg[level] = sum / 6
+        if level >= 2 then check(worst <= 10, VB.LEVELS[level] .. " cracks every vault within ten guesses (worst " .. worst .. ")") end
+    end
+    check(avg[3] <= avg[1], string.format("the Master needs no more guesses than the Novice (%.1f vs %.1f)", avg[3], avg[1]))
+    check(avg[3] <= 6, string.format("the Master averages six guesses or fewer (%.1f)", avg[3]))
+    RemoveClient(c)
+
+    section("vault breaker: an online game, witnessed")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    local w = NewClient("Wit", nil, "Ness")
+    Advance(25)
+    local CA, JK = "Canga Prime", "Just Keepingcalm"
+    a.ns.Game.Invite(JK, { game = "vb" }); Advance(1)
+    local inv = b.ns.Game.LatestInvite()
+    check(inv and inv.game == "vb", "a Vault Breaker challenge arrives")
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    local sa, sb = a.ns.Vault.current, b.ns.Vault.current
+    check(sa and sb and sa.id == sb.id and sa.phase == "set", "both are locking their vaults")
+    check(sa.white ~= sb.white or sa.white == CA or sa.white == JK, "both agree who is listed first")
+    eq(sa.white, sb.white, "the same order on both sides")
+    check(a.ns.Vault.SetCode("1234"), "Canga chooses a code")
+    check(not a.ns.Vault.SetCode("1239"), "but not an invalid one")
+    b.ns.Vault.SetCode("6543")
+    a.ns.Vault.Ready(); Advance(1)
+    eq(sb.phase, "set", "waiting for the other vault")
+    check(not a.ns.Vault.SetCode("1111"), "a sealed vault cannot be changed")
+    b.ns.Vault.Ready(); Advance(2)
+    eq(sa.phase, "play", "the game begins")
+    eq(sb.phase, "play", "on both sides")
+    eq(sa.round, 1, "round one")
+    w.ns.Game.Watch(CA); Advance(3)
+    local sw = w.ns.Vault.current
+    check(sw and sw.mode == "spectate", "a spectator can watch")
+    -- round 1: both miss
+    a.ns.Vault.Guess("1122"); Advance(1)
+    check(not a.ns.Vault.CanGuess(), "one guess per round")
+    eq(sa.round, 1, "the round waits for both guesses")
+    b.ns.Vault.Guess("5555"); Advance(3)
+    eq(sa.round, 2, "both guessed: round two")
+    eq(sb.round, 2, "on both sides")
+    eq(sa.mine[1].gold, 0, "Canga's 1122 against 6543: no gold")
+    eq(sa.mine[1].silver, 0, "and no silver")
+    eq(sb.mine[1].gold + sb.mine[1].silver, 0, "Keepingcalm's 5555 against 1234: no pins either")
+    -- round 2: Canga cracks it, Keepingcalm does not
+    a.ns.Vault.Guess("6543"); Advance(1)
+    b.ns.Vault.Guess("1243"); Advance(5)
+    eq(sa.outcome, "win", "Canga cracked the vault")
+    eq(sb.outcome, "loss", "Keepingcalm lost")
+    eq(sa.reason, "cracked", "by cracking it")
+    Advance(5)
+    eq(sb.verified, true, "Keepingcalm checked Canga's code against every pin: honest")
+    eq(sa.verified, true, "and the other way round")
+    eq(sb.theirCode, "1234", "the losing side sees the code at the end")
+    eq(sw.phase, "over", "the spectator saw the end")
+    eq(sw.mine[2] and sw.mine[2].gold, 4, "the spectator saw the winning guess")
+    eq(sw.theirCode, "6543", "and both codes")
+    Advance(5)
+    local rec = w.ns.Ledger.Record(CA, "vb")
+    check(rec and rec.w == 1, "the witness records Canga's win")
+    check(w.ns.Ledger.Record(JK, "vb") and w.ns.Ledger.Record(JK, "vb").l == 1, "and Keepingcalm's loss")
+    eq(w.ns.Ledger.Record(CA, "c4"), nil, "Vault Breaker never touches Four in a Row")
+    eq(w.ns.Ledger.Rating(CA), 1200, "nor chess ratings")
+    check(a.ns.Profile.me.badges.vb_win1, "Canga earns Cracked It (the Safecracker)")
+    check(a.ns.Profile.me.badges.vb_lucky, "in two guesses: the Lucky Guess")
+    check(a.ns.Profile.me.badges.vb_quick, "and the Mind Reader")
+    check(b.ns.Profile.me.badges.vb_play, "Keepingcalm earns First Vault")
+    local board = w.ns.Profile.RecordBoard("vb")
+    eq(board[1] and board[1].name, CA, "Canga tops the Master Safecrackers")
+
+    section("vault breaker: cracking it in the same round is a draw")
+    a.ns.Game.Invite(JK, { game = "vb" }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    sa, sb = a.ns.Vault.current, b.ns.Vault.current
+    a.ns.Vault.SetCode("1111"); b.ns.Vault.SetCode("2222")
+    a.ns.Vault.Ready(); b.ns.Vault.Ready(); Advance(2)
+    a.ns.Vault.Guess("2222"); b.ns.Vault.Guess("1111"); Advance(6)
+    eq(sa.outcome, "draw", "both cracked in round one")
+    eq(sb.outcome, "draw", "a draw for both")
+    eq(sa.reason, "both", "because both cracked it")
+    Advance(5)
+    rec = w.ns.Ledger.Record(CA, "vb")
+    check(rec and rec.d == 1, "the witness records the draw")
+
+    section("vault breaker: a cheater who gives false pins is caught")
+    local honestPins = b.ns.Vault.Pins
+    b.ns.Vault.Pins = function() return 0, 0 end -- Keepingcalm's client always answers "no pins"
+    a.ns.Game.Invite(JK, { game = "vb" }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    sa, sb = a.ns.Vault.current, b.ns.Vault.current
+    a.ns.Vault.SetCode("3456"); b.ns.Vault.SetCode("1212")
+    a.ns.Vault.Ready(); b.ns.Vault.Ready(); Advance(2)
+    a.ns.Vault.Guess("1212"); b.ns.Vault.Guess("1111"); Advance(4)
+    eq(sa.mine[1].gold, 0, "the liar hides that Canga's guess was right")
+    a.ns.Vault.Guess("1212"); b.ns.Vault.Guess("3456"); Advance(6)
+    eq(sb.outcome, "win", "the liar 'wins'")
+    eq(sa.verified, false, "but Canga's check of the revealed code fails")
+    eq(sa.outcome, "disputed", "the game is disputed")
+    Advance(5)
+    local liar = w.ns.Ledger.Record(JK, "vb")
+    check(liar and liar.w == 0, "the liar gets no win on the record")
+    b.ns.Vault.Pins = honestPins
+
+    section("vault breaker: the round timer")
+    a.ns.Game.Invite(JK, { game = "vb" }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    sa, sb = a.ns.Vault.current, b.ns.Vault.current
+    Advance(95)
+    eq(sa.phase, "play", "unsealed vaults lock themselves when time runs out")
+    check(sa.ready and sb.ready, "with the code as it stood")
+    -- Canga never guesses; Keepingcalm always does (never the right code: Canga's has a 1, we guess 6s first)
+    local guard = 0
+    while sa.phase == "play" and guard < 400 do
+        guard = guard + 1
+        if b.ns.Vault.CanGuess() then
+            local g = "6666"
+            if sa.myCode == g then g = "5555" end
+            b.ns.Vault.Guess(g)
+        end
+        Advance(1)
+    end
+    eq(sa.outcome, "loss", "three missed rounds forfeit the game")
+    eq(sa.reason, "time", "lost on time")
+    eq(sb.outcome, "win", "the opponent wins")
+
+    section("vault breaker: queue and practice")
+    Advance(5)
+    a.ns.Game.StartSeek(0, 0, false, true, "vb")
+    b.ns.Game.StartSeek(0, 0, false, true, "c4")
+    Advance(30)
+    check(not a.ns.Vault.Busy(), "a Vault Breaker queue never pairs with a Four in a Row queue")
+    a.ns.Game.Announce(true); Advance(3)
+    eq(w.ns.Profile.online[CA] and w.ns.Profile.online[CA].status, "v", "the lobby shows Canga looking for Vault Breaker")
+    b.ns.Game.StopSeek()
+    b.ns.Game.StartSeek(0, 0, false, true, "vb")
+    Advance(30)
+    check(a.ns.Vault.Busy() and b.ns.Vault.Busy(), "two Vault Breaker queuers are paired")
+    a.ns.Vault.Resign(); Advance(2)
+    eq(a.ns.Vault.current.outcome, "abort", "leaving before the vaults are sealed calls the game off")
+    local s3 = a.ns.Vault.StartAI(3)
+    a.ns.Vault.Ready()
+    eq(s3.phase, "play", "a practice game starts at once")
+    for _ = 1, 30 do
+        if s3.phase ~= "play" then break end
+        if a.ns.Vault.CanGuess() then a.ns.Vault.Guess("1234") end
+        Advance(1)
+    end
+    eq(s3.phase, "over", "a practice game against the Master finishes")
+    check(s3.outcome == "loss" or s3.outcome == "draw" or s3.outcome == "win", "with a result (" .. tostring(s3.outcome) .. ")")
+    eq(s3.theirCode, s3.aiCode, "and the computer's code is shown")
+    for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
+if want("vbui") then
+    section("games tab: choosing a game")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    a.faction, b.faction = "Horde", "Alliance"
+    Advance(25)
+    local UI, T = a.ns.UI, a.ns.Tabs
+    UI.Show()
+    UI.ShowTab("games")
+    check(UI.IsVisibleTab("games"), "the Games tab opens")
+    eq(#T.games.cards, 4, "a card for each game")
+    local names = {}
+    for _, card in ipairs(T.games.cards) do names[#names + 1] = card.name:GetText() end
+    eq(table.concat(names, ","), "Chess,Battleship,Four in a Row,Vault Breaker", "in order")
+    T.games.cards[3].play:Click()
+    eq(UI.Game(), "c4", "Play on a card switches the game")
+    check(UI.IsVisibleTab("c4play"), "and opens it")
+    UI.ShowTab("games")
+    check(T.games.cards[3].glow:IsShown(), "the current game's card glows")
+    check(not T.games.cards[1].glow:IsShown(), "the others do not")
+    T.games.cards[4].play:Click()
+    check(UI.IsVisibleTab("vbplay"), "Vault Breaker opens on its Game tab")
+    eq(UI.Game(), "vb", "game is Vault Breaker")
+    UI.ShowTab("games")
+    eq(UI.Game(), "vb", "the Games tab keeps the current game")
+    UI.ShowTab("vbboard")
+    eq(UI.Game(), "vb", "the Safecrackers board belongs to Vault Breaker")
+    UI.SetGame("chess")
+    check(UI.IsVisibleTab("ladder"), "switching to chess from the Safecrackers shows the Ladder")
+
+    section("vault breaker ui: locking the vault and guessing")
+    UI.SetGame("vb")
+    local VB, v = a.ns.Vault, a.ns.VaultView.view
+    local s = VB.StartAI(2)
+    Advance(1)
+    check(UI.IsVisibleTab("vbplay"), "a new game shows the vault")
+    eq(v.turn.text:GetText(), "LOCK YOUR VAULT", "the banner says to lock your vault")
+    check(v.random:IsShown(), "Random is offered while choosing")
+    a.ns.VaultView.ClearDraft()
+    for _, n in ipairs({ 3, 1, 4, 1 }) do v.gemButtons[n]:Click() end
+    eq(s.myCode, "3141", "clicking gems in the palette sets the code")
+    v.left.code[2]:Click()
+    eq(v.draft[2], nil, "clicking a code slot empties it")
+    v.gemButtons[5]:Click()
+    eq(s.myCode, "3541", "the next gem fills the gap")
+    v.lockIn:Click()
+    check(s.ready, "Seal Vault locks it")
+    eq(s.phase, "play", "against the computer the game starts at once")
+    check(v.turn.text:GetText():find("MAKE YOUR GUESS") ~= nil, "the banner asks for a guess")
+    check(v.right.rows[1].hl:IsShown(), "the guess row glows")
+    for _, n in ipairs({ 1, 1, 2, 2 }) do v.gemButtons[n]:Click() end
+    eq(v.right.rows[1].gems[3].gem, 2, "the guess shows in the row as it is built")
+    v.lockIn:Click()
+    check(s.mine[1] and s.mine[1].guess == "1122", "Lock In sends the guess")
+    check(v.turn.text:GetText():find("THINKING") ~= nil, "then waits for the computer")
+    Advance(2)
+    check(s.round == 2 or s.phase == "over", "the round resolves")
+    eq(v.right.rows[1].pins.gold, s.mine[1].gold, "the gold pins show on the row")
+    eq(v.right.rows[1].pins.silver, s.mine[1].silver, "and the silver ones")
+    eq(v.left.rows[1].pins.gold, s.theirs[1].gold, "the computer's guess and pins show in your vault")
+    eq(#v.log.data, 1, "the round is in the log")
+
+    section("vault breaker ui: resizing")
+    UI.SetCollapsed(false)
+    UI.DebugResize(1200, 900)
+    local big = a.ns.db.settings.vbCell
+    UI.DebugResize(800, 600)
+    local small = a.ns.db.settings.vbCell
+    check(big and small and big > small, "a bigger window means bigger gems (" .. tostring(big) .. " > " .. tostring(small) .. ")")
+    VB.Resign(); Advance(2)
+    check(v.banner:IsShown(), "the result banner appears")
+    eq(v.banner.title:GetText(), "Defeat", "giving up is a defeat")
+
+    section("vault breaker ui: an online game from the lobby")
+    b.ns.UI.Show(); b.ns.UI.SetGame("vb"); b.ns.UI.ShowTab("vblobby"); b.ns.UI.Refresh()
+    local row = b.ns.Tabs.vblobby.list.rows[1]
+    check(row and row.item, "Canga is listed in the Vault Breaker lobby")
+    row.challenge:Click(); Advance(1)
+    check(UI.invitePopup and UI.invitePopup:IsShown(), "the challenge popup appears")
+    check(UI.invitePopup.text:GetText():find("Vault Breaker") ~= nil, "and names the game")
+    UI.invitePopup.accept:Click(); Advance(2)
+    check(a.ns.Vault.Busy() and b.ns.Vault.Busy(), "the game starts on both sides")
+    check(UI.IsVisibleTab("vbplay") and b.ns.UI.IsVisibleTab("vbplay"), "both see the vaults")
+    check(UI.Status() == "battle", "the status dot shows a game in progress")
+    local sa, sb = a.ns.Vault.current, b.ns.Vault.current
+    a.ns.Vault.SetCode("1234"); b.ns.Vault.SetCode("5566")
+    a.ns.Vault.Ready(); b.ns.Vault.Ready(); Advance(2)
+    a.ns.Vault.Guess("5566"); b.ns.Vault.Guess("1111"); Advance(6)
+    eq(sa.outcome, "win", "Canga cracks it")
+    local av = a.ns.VaultView.view
+    check(av.banner:IsShown(), "the winner sees the banner")
+    eq(av.banner.title:GetText(), "Vault Cracked!", "Vault Cracked!")
+    Advance(5)
+    UI.ShowTab("games"); UI.Refresh()
+    check(T.games.cards[4].record:GetText():find("1|r won") ~= nil, "the Games tab shows the Vault Breaker record")
+
+    section("vault breaker ui: titles")
+    local P = a.ns.Profile
+    P.SetTitle("b:vb_win1", "vb")
+    eq(P.MyTitleId("vb"), "b:vb_win1", "the Safecracker title is set")
+    eq(P.MyTitleId("c4"), "", "Four in a Row keeps its own")
+    a.ns.Game.Announce(true); Advance(5)
+    local seen = b.ns.Profile.players["Canga Prime"]
+    eq(seen and seen.vt, "b:vb_win1", "others receive the Vault Breaker title")
+    check(b.ns.Profile.GameTitleText("", "vb"):find("Apprentice Locksmith") ~= nil, "players without one are Apprentice Locksmiths")
+    UI.ShowTab("vbcollection")
+    T.vbcoll.section = "badges"; UI.Layout(); UI.Refresh()
+    local only = #T.vbcoll.grids.badges.data == 10
+    for _, e in ipairs(T.vbcoll.grids.badges.data) do if e.badge.game ~= "vb" then only = false end end
+    check(only, "the Vault Breaker collection holds its ten feats")
     for _, cl in ipairs({ a, b }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
     net.forever = false
 end

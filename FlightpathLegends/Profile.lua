@@ -160,7 +160,8 @@ function P.BsTitleText(id)
 end
 
 -- A player's title id in a game, from what they announced (or our own).
-local TITLE_FIELD = { bs = "bt", c4 = "ft" }
+local TITLE_FIELD = { bs = "bt", c4 = "ft", vb = "vt" }
+P.TITLE_FIELD = TITLE_FIELD
 function P.TitleOf(name, game)
     if ns.SameName(name, ns.me) then return P.MyTitleId(game) end
     local e = P.players[name]
@@ -280,14 +281,15 @@ function P.RecordGame(s)
     s.ratingBefore = p.rating
     local delta = 0
 
-    if s.mode == "c4" and not s.vsAI then
-        -- local Four in a Row counters (only for feats; the record itself is witnessed)
+    if (s.mode == "c4" or s.mode == "vb") and not s.vsAI then
+        -- local counters (only for feats; the record itself is witnessed): c4w, c4Streak, c4Best, vbw, ...
+        local W, S, B = s.mode .. "w", s.mode .. "Streak", s.mode .. "Best"
         if s.outcome == "win" then
-            p.c4w = (p.c4w or 0) + 1
-            p.c4Streak = (p.c4Streak or 0) + 1
-            if p.c4Streak > (p.c4Best or 0) then p.c4Best = p.c4Streak end
+            p[W] = (p[W] or 0) + 1
+            p[S] = (p[S] or 0) + 1
+            if p[S] > (p[B] or 0) then p[B] = p[S] end
         elseif s.outcome == "loss" or s.outcome == "draw" then
-            p.c4Streak = 0
+            p[S] = 0
         end
     end
     if s.mode == "bs" and not s.vsAI then
@@ -435,29 +437,31 @@ function P.AdmiralBoard()
     return rows
 end
 
--- Four in a Row leaderboard: witnessed wins, losses and draws, best record first.
-function P.TavernBoard()
+-- Leaderboard for a game without ratings: witnessed wins, losses and draws, best record first.
+function P.RecordBoard(game)
     local rows = {}
-    for name, e in pairs(ns.Ledger.players) do
-        local n = (e.fw or 0) + (e.fl or 0) + (e.fd or 0)
-        if n > 0 then
+    for name in pairs(ns.Ledger.players) do
+        local r = ns.Ledger.Record(name, game)
+        if r then
             local known = P.players[name]
             rows[#rows + 1] = {
-                name = name, w = e.fw, l = e.fl, d = e.fd, games = n, ratio = (e.fw + e.fd * 0.5) / n,
-                best = e.fbest, streak = e.fstreak, me = name == ns.me, t = P.TitleOf(name, "c4"),
+                name = name, w = r.w, l = r.l, d = r.d, games = r.games, ratio = (r.w + r.d * 0.5) / r.games,
+                best = r.best, streak = r.streak, me = name == ns.me, t = P.TitleOf(name, game),
                 f = name == ns.me and ns.Assets.MyFaction() or (known and known.f), ch = known and known.ch,
             }
         end
     end
     local function Score(r) return (r.w + r.d * 0.5 + 1) / (r.games + 2) end
-    table.sort(rows, function(a, b)
-        local sa, sb = Score(a), Score(b)
-        if sa ~= sb then return sa > sb end
-        if a.w ~= b.w then return a.w > b.w end
-        return a.name < b.name
+    table.sort(rows, function(x, y)
+        local sx, sy = Score(x), Score(y)
+        if sx ~= sy then return sx > sy end
+        if x.w ~= y.w then return x.w > y.w end
+        return x.name < y.name
     end)
     return rows
 end
+
+function P.TavernBoard() return P.RecordBoard("c4") end
 
 function P.SetOnline(name, status, opp)
     P.online[name] = { last = ns.Now(), status = status, opp = opp }
@@ -481,7 +485,7 @@ function P.OnlineList()
                 name = name, status = o.status, opp = o.opp,
                 -- Witnessed rating when known; otherwise what they claim, marked unverified.
                 r = v and v.r or (e and e.r) or D.START_RATING, verified = v ~= nil,
-                t = e and e.t or "", bt = e and e.bt, ft = e and e.ft, f = e and e.f, ch = e and e.ch, battle = o.battle,
+                t = e and e.t or "", bt = e and e.bt, ft = e and e.ft, vt = e and e.vt, f = e and e.f, ch = e and e.ch, battle = o.battle,
                 bs = ns.Ledger.Battleship(name), c4 = ns.Ledger.FourRow(name),
                 g = v and v.games or 0, casual = ns.Ledger.Casual(name),
             }
