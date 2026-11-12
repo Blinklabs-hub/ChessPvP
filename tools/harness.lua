@@ -1,5 +1,5 @@
 -- Test harness: loads the addon into mocked WoW environments and simulates several clients.
-local FILES = { "Core.lua", "Hash.lua", "Data.lua", "Assets.lua", "Engine.lua", "AI.lua", "Profile.lua", "Comm.lua", "Ledger.lua", "Game.lua", "Battleship.lua", "UI_Widgets.lua", "UI_Board.lua", "UI_Play.lua", "UI_Battleship.lua", "UI_Tabs.lua", "UI_Main.lua", "UI_Profile.lua" }
+local FILES = { "Core.lua", "Hash.lua", "Data.lua", "Assets.lua", "Engine.lua", "AI.lua", "Profile.lua", "Comm.lua", "Ledger.lua", "Game.lua", "Battleship.lua", "FourRow.lua", "UI_Widgets.lua", "UI_Board.lua", "UI_Play.lua", "UI_Battleship.lua", "UI_FourRow.lua", "UI_Tabs.lua", "UI_Main.lua", "UI_Profile.lua" }
 local REALM = "TestRealm"
 
 -- Like WoW's LuaBitOp "bit" library: 32-bit operations returning signed numbers.

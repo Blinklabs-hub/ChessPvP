@@ -2,8 +2,8 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "2.1.0"
-ns.PROTO = 3 -- network protocol version; bump when messages change incompatibly
+ns.VERSION = "2.2.0"
+ns.PROTO = 4 -- network protocol version; bump when messages change incompatibly
 FlightpathLegends = ns -- exposed for debugging and the addon compartment
 
 ------------------------------------------------------------------------
@@ -289,7 +289,7 @@ end)
 ------------------------------------------------------------------------
 local function Help()
     ns.Print("commands:")
-    ns.Print("  /fpl - open or close Flightpath Legends  (/chess, /battleship open a game)")
+    ns.Print("  /fpl - open or close Flightpath Legends  (/chess, /battleship, /four open a game)")
     ns.Print("  /fpl challenge <name> - challenge a player (or your target)")
     ns.Print("  /fpl accept | decline - answer the latest challenge")
     ns.Print("  /fpl resign - resign the current game")
@@ -305,8 +305,11 @@ SLASH_FPLCHESS1 = "/chess"
 SLASH_FPLCHESS2 = "/checkmate"
 SLASH_FPLBATTLESHIP1 = "/battleship"
 SLASH_FPLBATTLESHIP2 = "/bs"
+SLASH_FPLFOURROW1 = "/four"
+SLASH_FPLFOURROW2 = "/connect4"
+SLASH_FPLFOURROW3 = "/c4"
 
--- /chess and /battleship open that game; anything after them works like /fpl.
+-- /chess, /battleship and /four open that game; anything after them works like /fpl.
 local function OpenGame(game, msg)
     if (msg or ""):match("^%s*$") then
         ns.UI.Show()
@@ -318,6 +321,7 @@ local function OpenGame(game, msg)
 end
 SlashCmdList["FPLCHESS"] = function(msg) OpenGame("chess", msg) end
 SlashCmdList["FPLBATTLESHIP"] = function(msg) OpenGame("bs", msg) end
+SlashCmdList["FPLFOURROW"] = function(msg) OpenGame("c4", msg) end
 
 SlashCmdList["FLIGHTPATHLEGENDS"] = function(msg)
     msg = msg or ""
@@ -333,14 +337,16 @@ SlashCmdList["FLIGHTPATHLEGENDS"] = function(msg)
         if not target or target == "" then
             ns.Print("usage: /fpl challenge <name>  (the game selected in the window is used)")
         else
-            ns.Game.Invite(target, { game = ns.db.settings.game == "bs" and "bs" or "chess" })
+            ns.Game.Invite(target, { game = ns.Game.GameKey(ns.db.settings.game) })
         end
     elseif cmd == "accept" then
         ns.Game.AnswerLatest(true)
     elseif cmd == "decline" then
         ns.Game.AnswerLatest(false)
     elseif cmd == "resign" then
-        if ns.Battleship.Active() then ns.Battleship.Resign() else ns.Game.Resign() end
+        if ns.Battleship.Active() then ns.Battleship.Resign()
+        elseif ns.FourRow.Active() then ns.FourRow.Resign()
+        else ns.Game.Resign() end
     elseif cmd == "dnd" then
         ns.UI.SetDND(true)
     elseif cmd == "online" then

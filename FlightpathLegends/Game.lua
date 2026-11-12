@@ -5,6 +5,12 @@ local _, ns = ...
 local G = {}
 ns.Game = G
 
+-- The game a message is about: "chess", "bs" (Battleship) or "c4" (Four in a Row).
+function G.GameKey(v)
+    if v == "bs" or v == "c4" then return v end
+    return "chess"
+end
+
 local E, AI, P, C, D = ns.Engine, ns.AI, ns.Profile, ns.Comm, ns.Data
 local floor, max, abs = math.floor, math.max, math.abs
 
@@ -169,8 +175,10 @@ local function MyStatus()
     local g = G.current
     if g and g.state == "active" and g.mode == "online" then return "g", g.opp end
     if ns.Battleship and ns.Battleship.Busy() then return "g", ns.Battleship.current.opp end
+    if ns.FourRow and ns.FourRow.Busy() then return "g", ns.FourRow.current.opp end
     if G.seek then
         if G.seek.game == "bs" then return "b", "" end
+        if G.seek.game == "c4" then return "f", "" end
         return G.seek.rated and "r" or "c", ""
     end
     if ns.db.settings.dnd then return "d", "" end
@@ -198,13 +206,16 @@ function G.Announce(force)
     -- While in a battle, what kind it is (for the Live Battles tab).
     local cur, battle = G.current, ""
     local bsCur = ns.Battleship and ns.Battleship.Busy() and ns.Battleship.current
+    local frCur = ns.FourRow and ns.FourRow.Busy() and ns.FourRow.current
     if status == "g" and bsCur then
         battle = table.concat({ "b", 0, 0, #bsCur.myLog + #bsCur.theirLog }, ",")
+    elseif status == "g" and frCur then
+        battle = table.concat({ "f", 0, 0, #frCur.moves }, ",")
     elseif status == "g" and cur then
         battle = table.concat({ cur.rated and "r" or "c", cur.base, cur.inc, #cur.moves }, ",")
     end
     C.Presence("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(),
-        char, guild, battle, P.MyTitleId("bs"))
+        char, guild, battle, P.MyTitleId("bs"), P.MyTitleId("c4"))
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -217,11 +228,12 @@ C.handlers.PF = function(sender, dist, parts)
     local ch = ns.Assets.UnpackChar(parts[12], parts[13])
     if ch then P.players[sender].ch = ch end
     if parts[15] and #parts[15] <= 24 then P.players[sender].bt = parts[15] end
+    if parts[16] and #parts[16] <= 24 then P.players[sender].ft = parts[16] end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
-    local kind, base, inc, moves = string.match(parts[14] or "", "^([rcb]),(%d+),(%d+),(%d+)$")
+    local kind, base, inc, moves = string.match(parts[14] or "", "^([rcbf]),(%d+),(%d+),(%d+)$")
     if kind and opp then
-        P.online[sender].battle = { rated = kind == "r", game = kind == "b" and "bs" or "chess",
+        P.online[sender].battle = { rated = kind == "r", game = (kind == "b" and "bs") or (kind == "f" and "c4") or "chess",
             base = tonumber(base), inc = tonumber(inc), moves = tonumber(moves) }
     end
     ns.Fire("CHESS_LOBBY_CHANGED")
@@ -391,6 +403,7 @@ end
 local function OnlineBusy()
     local g = G.current
     if g and g.state == "active" and g.mode == "online" then return true end
+    if ns.FourRow and ns.FourRow.Busy() then return true end
     return ns.Battleship ~= nil and ns.Battleship.Busy()
 end
 G.OnlineBusy = OnlineBusy
@@ -535,8 +548,8 @@ function G.Invite(name, opts)
     local rated = opts.rated
     if rated == nil then rated = s.rated ~= false end
     if base == 0 then rated = false end -- rated games always use a clock
-    local game = opts.game == "bs" and "bs" or "chess"
-    if game == "bs" then rated, base, inc = false, 0, 0 end -- Battleship: win/loss only, fixed shot timer
+    local game = G.GameKey(opts.game)
+    if game ~= "chess" then rated, base, inc = false, 0, 0 end -- other games: win/loss only, fixed move timer
     if rated and not opts.q and not G.LeagueOK(name) then
         ns.Print(string.format("%s plays in the %s league - rated battles are only possible within one league of yours. Sending a casual challenge instead.",
             ns.ShortName(name), G.LeagueName(name)))
@@ -580,11 +593,12 @@ local function AcceptInvite(inv)
     if G.outgoing then G.CancelInvite() end
     G.seek = nil
     local myColor = (inv.theirColor == "w") and -1 or 1
-    if inv.game == "bs" then
+    if inv.game ~= "chess" then
         C.Whisper(inv.from, "AC", inv.id, P.me.rating, P.MyTitleId())
         for _, other in pairs(G.incoming) do C.Whisper(other.from, "DC", other.id, "busy") end
         G.incoming = {}
-        ns.Battleship.StartOnline(inv.id, inv.from, myColor == 1)
+        if inv.game == "c4" then ns.FourRow.StartOnline(inv.id, inv.from, myColor == 1)
+        else ns.Battleship.StartOnline(inv.id, inv.from, myColor == 1) end
         ns.Fire("CHESS_INVITE_CHANGED")
         return
     end
@@ -656,12 +670,12 @@ C.handlers.IV = function(sender, dist, parts)
     local inv = {
         id = gid, from = sender, base = base, inc = inc, rated = rated,
         theirColor = color, rating = floor(rating), title = parts[10] or "",
-        expires = ns.Now() + INVITE_TIMEOUT, game = parts[11] == "bs" and "bs" or "chess",
+        expires = ns.Now() + INVITE_TIMEOUT, game = G.GameKey(parts[11]),
     }
-    if inv.game == "bs" then inv.rated = false end
+    if inv.game ~= "chess" then inv.rated = false end
     if q then
         local s = G.seek
-        if s and (s.game or "chess") == inv.game and (inv.game == "bs" or G.SeekCompatible(s, sender, base, inc, rated, false)) then
+        if s and (s.game or "chess") == inv.game and (inv.game ~= "chess" or G.SeekCompatible(s, sender, base, inc, rated, false)) then
             AcceptInvite(inv)
         else
             C.Whisper(sender, "DC", gid, "noseek")
@@ -702,10 +716,11 @@ C.handlers.AC = function(sender, dist, parts)
     local title = parts[4] or ""
     G.outgoing = nil
     G.seek = nil
-    if o.game == "bs" then
+    if o.game ~= "chess" then
         for _, other in pairs(G.incoming) do C.Whisper(other.from, "DC", other.id, "busy") end
         G.incoming = {}
-        ns.Battleship.StartOnline(o.id, sender, o.myColor == 1)
+        if o.game == "c4" then ns.FourRow.StartOnline(o.id, sender, o.myColor == 1)
+        else ns.Battleship.StartOnline(o.id, sender, o.myColor == 1) end
         ns.Fire("CHESS_INVITE_CHANGED")
         return
     end
@@ -785,8 +800,8 @@ function G.StartSeek(base, inc, rated, any, game)
         ns.Print("still connecting to the chess network - try again in a few seconds.")
         return
     end
-    game = game == "bs" and "bs" or "chess"
-    if game == "bs" then rated, any, base, inc = false, true, 0, 0 end
+    game = G.GameKey(game)
+    if game ~= "chess" then rated, any, base, inc = false, true, 0, 0 end
     if base == 0 and not any then rated = false end
     G.seek = { base = base, inc = inc, rated = rated and true or false, any = any and true or false, next = 0, since = ns.Now(), game = game }
     G.Announce()
@@ -840,7 +855,7 @@ C.handlers.SK = function(sender, dist, parts)
     local s = G.seek
     if not s or G.outgoing or OnlineBusy() then return end
     local base, inc, rated, any = tonumber(parts[2]), tonumber(parts[3]), parts[4] == "1", parts[5] == "1"
-    local game = parts[6] == "bs" and "bs" or "chess"
+    local game = G.GameKey(parts[6])
     if not base or not inc or game ~= (s.game or "chess") then return end
     local ok, b, i = true, 0, 0
     if game == "chess" then ok, b, i = G.SeekCompatible(s, sender, base, inc, rated, any) end
@@ -867,7 +882,7 @@ C.handlers.PQ = function(sender, dist)
         if P.me.badges[D.BADGES[i].id] then list[#list + 1] = i end
     end
     local char, guild = ns.Assets.PackChar(ns.Assets.MyCharInfo())
-    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild, P.MyTitleId("bs"))
+    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild, P.MyTitleId("bs"), P.MyTitleId("c4"))
 end
 
 C.handlers.PR = function(sender, dist, parts)
@@ -888,6 +903,7 @@ C.handlers.PR = function(sender, dist, parts)
     local ch = ns.Assets.UnpackChar(parts[5], parts[6])
     if ch then e.ch = ch end
     if parts[7] and #parts[7] <= 24 then e.bt = parts[7] end
+    if parts[8] and #parts[8] <= 24 then e.ft = parts[8] end
     e.profileAt = ns.ServerTime()
     ns.Fire("CHESS_PROFILE_INFO", sender)
 end
@@ -1155,7 +1171,7 @@ function G.Watch(name)
     name = ns.FullName(name)
     if not name or SameName(name, ns.me) then return end
     local g = G.current
-    if (g and g.state == "active" and g.mode ~= "spectate") or (ns.Battleship and ns.Battleship.Busy()) then
+    if (g and g.state == "active" and g.mode ~= "spectate") or OnlineBusy() then
         ns.Print("finish your current game before watching another.")
         return
     end
@@ -1177,6 +1193,10 @@ C.handlers.SP = function(sender, dist)
     if dist ~= "WHISPER" then return end
     if ns.Battleship and ns.Battleship.Busy() then
         if not ns.Battleship.HandleWatchRequest(sender) then C.Whisper(sender, "SN") end
+        return
+    end
+    if ns.FourRow and ns.FourRow.Busy() then
+        if not ns.FourRow.HandleWatchRequest(sender) then C.Whisper(sender, "SN") end
         return
     end
     local g = G.current
@@ -1204,6 +1224,9 @@ C.handlers.SX = function(sender, dist, parts)
         g.spectators[sender] = nil
         g.spectatorCount = g.spectatorCount - 1
     end
+    local bs = ns.Battleship and ns.Battleship.current
+    if bs and bs.id == parts[2] and bs.spectators then bs.spectators[sender] = nil end
+    if ns.FourRow then ns.FourRow.DropSpectator(sender, parts[2]) end
 end
 
 C.handlers.SN = function(sender, dist)

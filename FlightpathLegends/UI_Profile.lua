@@ -9,7 +9,7 @@ local card
 local FEAT_ICONS = 16
 
 local function Record(w, l, d)
-    return string.format("|cff40ff40%d|r  -  |cffff5040%d|r  -  |cffaaaaaa%d|r", w, l, d)
+    return string.format("|cff40ff40%d|r-|cffff5040%d|r-|cffaaaaaa%d|r", w, l, d)
 end
 
 local function WinRate(w, l, d)
@@ -20,7 +20,7 @@ end
 
 local function StatBox(parent, title)
     local b = W.Card(parent)
-    b:SetSize(94, 78)
+    b:SetSize(74, 78)
     b.title = W.Label(b, "GameFontNormalSmall", title)
     b.title:SetPoint("TOP", 0, -6)
     b.big = W.Title(b, 20, nil, { 1, 1, 1 })
@@ -81,8 +81,10 @@ local function Build()
     f.casual:SetPoint("LEFT", f.rated, "RIGHT", 6, 0)
     f.bs = StatBox(f, "Battleship")
     f.bs:SetPoint("LEFT", f.casual, "RIGHT", 6, 0)
+    f.c4 = StatBox(f, "Four in a Row")
+    f.c4:SetPoint("LEFT", f.bs, "RIGHT", 6, 0)
     f.h2h = StatBox(f, "Against you")
-    f.h2h:SetPoint("LEFT", f.bs, "RIGHT", 6, 0)
+    f.h2h:SetPoint("LEFT", f.c4, "RIGHT", 6, 0)
     f.warn = W.Label(f, "GameFontHighlightSmall")
     f.warn:SetPoint("TOPLEFT", 16, -198)
     f.warn:SetWidth(390)
@@ -156,13 +158,19 @@ local function Build()
         end
     end)
     f.casualBtn = W.Button(f, "Casual Battle", 120, 26, function()
-        G.Invite(f.target, { rated = false })
-        UI.ShowTab("play")
+        local game = UI.Game()
+        if game == "chess" then
+            G.Invite(f.target, { rated = false })
+        else
+            G.Invite(f.target, { game = game })
+        end
+        UI.ShowTab(ns.Tabs.PLAY_TAB[game])
     end)
     f.casualBtn:SetPoint("LEFT", f.ratedBtn, "RIGHT", 6, 0)
     f.watchBtn = W.Button(f, "Watch", 70, 26, function()
         G.Watch(f.target)
-        UI.ShowTab("play")
+        local o = P.online[f.target or ""]
+        if not (o and o.battle and o.battle.game and o.battle.game ~= "chess") then UI.ShowTab("play") end
     end)
     f.watchBtn:SetPoint("LEFT", f.casualBtn, "RIGHT", 6, 0)
     f.whisperBtn = W.Button(f, "Whisper", 70, 26, function()
@@ -193,9 +201,10 @@ local function Refresh()
     local rating = rated and rated.r or (me and P.me.rating) or (known and known.r) or D.START_RATING
     local games = rated and rated.games or 0
     local titleId = me and P.MyTitleId() or (known and known.t) or ""
-    local bsMode = ns.UI.Game() == "bs"
+    local game = ns.UI.Game()
+    local bsMode = game ~= "chess"
     if bsMode then
-        f.titleText:SetText(P.BsTitleText(me and P.MyTitleId("bs") or (known and known.bt)))
+        f.titleText:SetText(P.GameTitleText(P.TitleOf(name, game), game))
     else
         f.titleText:SetText(P.TitleText(titleId, rating, games))
     end
@@ -223,7 +232,7 @@ local function Refresh()
     if rated then
         f.rated.big:SetText(rated.r)
         f.rated.line1:SetText(Record(rated.w, rated.l, rated.d))
-        f.rated.line2:SetText("|cffaaaaaaBest " .. rated.peak .. " · " .. rated.beaten .. " foes|r")
+        f.rated.line2:SetText("|cffaaaaaaBest " .. rated.peak .. "|r")
     else
         f.rated.big:SetText("|cff808080" .. rating .. "|r")
         f.rated.line1:SetText("|cffaaaaaaNo rated battles|r")
@@ -248,15 +257,25 @@ local function Refresh()
         f.bs.line1:SetText("|cffaaaaaaNo battles|r")
         f.bs.line2:SetText("")
     end
+    local c4 = L.FourRow(name)
+    if c4 then
+        f.c4.big:SetText(c4.fw + c4.fl + c4.fd)
+        f.c4.line1:SetText(Record(c4.fw, c4.fl, c4.fd))
+        f.c4.line2:SetText(WinRate(c4.fw, c4.fl, c4.fd))
+    else
+        f.c4.big:SetText("|cff808080-|r")
+        f.c4.line1:SetText("|cffaaaaaaNo games|r")
+        f.c4.line2:SetText("")
+    end
     if me then
         f.h2h:Hide()
     else
-        local h = L.HeadToHead(ns.me, name, "chess")
+        -- head to head in the game being shown
+        local h = L.HeadToHead(ns.me, name, (game == "bs" and "b") or (game == "c4" and "f") or "chess")
         f.h2h:Show()
         f.h2h.big:SetText(h.w + h.l + h.d)
         f.h2h.line1:SetText(Record(h.w, h.l, h.d))
-        local hb = L.HeadToHead(ns.me, name, "b")
-        f.h2h.line2:SetText(string.format("|cffaaaaaachess · ships %d-%d|r", hb.w, hb.l))
+        f.h2h.line2:SetText("|cffaaaaaa" .. ((game == "bs" and "at sea") or (game == "c4" and "at the tavern") or "at chess") .. "|r")
     end
     if v and v.disputed > 0 then
         f.warn:SetText(v.disputed .. " disputed result(s): the players reported different outcomes.")
@@ -274,6 +293,8 @@ local function Refresh()
             row.opp:SetText("vs " .. ns.ShortName(e.opp))
             if e.game == "b" then
                 row.kind:SetText("|cff9ac8ffBattleship|r")
+            elseif e.game == "f" then
+                row.kind:SetText("|cffffd040Four in a Row|r")
             elseif e.rated then
                 local d = e.d or 0
                 row.kind:SetText(string.format("rated %s%d|r", d >= 0 and "|cff40ff40+" or "|cffff5040", d))
@@ -300,7 +321,6 @@ local function Refresh()
     end
     -- only this game's feats
     if feats then
-        local game = bsMode and "bs" or "chess"
         local only = {}
         for _, id in ipairs(feats) do
             local b = D.BADGE_BY_ID[id]
@@ -329,8 +349,8 @@ local function Refresh()
         f.featNote:SetText("No feats earned yet.")
     else
         local total = 0
-        for _, b in ipairs(D.BADGES) do if P.BadgeGame(b) == (bsMode and "bs" or "chess") then total = total + 1 end end
-        f.featTitle:SetText(string.format("%s feats  |cffaaaaaa%d / %d|r", bsMode and "Battleship" or "Chess", #feats, total))
+        for _, b in ipairs(D.BADGES) do if P.BadgeGame(b) == game then total = total + 1 end end
+        f.featTitle:SetText(string.format("%s feats  |cffaaaaaa%d / %d|r", D.GAMES[game].name, #feats, total))
         f.featNote:SetText("")
     end
 
@@ -338,7 +358,17 @@ local function Refresh()
     if me then
         f.ratedBtn:Hide(); f.casualBtn:Hide(); f.watchBtn:Hide(); f.whisperBtn:Hide()
     else
-        f.ratedBtn:Show(); f.casualBtn:Show(); f.whisperBtn:Show()
+        f.casualBtn:Show(); f.whisperBtn:Show()
+        f.casualBtn:ClearAllPoints()
+        if game == "chess" then
+            f.ratedBtn:Show()
+            f.casualBtn:SetPoint("LEFT", f.ratedBtn, "RIGHT", 6, 0)
+            f.casualBtn:SetText("Casual Battle")
+        else
+            f.ratedBtn:Hide()
+            f.casualBtn:SetPoint("BOTTOMLEFT", 14, 14)
+            f.casualBtn:SetText(game == "c4" and "Challenge" or "Battle")
+        end
         if G.LeagueOK(name) then f.ratedBtn:Enable() else f.ratedBtn:Disable() end
         local o = P.online[name]
         if o and o.status == "g" then f.watchBtn:Show() else f.watchBtn:Hide() end

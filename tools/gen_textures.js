@@ -307,6 +307,28 @@ writeTGA(path.join(OUT, "splash.tga"), 128, 128, field(128, (u, v) => {
   return [1, 1, 1, Math.min(1, ring + centre)];
 }));
 
+// ---------------------------------------------------------------- Four in a Row
+// One square of the board: a wooden plate with a round hole and a bevelled rim, so coins
+// drawn behind it show through. Grayscale (tinted by the addon), light from the top-left.
+writeTGA(path.join(OUT, "c4_slot.tga"), 128, 128, field(128, (u, v) => {
+  const r = Math.hypot(u, v);
+  const HOLE = 0.74, RIM = 0.86;
+  if (r < HOLE) return [0, 0, 0, 0];
+  // wood grain running across the plate
+  const grain = 0.06 * Math.sin(v * 9 + Math.sin(u * 3) * 1.4) + 0.03 * Math.sin(v * 31 + u * 2);
+  let shade = 0.74 + grain;
+  if (r < RIM) {
+    // bevel down into the hole: lit on the bottom-right inside edge, shadowed top-left
+    const t = (r - HOLE) / (RIM - HOLE);
+    const facing = (u + v) / Math.SQRT2 / Math.max(r, 1e-6);
+    shade = 0.35 + 0.3 * t + 0.25 * facing * (1 - t);
+  }
+  // soft edge of the square (squares butt up against each other)
+  const edge = Math.max(Math.abs(u), Math.abs(v));
+  if (edge > 0.96) shade *= 0.85;
+  return [shade, shade, shade, 1];
+}));
+
 // ---------------------------------------------------------------- logo (knight on a gold-rimmed tile)
 {
   const S = SIZE, rgba = Buffer.alloc(S * S * 4);

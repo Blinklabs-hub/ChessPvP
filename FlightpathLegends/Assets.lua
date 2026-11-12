@@ -84,6 +84,19 @@ function A.ShipIcon(i, faction)
     return nil
 end
 
+-- Four in a Row: the first player's coins are gold, the second player's silver.
+A.COINS = {
+    { icon = "inv_misc_coin_01", ring = { 1, 0.8, 0.25 }, name = "Gold" },
+    { icon = "inv_misc_coin_03", ring = { 0.82, 0.86, 0.92 }, name = "Silver" },
+}
+function A.CoinIcon(who)
+    local c = A.COINS[who]
+    if not c then return nil end
+    local path = Icon(c.icon)
+    if A.HasFile(path) then return path end
+    return nil
+end
+
 -- Circular mask used by the game's own unit portraits.
 function A.PortraitMask()
     local blizzard = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
@@ -430,6 +443,13 @@ A.SOUNDS = {
     bsCheer = { files = { 540808, 540806 }, random = true }, -- pirate cheer: victory
     bsDying = { files = { 540809 } }, -- pirate death: one of yours goes down
     bsSonar = { files = { 569006, 568683 }, random = true }, -- sonar ping: a submarine sinks
+    -- Four in a Row
+    c4Drop = { files = { 942678, 942680, 942682, 942684, 942686, 942688 }, random = true, kits = { 856 } }, -- goblin coin toss
+    c4Land = { files = { 567428, 567413 }, random = true, kits = { 856 } }, -- coins clink into place
+    c4Turn = { files = { 567413 }, kits = { 8960 } }, -- a heavy coin: your turn
+    c4Start = { kits = { 25478, 8459 } }, -- the match begins
+    c4Cheer = { files = { 567388, 567385, 567383 }, random = true }, -- the tavern crowd cheers
+    c4Applause = { files = { 544894 } }, -- polite applause (a draw)
 }
 
 A.RegisterArmySounds()

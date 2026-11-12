@@ -47,7 +47,7 @@ end
 -- Records a statement by `sender` about game `id`. res is a result or nil (started).
 -- Returns true when something changed.
 -- kind: "r" rated chess, "c" casual chess, "b" battleship.
-local KINDS = { r = true, c = true, b = true }
+local KINDS = { r = true, c = true, b = true, f = true }
 local function KindOf(g) return g.kind or (g.casual and "c" or "r") end
 L.KindOf = KindOf
 
@@ -101,7 +101,8 @@ local function Get(players, name)
     local p = players[name]
     if not p then
         p = { r = START, w = 0, l = 0, d = 0, games = 0, peak = START, beaten = 0, opps = {}, disputed = 0,
-            cw = 0, cl = 0, cd = 0, bw = 0, bl = 0, bstreak = 0, bbest = 0, recent = {} }
+            cw = 0, cl = 0, cd = 0, bw = 0, bl = 0, bstreak = 0, bbest = 0,
+            fw = 0, fl = 0, fd = 0, fstreak = 0, fbest = 0, recent = {} }
         players[name] = p
     end
     return p
@@ -172,6 +173,22 @@ function L.Recompute()
             local sw = (res == "1-0" and 1) or 0
             table.insert(pw.recent, { opp = g.b, s = sw, game = "b", ts = e.ts })
             table.insert(pb.recent, { opp = g.w, s = 1 - sw, game = "b", ts = e.ts })
+        elseif res and KindOf(g) == "f" then
+            -- Four in a Row: witnessed wins, losses and draws, no rating.
+            local pw, pb = Get(players, g.w), Get(players, g.b)
+            if res == "1/2" then
+                pw.fd, pb.fd = pw.fd + 1, pb.fd + 1
+                pw.fstreak, pb.fstreak = 0, 0
+            else
+                local winner, loser = pw, pb
+                if res == "0-1" then winner, loser = pb, pw end
+                winner.fw, loser.fl = winner.fw + 1, loser.fl + 1
+                winner.fstreak, loser.fstreak = winner.fstreak + 1, 0
+                if winner.fstreak > winner.fbest then winner.fbest = winner.fstreak end
+            end
+            local sw = (res == "1-0" and 1) or (res == "1/2" and 0.5) or 0
+            table.insert(pw.recent, { opp = g.b, s = sw, game = "f", ts = e.ts })
+            table.insert(pb.recent, { opp = g.w, s = 1 - sw, game = "f", ts = e.ts })
         elseif res and KindOf(g) == "c" then
             -- Casual: witnessed win/loss/draw record, no rating, no daily cap.
             local pw, pb = Get(players, g.w), Get(players, g.b)
@@ -269,7 +286,7 @@ function L.HeadToHead(a, b, game)
     local now = ns.ServerTime()
     for _, g in pairs(db.games) do
         local k = KindOf(g)
-        local wanted = not game or (game == "b" and k == "b") or (game == "chess" and k ~= "b")
+        local wanted = not game or (game == k) or (game == "chess" and (k == "r" or k == "c"))
         if wanted and ((g.w == a and g.b == b) or (g.w == b and g.b == a)) then
             local res = Outcome(g, now)
             if res then
@@ -281,6 +298,13 @@ function L.HeadToHead(a, b, game)
         end
     end
     return r
+end
+
+-- Four in a Row record, or nil if no witnessed games.
+function L.FourRow(name)
+    local p = L.players[name]
+    if p and (p.fw + p.fl + p.fd) > 0 then return p end
+    return nil
 end
 
 -- Battleship record, or nil if no witnessed battleship games.

@@ -1440,6 +1440,365 @@ if want("pergame") then
 end
 
 ------------------------------------------------------------------------
+if want("fourrow") then
+    section("four in a row: rules")
+    local c = NewClient("Rules")
+    local FR = c.ns.FourRow
+    local b = {}
+    eq(FR.Drop(b, 3, 1), 1, "a coin falls to the bottom row")
+    eq(FR.Drop(b, 3, 2), 2, "the next one lands on top of it")
+    for _ = 3, 6 do FR.Drop(b, 3, 1) end
+    eq(FR.FreeRow(b, 3), nil, "a full column takes no more coins")
+    eq(FR.Drop(b, 3, 1), nil, "dropping into a full column fails")
+    eq(FR.FreeRow(b, 0), nil, "column 0 does not exist")
+    eq(FR.FreeRow(b, 8), nil, "column 8 does not exist")
+    eq(FR.FreeRow(b, 2.5), nil, "half columns do not exist")
+
+    local function Board(list) -- list of { col, row, who }
+        local t = {}
+        for _, e in ipairs(list) do t[FR.Index(e[1], e[2])] = e[3] end
+        return t
+    end
+    local h = Board({ { 2, 1, 1 }, { 3, 1, 1 }, { 4, 1, 1 }, { 5, 1, 1 } })
+    local line, diag = FR.LineAt(h, 3, 1)
+    check(line and #line == 4 and not diag, "four across")
+    local v = Board({ { 7, 3, 2 }, { 7, 4, 2 }, { 7, 5, 2 }, { 7, 6, 2 } })
+    check(FR.LineAt(v, 7, 6) ~= nil, "four down")
+    local d1 = Board({ { 1, 1, 1 }, { 2, 2, 1 }, { 3, 3, 1 }, { 4, 4, 1 } })
+    line, diag = FR.LineAt(d1, 4, 4)
+    check(line and diag, "four on a rising diagonal")
+    local d2 = Board({ { 4, 1, 2 }, { 3, 2, 2 }, { 2, 3, 2 }, { 1, 4, 2 } })
+    check(FR.LineAt(d2, 2, 3) ~= nil, "four on a falling diagonal (from the middle)")
+    local three = Board({ { 1, 1, 1 }, { 2, 1, 1 }, { 3, 1, 1 }, { 4, 1, 2 } })
+    eq(FR.LineAt(three, 1, 1), nil, "three is not enough")
+    local five = Board({ { 1, 1, 1 }, { 2, 1, 1 }, { 3, 1, 1 }, { 4, 1, 1 }, { 5, 1, 1 } })
+    line = FR.LineAt(five, 3, 1)
+    eq(line and #line, 5, "five in a row counts, with all five coins")
+
+    check(FR.Replay({ 4, 4, 3, 3 }) ~= nil, "a legal game replays")
+    eq(FR.Replay({ 1, 1, 1, 1, 1, 1, 1 }), nil, "an overfull column does not replay")
+    eq(FR.Replay({ 1, 2, 1, 2, 1, 2, 1, 2 }), nil, "no moves after a win")
+
+    -- A drawn game: random games until one fills the board with no four.
+    local drawMoves
+    for _ = 1, 5000 do
+        local board, moves, won = {}, {}, false
+        while not FR.Full(board) do
+            local legal = FR.LegalCols(board)
+            local col = legal[math.random(1, #legal)]
+            local row = FR.Drop(board, col, (#moves % 2 == 0) and 1 or 2)
+            moves[#moves + 1] = col
+            if FR.LineAt(board, col, row) then won = true break end
+        end
+        if not won then drawMoves = moves break end
+    end
+    check(drawMoves and #drawMoves == 42, "a drawn game exists (42 coins, no four)")
+    FR.DRAW_FOR_TESTS = drawMoves
+
+    section("four in a row: computer")
+    -- takes a win
+    local wb = Board({ { 1, 1, 1 }, { 2, 1, 1 }, { 3, 1, 1 }, { 1, 2, 2 }, { 2, 2, 2 } })
+    for level = 1, 3 do eq(FR.AIMove(wb, 1, level), 4, FR.LEVELS[level] .. " takes the winning column") end
+    -- blocks
+    local bb = Board({ { 5, 1, 2 }, { 5, 2, 2 }, { 5, 3, 2 }, { 1, 1, 1 }, { 2, 1, 1 } })
+    for level = 2, 3 do eq(FR.AIMove(bb, 1, level), 5, FR.LEVELS[level] .. " blocks four down") end
+    eq(FR.AIMove({}, 1, 3), 4, "the Master opens in the middle")
+    -- Master against Novice
+    local masterWins = 0
+    for game = 1, 4 do
+        local board, turn = {}, 1
+        local masterIs = (game % 2 == 1) and 1 or 2
+        local winner
+        while not FR.Full(board) do
+            local col = FR.AIMove(board, turn, turn == masterIs and 3 or 1)
+            local row = FR.Drop(board, col, turn)
+            if FR.LineAt(board, col, row) then winner = turn break end
+            turn = 3 - turn
+        end
+        if winner == masterIs then masterWins = masterWins + 1 end
+    end
+    check(masterWins >= 3, "the Master beats the Novice (" .. masterWins .. " of 4)")
+    RemoveClient(c)
+
+    section("four in a row: an online game, witnessed")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local bcl = NewClient("Just", nil, "Keepingcalm")
+    local w = NewClient("Wit", nil, "Ness")
+    Advance(25)
+    local CA, JK = "Canga Prime", "Just Keepingcalm"
+    a.ns.Game.Invite(JK, { game = "c4" }); Advance(1)
+    local inv = bcl.ns.Game.LatestInvite()
+    check(inv and inv.game == "c4", "a Four in a Row challenge arrives")
+    bcl.ns.Game.AnswerLatest(true); Advance(2)
+    local sa, sb = a.ns.FourRow.current, bcl.ns.FourRow.current
+    check(sa and sb and sa.id == sb.id and sa.phase == "play", "both are at the table")
+    check(sa.iFirst ~= sb.iFirst, "exactly one side drops first")
+    check(a.ns.Game.OnlineBusy() and bcl.ns.Game.OnlineBusy(), "both count as busy")
+    a.ns.Game.Announce(true); Advance(5)
+    eq(w.ns.Profile.online[CA] and w.ns.Profile.online[CA].status, "g", "the lobby shows Canga in a game")
+    eq(w.ns.Profile.online[CA].battle and w.ns.Profile.online[CA].battle.game, "c4", "a Four in a Row game")
+
+    local first, second = sa.iFirst and a or bcl, sa.iFirst and bcl or a
+    local sf, ss = first.ns.FourRow.current, second.ns.FourRow.current
+    check(not second.ns.FourRow.DropCoin(1), "you cannot drop out of turn")
+    first.ns.FourRow.DropCoin(1); Advance(1)
+    eq(#ss.moves, 1, "the move arrives")
+    w.ns.Game.Watch(first.ns.me); Advance(3)
+    local sw = w.ns.FourRow.current
+    check(sw and sw.mode == "spectate", "a spectator can watch")
+    eq(sw and #sw.moves, 1, "the spectator sees the game so far")
+    -- first stacks column 1, second column 2: first connects four down
+    for k = 1, 3 do
+        second.ns.FourRow.DropCoin(2); Advance(1)
+        first.ns.FourRow.DropCoin(1); Advance(1)
+    end
+    Advance(5)
+    eq(sf.outcome, "win", "four down wins")
+    eq(ss.outcome, "loss", "the other side loses")
+    eq(sf.reason, "four", "by connecting four")
+    eq(sw.phase, "over", "the spectator saw the end")
+    eq(#sw.moves, 7, "and every coin")
+    check(sw.line ~= nil, "the spectator sees the winning line")
+    local winner, loser = first.ns.me, second.ns.me
+    local rec = w.ns.Ledger.FourRow(winner)
+    check(rec and rec.fw == 1, "the witness records the win")
+    check(w.ns.Ledger.FourRow(loser) and w.ns.Ledger.FourRow(loser).fl == 1, "and the loss")
+    eq(w.ns.Ledger.Rating(winner), 1200, "Four in a Row never touches chess ratings")
+    eq(w.ns.Ledger.Battleship(winner), nil, "nor the Battleship record")
+    check(first.ns.Profile.me.badges.c4_win1, "the winner earns Four Down (the Connector)")
+    check(first.ns.Profile.me.badges.c4_play and second.ns.Profile.me.badges.c4_play, "both earn First Drop")
+    check(first.ns.Profile.me.badges.c4_quick, "four coins is a Quick Draw")
+    local board = w.ns.Profile.TavernBoard()
+    eq(board[1] and board[1].name, winner, "the winner tops the Tavern Champions")
+    eq(board[2] and board[2].name, loser, "the loser is listed too")
+    local hh = w.ns.Ledger.HeadToHead(winner, loser, "f")
+    eq(hh.w, 1, "head to head counts the Four in a Row game")
+    eq(w.ns.Ledger.HeadToHead(winner, loser, "chess").w, 0, "but not as chess")
+
+    section("four in a row: a drawn game")
+    a.ns.Game.Invite(JK, { game = "c4" }); Advance(1)
+    bcl.ns.Game.AnswerLatest(true); Advance(2)
+    sa, sb = a.ns.FourRow.current, bcl.ns.FourRow.current
+    first = sa.iFirst and a or bcl
+    second = sa.iFirst and bcl or a
+    for i, col in ipairs(FR.DRAW_FOR_TESTS) do
+        local who = (i % 2 == 1) and first or second
+        for _ = 1, 40 do if who.ns.FourRow.MyTurn() then break end Advance(0.5) end
+        check(who.ns.FourRow.DropCoin(col), "coin " .. i .. " drops")
+    end
+    Advance(5)
+    eq(sa.outcome, "draw", "a full board is a draw")
+    eq(sb.outcome, "draw", "for both")
+    eq(sa.reason, "full", "because the board is full")
+    rec = w.ns.Ledger.FourRow(CA)
+    check(rec and rec.fd == 1, "the witness records the draw")
+    check(a.ns.Profile.me.badges.c4_draw, "Even Match for a draw")
+
+    section("four in a row: resigning and the turn timer")
+    a.ns.Game.Invite(JK, { game = "c4" }); Advance(1)
+    bcl.ns.Game.AnswerLatest(true); Advance(2)
+    sa, sb = a.ns.FourRow.current, bcl.ns.FourRow.current
+    bcl.ns.FourRow.Resign(); Advance(2)
+    eq(sb.outcome, "loss", "resigning loses")
+    eq(sa.outcome, "win", "the opponent wins")
+    eq(sa.reason, "resign", "by resignation")
+
+    a.ns.Game.Invite(JK, { game = "c4" }); Advance(1)
+    bcl.ns.Game.AnswerLatest(true); Advance(2)
+    sa, sb = a.ns.FourRow.current, bcl.ns.FourRow.current
+    local idle = sa.iFirst and a or bcl
+    local other = (idle == a) and bcl or a
+    local si = idle.ns.FourRow.current
+    Advance(61)
+    eq(#si.moves, 1, "after a minute a coin is dropped for you")
+    eq(si.missed, 1, "one missed turn")
+    for _ = 1, 300 do
+        local so = other.ns.FourRow.current
+        if so.phase ~= "play" then break end
+        if other.ns.FourRow.MyTurn() then
+            -- the active player avoids winning: drops where it does not connect four
+            local legal = FR.LegalCols(so.board)
+            local pick = legal[1]
+            for _, col in ipairs(legal) do
+                local t = {}
+                for k, vv in pairs(so.board) do t[k] = vv end
+                local row = FR.Drop(t, col, so.myCoin)
+                if not FR.LineAt(t, col, row) then pick = col break end
+            end
+            other.ns.FourRow.DropCoin(pick)
+        end
+        Advance(1)
+    end
+    local outI, outO = idle.ns.FourRow.current, other.ns.FourRow.current
+    check(outI.phase == "over", "the game ends")
+    if outI.reason == "time" then
+        eq(outI.outcome, "loss", "three missed turns forfeit the game")
+        eq(outO.outcome, "win", "the opponent wins on time")
+    else
+        check(outI.reason == "four" or outI.reason == "full", "or the random coins decided it first (" .. tostring(outI.reason) .. ")")
+    end
+
+    section("four in a row: queue and practice")
+    Advance(5)
+    a.ns.Game.StartSeek(0, 0, false, true, "c4")
+    bcl.ns.Game.StartSeek(0, 0, false, true, "bs")
+    Advance(30)
+    check(not a.ns.FourRow.Busy(), "a Four in a Row queue never pairs with a Battleship queue")
+    a.ns.Game.Announce(true); Advance(3)
+    eq(w.ns.Profile.online[CA] and w.ns.Profile.online[CA].status, "f", "the lobby shows Canga looking for Four in a Row")
+    bcl.ns.Game.StopSeek()
+    bcl.ns.Game.StartSeek(0, 0, false, true, "c4")
+    Advance(30)
+    check(a.ns.FourRow.Busy() and bcl.ns.FourRow.Busy(), "two Four in a Row queuers are paired")
+    a.ns.FourRow.Resign(); Advance(2)
+    local s3 = a.ns.FourRow.StartAI(3)
+    for _ = 1, 200 do
+        if s3.phase ~= "play" then break end
+        if a.ns.FourRow.MyTurn() then
+            local legal = FR.LegalCols(s3.board)
+            a.ns.FourRow.DropCoin(legal[1])
+        end
+        Advance(1)
+    end
+    eq(s3.phase, "over", "a practice game against the Master finishes")
+    eq(s3.outcome, "loss", "and the Master wins against a player who only fills from the left")
+    for _, cl in ipairs({ a, bcl, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
+if want("c4ui") then
+    section("four in a row ui: the game switcher and tabs")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    a.faction, b.faction = "Horde", "Alliance"
+    Advance(25)
+    local UI, T, P = a.ns.UI, a.ns.Tabs, a.ns.Profile
+    UI.Show()
+    UI.SetGame("c4")
+    check(UI.IsVisibleTab("c4play"), "Four in a Row opens on its Game tab")
+    eq(UI.Game(), "c4", "game is Four in a Row")
+    UI.ShowTab("c4lobby")
+    UI.SetGame("bs")
+    check(UI.IsVisibleTab("bslobby"), "switching game from the Four in a Row lobby shows the Battleship lobby")
+    UI.SetGame("c4")
+    check(UI.IsVisibleTab("c4lobby"), "and back")
+    UI.ShowTab("c4board")
+    eq(UI.Game(), "c4", "Tavern Champions belongs to Four in a Row")
+    UI.ShowTab("ladder")
+    eq(UI.Game(), "chess", "the Ladder switches to chess")
+    UI.ShowTab("c4collection")
+    eq(UI.Game(), "c4", "the Four in a Row collection switches back")
+    T.c4coll.section = "badges"; UI.Layout(); UI.Refresh()
+    local only = #T.c4coll.grids.badges.data == 10
+    for _, e in ipairs(T.c4coll.grids.badges.data) do if e.badge.game ~= "c4" then only = false end end
+    check(only, "its feats are the ten Four in a Row feats")
+
+    section("four in a row ui: dropping coins with the mouse")
+    local FR, v = a.ns.FourRow, a.ns.FourView.view
+    local s = FR.StartAI(1)
+    Advance(1)
+    check(UI.IsVisibleTab("c4play"), "the game tab is shown for a new game")
+    for _ = 1, 10 do if FR.MyTurn() then break end Advance(1) end
+    check(FR.MyTurn(), "our turn comes")
+    eq(v.turn.text:GetText(), "YOUR TURN - DROP A COIN!", "the turn banner says so")
+    check(v.glow:IsShown(), "the board glows on your turn")
+    check(v.strips[2].glow:IsShown(), "your strip glows")
+    local col4 = v.board.cols[4]
+    col4.__scripts.OnEnter(col4)
+    check(v.board.hand:IsShown(), "hovering a column shows the coin in your hand")
+    check(v.board.handArrow:IsShown(), "and where it will land")
+    local before = #s.moves
+    col4.__scripts.OnClick(col4, "LeftButton")
+    eq(#s.moves, before + 1, "clicking the column drops the coin")
+    eq(s.moves[#s.moves], 4, "into column 4")
+    check(not v.board.hand:IsShown(), "the hand is empty while the computer thinks")
+    check(v.turn.text:GetText():find("THINKING") ~= nil, "the banner says the computer is thinking")
+    Advance(3)
+    local idx = a.ns.FourRow.Index(4, 1)
+    local coinRow = s.board[idx] and 1 or 2
+    check(v.board.coins[a.ns.FourRow.Index(4, coinRow)]:IsShown(), "the coin sits in its hole after falling")
+    local logN = #v.log.data
+    eq(logN, #s.moves, "every coin is in the move list")
+
+    section("four in a row ui: resizing")
+    UI.SetCollapsed(false)
+    UI.DebugResize(1100, 900)
+    local big = a.ns.db.settings.c4Cell
+    UI.DebugResize(700, 600)
+    local small = a.ns.db.settings.c4Cell
+    check(big and small and big > small, "a bigger window means bigger holes (" .. tostring(big) .. " > " .. tostring(small) .. ")")
+    UI.SetCollapsed(true)
+    check(not v.side:IsShown(), "the side panel folds away")
+    UI.SetCollapsed(false)
+    check(v.side:IsShown(), "and comes back")
+
+    -- finish the practice game and see the banner
+    FR.Resign(); Advance(2)
+    check(v.banner:IsShown(), "the result banner appears")
+    eq(v.banner.title:GetText(), "Defeat", "resigning is a defeat")
+
+    section("four in a row ui: an online game from the lobby")
+    b.ns.UI.Show(); b.ns.UI.SetGame("c4"); b.ns.UI.ShowTab("c4lobby"); b.ns.UI.Refresh()
+    local row = b.ns.Tabs.c4lobby.list.rows[1]
+    check(row and row.item, "Canga is listed in the Four in a Row lobby")
+    row.challenge:Click(); Advance(1)
+    local inv = a.ns.Game.LatestInvite()
+    eq(inv and inv.game, "c4", "a challenge from the Four in a Row lobby is a Four in a Row challenge")
+    check(UI.invitePopup and UI.invitePopup:IsShown(), "the challenge popup appears")
+    check(UI.invitePopup.text:GetText():find("Four in a Row") ~= nil, "and names the game")
+    UI.invitePopup.accept:Click(); Advance(2)
+    check(a.ns.FourRow.Busy() and b.ns.FourRow.Busy(), "the game starts on both sides")
+    check(UI.IsVisibleTab("c4play"), "Canga sees the board")
+    check(b.ns.UI.IsVisibleTab("c4play"), "and so does Keepingcalm")
+    check(UI.Status() == "battle", "the status dot shows a game in progress")
+    local sa = a.ns.FourRow.current
+    local first = sa.iFirst and a or b
+    local second = sa.iFirst and b or a
+    for _ = 1, 3 do
+        first.ns.FourRow.DropCoin(3); Advance(1)
+        second.ns.FourRow.DropCoin(5); Advance(1)
+    end
+    first.ns.FourRow.DropCoin(3); Advance(5)
+    eq(first.ns.FourRow.current.outcome, "win", "the first player connects four")
+    local fv = first.ns.FourView.view
+    check(fv.banner:IsShown(), "the winner sees the banner")
+    eq(fv.banner.title:GetText(), "Victory!", "Victory!")
+    local shown = 0
+    for _, t in ipairs(fv.board.wins) do if t:IsShown() then shown = shown + 1 end end
+    eq(shown, 4, "the winning four glow")
+
+    section("four in a row ui: titles and records")
+    local winner = first
+    local wP = winner.ns.Profile
+    local avail = {}
+    for _, t in ipairs(wP.AvailableTitles("c4")) do avail[t.id] = true end
+    check(avail["b:c4_win1"], "the Connector title is available")
+    check(not avail["b:first_win"], "chess titles are not")
+    wP.SetTitle("b:c4_win1", "c4")
+    eq(wP.MyTitleId("c4"), "b:c4_win1", "the Four in a Row title is set")
+    eq(wP.MyTitleId("bs"), "", "Battleship keeps its own title")
+    winner.ns.Game.Announce(true); Advance(5)
+    local loser = (winner == a) and b or a
+    local seen = loser.ns.Profile.players[winner.ns.me]
+    eq(seen and seen.ft, "b:c4_win1", "others receive the Four in a Row title")
+    check(loser.ns.Profile.GameTitleText(seen.ft, "c4"):find("Connector") ~= nil, "shown as the Connector")
+    check(loser.ns.Profile.GameTitleText("", "c4"):find("Tavern Regular") ~= nil, "players without one are Tavern Regulars")
+    winner.ns.UI.SetGame("c4"); winner.ns.UI.ShowTab("c4board"); winner.ns.UI.Refresh()
+    local tav = winner.ns.Tabs.tavern
+    check(tav.list.data[1] and tav.list.data[1].me, "the winner tops the Tavern Champions")
+    check(tav.me.line:GetText():find("1|r won") ~= nil, "the card shows the record")
+    winner.ns.UI.ShowProfile(loser.ns.me); Advance(2)
+    local card = winner.ns.UI.profileCard
+    eq(tostring(card.c4.big:GetText()), "1", "the profile card counts Four in a Row games")
+    check(card.casualBtn:GetText() == "Challenge", "the profile offers a Four in a Row challenge")
+    for _, cl in ipairs({ a, b }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
 if want("cheat") then
     section("validation")
     local c = NewClient("Val")

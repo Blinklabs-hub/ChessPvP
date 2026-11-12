@@ -171,7 +171,38 @@ D.BADGES = {
         check = function(p, s) return s.mode == "bs" and not s.vsAI and s.outcome == "win" and s.shipsLeft == 1 end },
     { id = "bs_ai", game = "bs", title = "the Sea Dog", name = "Sea Dog", points = 10, desc = "Beat the Admiral (the hardest computer) at Battleship.",
         check = function(p, s) return s.mode == "bs" and s.vsAI and s.outcome == "win" and s.aiLevel >= 3 end },
+
+    -- Four in a Row (game = "c4")
+    { id = "c4_play", game = "c4", title = "the Coin Dropper", name = "First Drop", points = 5, desc = "Finish a game of Four in a Row against another player.",
+        check = function(p, s) return s.mode == "c4" and not s.vsAI end },
+    { id = "c4_win1", game = "c4", title = "the Connector", name = "Four Down", points = 10, desc = "Win a game of Four in a Row against another player.",
+        check = function(p, s) return s.mode == "c4" and not s.vsAI and s.outcome == "win" end },
+    { id = "c4_win10", game = "c4", title = "Tavern Champion", name = "Tavern Champion", points = 15, desc = "Win 10 games of Four in a Row.",
+        check = function(p) return (p.c4w or 0) >= 10 end, progress = function(p) return p.c4w or 0, 10 end },
+    { id = "c4_win50", game = "c4", title = "Grandmaster of the Tavern", name = "Grandmaster of the Tavern", points = 50, desc = "Win 50 games of Four in a Row.",
+        check = function(p) return (p.c4w or 0) >= 50 end, progress = function(p) return p.c4w or 0, 50 end },
+    { id = "c4_streak5", game = "c4", title = "the Unbeatable", name = "Unbeatable", points = 25, desc = "Win 5 games of Four in a Row in a row.",
+        check = function(p) return (p.c4Best or 0) >= 5 end, progress = function(p) return p.c4Best or 0, 5 end },
+    { id = "c4_quick", game = "c4", title = "the Quick Draw", name = "Quick Draw", points = 15, desc = "Win with no more than 6 coins of your own.",
+        check = function(p, s) return s.mode == "c4" and not s.vsAI and s.outcome == "win" and s.myCoins <= 6 end },
+    { id = "c4_diag", game = "c4", title = "the Sharp Angle", name = "Sharp Angle", points = 10, desc = "Win with a diagonal line.",
+        check = function(p, s) return s.mode == "c4" and not s.vsAI and s.outcome == "win" and s.diagonal end },
+    { id = "c4_last", game = "c4", title = "the Last Coin", name = "The Last Coin", points = 20, desc = "Win by filling the very last empty hole.",
+        check = function(p, s) return s.mode == "c4" and not s.vsAI and s.outcome == "win" and s.lastHole end },
+    { id = "c4_draw", game = "c4", title = "the Even-Handed", name = "Even Match", points = 5, desc = "Draw a game of Four in a Row against another player.",
+        check = function(p, s) return s.mode == "c4" and not s.vsAI and s.outcome == "draw" end },
+    { id = "c4_ai", game = "c4", title = "the Machinist", name = "Machinist", points = 10, desc = "Beat the Master computer at Four in a Row.",
+        check = function(p, s) return s.mode == "c4" and s.vsAI and s.outcome == "win" and s.aiLevel >= 3 end },
 }
+
+-- The games of Flightpath Legends. kind: witnessed-record kind, seek: lobby status while queued,
+-- noTitle: what players without a title are called in that game.
+D.GAMES = {
+    chess = { name = "Chess", kind = "r", seek = "r" },
+    bs = { name = "Battleship", kind = "b", seek = "b", noTitle = "Landlubber" },
+    c4 = { name = "Four in a Row", kind = "f", seek = "f", noTitle = "Tavern Regular" },
+}
+D.GAME_ORDER = { "chess", "bs", "c4" }
 
 -- Badge icons (game icons). A table picks the icon by the player's faction.
 local function PvP(n) return { Alliance = string.format("achievement_pvp_a_%02d", n), Horde = string.format("achievement_pvp_h_%02d", n) } end
@@ -209,6 +240,16 @@ D.BADGE_ICONS = {
     bs_sharp = "ability_marksmanship",
     bs_last = "inv_garrison_cargoship",
     bs_ai = "ships_ability_depthcharges",
+    c4_play = "inv_misc_coin_05",
+    c4_win1 = "inv_misc_coin_03",
+    c4_win10 = "inv_misc_coin_01",
+    c4_win50 = "inv_misc_coin_02",
+    c4_streak5 = "inv_misc_coin_04",
+    c4_quick = "inv_drink_05",
+    c4_diag = "inv_drink_03",
+    c4_last = "inv_misc_bag_10",
+    c4_draw = "inv_drink_01",
+    c4_ai = "inv_misc_gear_08",
 }
 
 function D.BadgeIcon(id, faction)
