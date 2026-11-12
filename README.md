@@ -4,7 +4,8 @@ Board games to play with other players while you're on a flight path or auto-run
 
 - **Chess:** Horde vs Alliance pieces with character portraits, rated (Elo and leagues) or casual, plus a computer opponent.
 - **Battleship:** the Garrison Shipyard fleet on a naval-map sea. Results are wins and losses, there's a computer admiral, and fleets are sealed so nobody can cheat.
-- **Shared:** a lobby, Live Battles to watch, player profiles, titles for every feat, and witnessed results that nobody can fake.
+- **Each game has its own** lobby, Live Battles to watch, leaderboard, collection, feats and titles. Only Settings is shared.
+- **Fair play:** every result is witnessed by both players, so nobody can fake their record.
 
 ## Install
 1. Download `FlightpathLegends-2.1.0.zip` from the [latest release](https://github.com/Blinklabs-hub/FlightpathLegends/releases/latest).
