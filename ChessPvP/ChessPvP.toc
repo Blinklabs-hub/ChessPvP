@@ -17,5 +17,8 @@ Profile.lua
 Comm.lua
 Ledger.lua
 Game.lua
+UI_Widgets.lua
 UI_Board.lua
+UI_Play.lua
+UI_Tabs.lua
 UI_Main.lua

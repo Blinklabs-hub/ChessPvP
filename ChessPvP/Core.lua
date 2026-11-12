@@ -200,6 +200,7 @@ local SETTING_DEFAULTS = {
     showLauncher = true,
     showLegal = true,
     animations = true,
+    autoCollapse = true,
     scale = 1,
 }
 

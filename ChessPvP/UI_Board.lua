@@ -36,7 +36,7 @@ local function DrawSilhouette(fill, line, t, fc, lc)
     fill:Show(); line:Show()
 end
 
-local function SetPiece(view, piece, g)
+local function SetPiece(view, piece, g, setOverride)
     view.piece = piece
     if not piece or piece == 0 then
         view:Hide()
@@ -44,7 +44,7 @@ local function SetPiece(view, piece, g)
     end
     local white = piece > 0
     local t = white and piece or -piece
-    local set = P.PieceSet()
+    local set = setOverride or P.PieceSet()
     local size = view.size
     local portrait, army
     if set.warcraft then

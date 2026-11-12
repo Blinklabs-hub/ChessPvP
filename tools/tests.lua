@@ -676,6 +676,63 @@ if want("ledger") then
 end
 
 ------------------------------------------------------------------------
+if want("ui") then
+    section("ui: panels fold away during a battle")
+    local c = NewClient("Uma")
+    local UI = c.ns.UI
+    UI.ShowTab("play")
+    local d = UI.Debug()
+    check(not d.collapsed and d.tabsVisible, "side panel and tabs shown before a battle")
+    local before = d.boardPx
+    c.ns.Game.StartAI(1, 1)
+    Advance(1)
+    d = UI.Debug()
+    check(d.collapsed, "side panel folded when the battle starts")
+    check(not d.tabsVisible, "tabs hidden during the battle")
+    eq(d.boardPx, before, "board keeps its size when folding")
+    local foldedW = d.size.w
+    UI.SetCollapsed(false)
+    d = UI.Debug()
+    check(not d.collapsed and d.tabsVisible, "arrow brings the panels back")
+    eq(d.size.w, foldedW + c.ns.PlayView.SIDE + c.ns.PlayView.GAP, "window widens by exactly the side panel")
+    UI.SetCollapsed(true)
+
+    section("ui: resizing scales the board and the window hugs it")
+    for _, sz in ipairs({ { 900, 900 }, { 2000, 700 }, { 500, 1200 }, { 100, 100 } }) do
+        UI.DebugResize(sz[1], sz[2])
+        d = UI.Debug()
+        local w, h = c.ns.PlayView.STRIP, c.ns.PlayView.GAP
+        check(d.boardPx >= 300 and d.boardPx <= 1000, "board size within limits (" .. d.boardPx .. ")")
+        local expectW = 12 + d.boardPx + h + c.ns.PlayView.HANDLE + 12
+        eq(d.size.w, expectW, "window width fits the board after dragging to " .. sz[1] .. "x" .. sz[2])
+    end
+    UI.DebugResize(700, 700)
+    local saved = c.ns.db.settings.boardPx
+    eq(saved, UI.Debug().boardPx, "board size remembered")
+
+    section("ui: every tab lays out at small and large sizes")
+    c.ns.Game.Resign(); Advance(2)
+    for _, tab in ipairs({ "lobby", "ladder", "collection", "settings", "play" }) do
+        UI.ShowTab(tab)
+        for _, sz in ipairs({ { 620, 460 }, { 1400, 1000 } }) do
+            UI.DebugResize(sz[1], sz[2])
+            UI.Refresh()
+        end
+        check(true, tab .. " tab resized without errors")
+    end
+    UI.ShowTab("collection")
+    for _, section in ipairs({ "boards", "pieces", "titles", "badges" }) do
+        c.ns.Tabs.coll.section = section
+        UI.Layout(); UI.Refresh()
+    end
+    check(c.ns.Tabs.coll.grids.badges.cols >= 1, "badge grid has columns")
+    UI.ShowTab("play")
+    check(not UI.Debug().collapsed, "panels shown again when no battle is running")
+    eq(#c.errors, 0, "no Lua errors in the UI")
+    RemoveClient(c)
+end
+
+------------------------------------------------------------------------
 if want("cheat") then
     section("validation")
     local c = NewClient("Val")

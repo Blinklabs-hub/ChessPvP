@@ -138,6 +138,41 @@ D.BADGES = {
         check = function(p) return p.peak >= 2000 end },
 }
 
+-- Badge icons (game icons). A table picks the icon by the player's faction.
+local function PvP(n) return { Alliance = string.format("achievement_pvp_a_%02d", n), Horde = string.format("achievement_pvp_h_%02d", n) } end
+D.BADGE_ICONS = {
+    first_game = "inv_misc_book_09",
+    first_win = "inv_sword_04",
+    wins10 = PvP(4),
+    wins50 = PvP(8),
+    wins100 = PvP(14),
+    streak3 = "ability_warrior_charge",
+    streak5 = "ability_warrior_battleshout",
+    streak10 = "inv_shield_06",
+    giant = "inv_misc_head_dragon_01",
+    quick = "ability_rogue_sprint",
+    pawnmate = { Alliance = "achievement_character_human_male", Horde = "achievement_character_orc_male" },
+    underpromo = { Alliance = "ability_mount_charger", Horde = "ability_mount_blackdirewolf" },
+    clutch = "inv_misc_pocketwatch_01",
+    rivals10 = "inv_misc_map_01",
+    marathon = "spell_nature_timestop",
+    peace = "spell_holy_layonhands",
+    bot1 = "inv_misc_gear_01",
+    bot2 = "inv_misc_gear_02",
+    bot3 = "inv_misc_gear_08",
+    watcher = "inv_misc_spyglass_01",
+    r1350 = PvP(5),
+    r1500 = PvP(7),
+    r1800 = PvP(10),
+    r2000 = PvP(12),
+}
+
+function D.BadgeIcon(id, faction)
+    local icon = D.BADGE_ICONS[id]
+    if type(icon) == "table" then icon = icon[faction or "Alliance"] end
+    return icon and ("Interface\\Icons\\" .. icon) or nil
+end
+
 D.BADGE_BY_ID = {}
 for i = 1, #D.BADGES do D.BADGE_BY_ID[D.BADGES[i].id] = D.BADGES[i] end
 

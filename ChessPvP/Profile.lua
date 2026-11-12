@@ -253,7 +253,7 @@ function P.RecordGame(s)
             local ok, earned = pcall(b.check, p, s)
             if ok and earned then
                 p.badges[b.id] = ns.ServerTime()
-                ns.Fire("TOAST", "Badge earned", b.name .. "  |cffffd100+" .. b.points .. "|r")
+                ns.Fire("TOAST", "Badge earned", b.name .. "  |cffffd100+" .. b.points .. "|r", D.BadgeIcon(b.id, ns.Assets.MyFaction()))
             end
         end
     end

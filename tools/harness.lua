@@ -1,5 +1,5 @@
 -- Test harness: loads the addon into mocked WoW environments and simulates several clients.
-local FILES = { "Core.lua", "Data.lua", "Assets.lua", "Engine.lua", "AI.lua", "Profile.lua", "Comm.lua", "Ledger.lua", "Game.lua", "UI_Board.lua", "UI_Main.lua" }
+local FILES = { "Core.lua", "Data.lua", "Assets.lua", "Engine.lua", "AI.lua", "Profile.lua", "Comm.lua", "Ledger.lua", "Game.lua", "UI_Widgets.lua", "UI_Board.lua", "UI_Play.lua", "UI_Tabs.lua", "UI_Main.lua" }
 local REALM = "TestRealm"
 
 T = 1000 -- virtual clock (seconds)

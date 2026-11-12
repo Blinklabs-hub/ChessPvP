@@ -281,16 +281,18 @@ end
 
 -- Newcomers ask everyone to re-share; replies are spread out and rate limited.
 local lastShare = -1000
-local function ShareRecent()
+-- minGap: seconds since our last share below which we stay quiet (avoids storms when
+-- several newcomers ask at once).
+local function ShareRecent(minGap)
     local now = ns.Now()
-    if now - lastShare < 60 then return end
+    if now - lastShare < (minGap or 60) then return end
     lastShare = now
     Share(OwnRecent(12))
 end
 
 ns.Comm.handlers.LQ = function(sender, dist)
     if dist ~= "CHANNEL" then return end
-    ns.After(2 + math.random() * 20, ShareRecent)
+    ns.After(2 + math.random() * 20, function() ShareRecent(15) end)
 end
 
 ns.On("CHESS_CHANNEL_READY", function()
