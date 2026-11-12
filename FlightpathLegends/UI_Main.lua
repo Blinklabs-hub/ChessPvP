@@ -24,15 +24,20 @@ local size = { w = 0, h = 0 } -- current window size (tracked here, not read bac
 local TABS = {
     { id = "play", game = "chess", text = "Battle", build = PV.Build, refresh = PV.Refresh },
     { id = "bsplay", game = "bs", text = "Battle", build = BV.Build, refresh = BV.Refresh },
-    { id = "lobby", text = "Lobby", build = T.BuildLobby, refresh = T.RefreshLobby, layout = T.LayoutLobby },
-    { id = "live", text = "Live Battles", build = T.BuildLive, refresh = T.RefreshLive, layout = T.LayoutLive },
+    { id = "lobby", game = "chess", text = "Lobby", build = T.lobbies.chess.Build, refresh = T.lobbies.chess.Refresh, layout = T.lobbies.chess.Layout },
+    { id = "bslobby", game = "bs", text = "Lobby", build = T.lobbies.bs.Build, refresh = T.lobbies.bs.Refresh, layout = T.lobbies.bs.Layout },
+    { id = "live", game = "chess", text = "Live Battles", build = T.lives.chess.Build, refresh = T.lives.chess.Refresh, layout = T.lives.chess.Layout },
+    { id = "bslive", game = "bs", text = "Live Battles", build = T.lives.bs.Build, refresh = T.lives.bs.Refresh, layout = T.lives.bs.Layout },
     { id = "ladder", game = "chess", text = "Ladder", build = T.BuildLadder, refresh = T.RefreshLadder, layout = T.LayoutLadder },
     { id = "admirals", game = "bs", text = "Admirals", build = T.BuildAdmirals, refresh = T.RefreshAdmirals, layout = T.LayoutAdmirals },
-    { id = "collection", text = "Collection", build = T.BuildCollection, refresh = T.RefreshCollection, layout = T.LayoutCollection },
+    { id = "collection", game = "chess", text = "Collection", build = T.collections.chess.Build, refresh = T.collections.chess.Refresh, layout = T.collections.chess.Layout },
+    { id = "bscollection", game = "bs", text = "Collection", build = T.collections.bs.Build, refresh = T.collections.bs.Refresh, layout = T.collections.bs.Layout },
     { id = "settings", text = "Settings", build = T.BuildSettings, refresh = T.RefreshSettings, layout = T.LayoutSettings },
 }
 -- The same tab in the other game.
-local SWAP = { play = "bsplay", bsplay = "play", ladder = "admirals", admirals = "ladder" }
+local SWAP = { play = "bsplay", bsplay = "play", ladder = "admirals", admirals = "ladder",
+    lobby = "bslobby", bslobby = "lobby", live = "bslive", bslive = "live", collection = "bscollection", bscollection = "collection" }
+local CHESS_TABS = { play = true, ladder = true, lobby = true, live = true, collection = true }
 
 local function Game()
     return (ns.db and ns.db.settings.game == "bs") and "bs" or "chess"
@@ -398,13 +403,23 @@ function UI.Refresh()
     end
     local card, info = main.me, A.MyCharInfo()
     card.portrait:SetPlayer(ns.me, info, A.MyFaction())
-    card.name:SetText(W.ClassName(ns.me, info) .. "  |cffaaaaaa" .. P.TitleText(P.MyTitleId(), p.rating, P.RatedGames()) .. "|r")
+    local bsMode = Game() == "bs"
+    if bsMode then
+        card.name:SetText(W.ClassName(ns.me, info) .. "  " .. P.BsTitleText(P.MyTitleId("bs")))
+    else
+        card.name:SetText(W.ClassName(ns.me, info) .. "  |cffaaaaaa" .. P.TitleText(P.MyTitleId(), p.rating, P.RatedGames()) .. "|r")
+    end
     card.line:SetText(A.CharLine(info) .. (info.guild and ("  |cff40ff40<" .. info.guild .. ">|r") or ""))
-    card.rating:SetText(p.rating)
+    if bsMode then
+        local rec = ns.Ledger.Battleship(ns.me)
+        card.rating:SetText(rec and string.format("|cff40ff40%d|r-|cffff5040%d|r", rec.bw, rec.bl) or "|cffaaaaaa0-0|r")
+    else
+        card.rating:SetText(p.rating)
+    end
     card.statusDot:SetVertexColor(unpack(UI.StatusColor()))
     local li = G.LeagueIndex(ns.me)
-    if li > 0 then W.SetLeagueIcon(card.league, li) else card.league:Hide() end
-    if P.RatedGames() >= D.PLACEMENT_GAMES then
+    if li > 0 and not bsMode then W.SetLeagueIcon(card.league, li) else card.league:Hide() end
+    if P.RatedGames() >= D.PLACEMENT_GAMES and not bsMode then
         local idx = 1
         for i = 1, #D.RANKS do if p.rating >= D.RANKS[i].min then idx = i end end
         W.SetRankIcon(card.rank, idx)
@@ -435,7 +450,7 @@ function UI.SetGame(game)
     end
     s.game = game
     local target = currentTab
-    if SWAP[target] and ((game == "bs") == (target == "play" or target == "ladder")) then target = SWAP[target] end
+    if SWAP[target] and ((game == "bs") == (CHESS_TABS[target] == true)) then target = SWAP[target] end
     if built then
         collapsed = false
         UI.ShowTab(target, true)

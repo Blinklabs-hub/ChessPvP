@@ -1345,10 +1345,13 @@ if want("bsui") then
     check(b.ns.UI.IsVisibleTab("bsplay"), "accepting opens the Battleship view")
     check(a.ns.UI.IsVisibleTab("bsplay"), "for the challenger too")
     a.ns.Battleship.Ready(); b.ns.Battleship.Ready(); Advance(3)
+    w.ns.UI.ShowTab("bslive")
+    local rows = w.ns.Tabs.bslive.list.data
+    check(rows[1] and rows[1].battle and rows[1].battle.game == "bs", "Battleship's Live Battles lists the battle")
     w.ns.UI.ShowTab("live")
-    local rows = w.ns.Tabs.live.list.data
-    check(rows[1] and rows[1].battle and rows[1].battle.game == "bs", "Live Battles lists the Battleship battle")
-    w.ns.Tabs.live.list.rows[1].watch:Click(); Advance(3)
+    eq(#w.ns.Tabs.live.list.data, 0, "the chess Live Battles does not list it")
+    w.ns.UI.ShowTab("bslive")
+    w.ns.Tabs.bslive.list.rows[1].watch:Click(); Advance(3)
     check(w.ns.Battleship.current and w.ns.Battleship.current.mode == "spectate", "watching from Live Battles")
     check(w.ns.UI.IsVisibleTab("bsplay"), "the spectator sees the Battleship view")
     a.ns.Battleship.Resign(); Advance(1)
@@ -1361,6 +1364,78 @@ if want("bsui") then
     a.ns.UI.ShowProfile("Just Keepingcalm"); Advance(3)
     check(a.ns.UI.profileCard.bs.line1:GetText():find("1"), "the profile card shows the Battleship record")
     for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
+if want("pergame") then
+    section("per game: tabs, lobby, live battles and collections")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    Advance(25)
+    local UI, T, P, D = a.ns.UI, a.ns.Tabs, a.ns.Profile, a.ns.Data
+    UI.Show()
+    UI.SetGame("chess")
+    local function TabShown(id)
+        for _, f in ipairs(a.frames) do end
+        return UI.Debug and true
+    end
+    UI.ShowTab("collection")
+    check(UI.IsVisibleTab("collection"), "chess collection")
+    UI.SetGame("bs")
+    check(UI.IsVisibleTab("bscollection"), "switching game swaps to the Battleship collection")
+    UI.ShowTab("bslobby")
+    eq(UI.Game(), "bs", "the Battleship lobby belongs to Battleship")
+    UI.SetGame("chess")
+    check(UI.IsVisibleTab("lobby"), "and back to the chess lobby")
+    UI.ShowTab("settings")
+    UI.SetGame("bs")
+    check(UI.IsVisibleTab("settings"), "Settings is shared: it stays open when switching games")
+
+    -- each collection only holds its own game's feats
+    UI.SetGame("chess"); UI.ShowTab("collection")
+    T.coll.section = "badges"; UI.Layout(); UI.Refresh()
+    local chessHasBs = false
+    for _, e in ipairs(T.coll.grids.badges.data) do if e.badge.game == "bs" then chessHasBs = true end end
+    check(not chessHasBs, "chess feats have no Battleship feats")
+    UI.SetGame("bs"); UI.ShowTab("bscollection")
+    T.bscoll.section = "badges"; UI.Layout(); UI.Refresh()
+    local onlyBs = #T.bscoll.grids.badges.data > 0
+    for _, e in ipairs(T.bscoll.grids.badges.data) do if e.badge.game ~= "bs" then onlyBs = false end end
+    check(onlyBs, "Battleship feats are only Battleship feats")
+
+    section("per game: titles")
+    P.me.badges.bs_win1 = 1
+    P.me.badges.first_win = 1
+    local bsIds, chessIds = {}, {}
+    for _, t in ipairs(P.AvailableTitles("bs")) do bsIds[t.id] = true end
+    for _, t in ipairs(P.AvailableTitles("chess")) do chessIds[t.id] = true end
+    check(bsIds["b:bs_win1"] and not bsIds["b:first_win"], "Battleship titles come from Battleship feats only")
+    check(chessIds["b:first_win"] and not chessIds["b:bs_win1"], "chess titles come from chess feats only")
+    T.bscoll.section = "titles"; UI.Refresh()
+    local tile
+    for _, e in ipairs(T.bscoll.grids.titles.data) do if e.id == "b:bs_win1" then tile = e end end
+    check(tile and tile.available, "the Gunner can be chosen in the Battleship collection")
+    P.SetTitle("b:bs_win1", "bs")
+    P.SetTitle("b:first_win", "chess")
+    eq(P.MyTitleId("bs"), "b:bs_win1", "Battleship title set")
+    eq(P.MyTitleId(), "b:first_win", "chess title set separately")
+    a.ns.Game.Announce(true); Advance(5)
+    local seen = b.ns.Profile.players["Canga Prime"]
+    eq(seen and seen.bt, "b:bs_win1", "others receive the Battleship title")
+    eq(seen and seen.t, "b:first_win", "and the chess title")
+    eq(b.ns.Profile.BsTitleText(seen.bt):find("Gunner") ~= nil, true, "shown as the Gunner in Battleship")
+
+    section("per game: lobby challenges")
+    b.ns.UI.Show(); b.ns.UI.SetGame("bs"); b.ns.UI.ShowTab("bslobby"); b.ns.UI.Refresh()
+    local row = b.ns.Tabs.bslobby.list.rows[1]
+    check(row and row.item, "Canga is listed in the Battleship lobby")
+    row.challenge:Click(); Advance(1)
+    local inv = a.ns.Game.LatestInvite()
+    eq(inv and inv.game, "bs", "a challenge from the Battleship lobby is a Battleship challenge")
+    a.ns.Game.AnswerLatest(false); Advance(1)
+    for _, cl in ipairs({ a, b }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
     net.forever = false
 end
 

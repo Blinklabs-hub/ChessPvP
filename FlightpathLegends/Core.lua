@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "2.0.0"
+ns.VERSION = "2.1.0"
 ns.PROTO = 3 -- network protocol version; bump when messages change incompatibly
 FlightpathLegends = ns -- exposed for debugging and the addon compartment
 

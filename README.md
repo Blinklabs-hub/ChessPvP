@@ -7,7 +7,7 @@ Board games to play with other players while you're on a flight path or auto-run
 - **Shared:** a lobby, Live Battles to watch, player profiles, titles for every feat, and witnessed results that nobody can fake.
 
 ## Install
-1. Download `FlightpathLegends-2.0.0.zip` from the [latest release](https://github.com/Blinklabs-hub/FlightpathLegends/releases/latest).
+1. Download `FlightpathLegends-2.1.0.zip` from the [latest release](https://github.com/Blinklabs-hub/FlightpathLegends/releases/latest).
 2. Unzip it and copy the `FlightpathLegends` folder (the one with `FlightpathLegends.toc` inside) to `World of Warcraft\_forever_\Interface\AddOns\`.
 3. Delete any old `CheckmateAzeroth` or `ChessPvP` folder from that AddOns folder. Your saved data carries over.
 4. Restart WoW completely and type `/fpl`, or click the knight button. `/chess` and `/battleship` open a game directly.

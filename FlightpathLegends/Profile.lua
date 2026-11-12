@@ -69,12 +69,19 @@ function P.RatedGames(p)
     return p.w + p.l + p.d
 end
 
-function P.Points(p)
+-- Which game a feat belongs to ("chess" or "bs").
+function P.BadgeGame(b)
+    return b.game == "bs" and "bs" or "chess"
+end
+
+-- Feat points for one game (chess when no game is given).
+function P.Points(p, game)
     p = p or P.me
+    game = game or "chess"
     local total = 0
     for id in pairs(p.badges) do
         local b = D.BADGE_BY_ID[id]
-        if b then total = total + b.points end
+        if b and P.BadgeGame(b) == game then total = total + b.points end
     end
     return total
 end
@@ -98,10 +105,12 @@ function P.IsUnlocked(item)
 end
 
 -- Titles the player may display: every rank up to their best, plus badge titles.
-function P.AvailableTitles()
+-- Titles the player may show in one game: chess ranks and chess feats, or Battleship feats.
+function P.AvailableTitles(game)
+    game = game or "chess"
     local p = P.me
     local out = {}
-    if P.RatedGames(p) >= D.PLACEMENT_GAMES then
+    if game == "chess" and P.RatedGames(p) >= D.PLACEMENT_GAMES then
         local top = D.RankFor(p.peak)
         for i = 1, #D.RANKS do
             local r = D.RANKS[i]
@@ -110,7 +119,7 @@ function P.AvailableTitles()
     end
     for i = 1, #D.BADGES do
         local b = D.BADGES[i]
-        if b.title and p.badges[b.id] then
+        if b.title and p.badges[b.id] and P.BadgeGame(b) == game then
             out[#out + 1] = { id = "b:" .. b.id, name = b.title, color = "ffffd100" }
         end
     end
@@ -118,11 +127,30 @@ function P.AvailableTitles()
 end
 
 -- The title id broadcast to others: the chosen one, or the current rank.
-function P.MyTitleId()
+-- The title shown to others in a game ("chess" by default).
+local function TitleGame(id)
+    local badgeId = id and string.match(id, "^b:(.+)$")
+    local b = badgeId and D.BADGE_BY_ID[badgeId]
+    return b and P.BadgeGame(b) or "chess"
+end
+
+function P.MyTitleId(game)
     local p = P.me
-    if p.title and D.TitleName(p.title) then return p.title end
+    if game == "bs" then
+        local id = p.bsTitle
+        if id and D.TitleName(id) and TitleGame(id) == "bs" then return id end
+        return ""
+    end
+    if p.title and D.TitleName(p.title) and TitleGame(p.title) == "chess" then return p.title end
     if P.RatedGames(p) < D.PLACEMENT_GAMES then return "" end
     return D.RankFor(p.rating).id
+end
+
+-- Battleship title text (players without one are still landlubbers).
+function P.BsTitleText(id)
+    local name, color = D.TitleName(id)
+    if name then return "|c" .. color .. name .. "|r" end
+    return "|cff808080Landlubber|r"
 end
 
 -- Coloured title text for any player record ({ t = titleId, r = rating, g = ratedGames }).
@@ -136,8 +164,8 @@ function P.TitleText(titleId, rating, ratedGames)
     return "|c" .. color .. name .. "|r"
 end
 
-function P.SetTitle(id)
-    P.me.title = id
+function P.SetTitle(id, game)
+    if game == "bs" then P.me.bsTitle = id else P.me.title = id end
     ns.Fire("PROFILE_CHANGED")
 end
 
@@ -358,7 +386,7 @@ function P.AdmiralBoard()
             local known = P.players[name]
             rows[#rows + 1] = {
                 name = name, w = e.bw, l = e.bl, games = n, ratio = e.bw / n, best = e.bbest, streak = e.bstreak,
-                me = name == ns.me, t = name == ns.me and P.MyTitleId() or (known and known.t) or "",
+                me = name == ns.me, t = name == ns.me and P.MyTitleId("bs") or (known and known.bt) or "",
                 f = name == ns.me and ns.Assets.MyFaction() or (known and known.f), ch = known and known.ch,
             }
         end
@@ -396,7 +424,8 @@ function P.OnlineList()
                 name = name, status = o.status, opp = o.opp,
                 -- Witnessed rating when known; otherwise what they claim, marked unverified.
                 r = v and v.r or (e and e.r) or D.START_RATING, verified = v ~= nil,
-                t = e and e.t or "", f = e and e.f, ch = e and e.ch, battle = o.battle,
+                t = e and e.t or "", bt = e and e.bt, f = e and e.f, ch = e and e.ch, battle = o.battle,
+                bs = ns.Ledger.Battleship(name),
                 g = v and v.games or 0, casual = ns.Ledger.Casual(name),
             }
         end

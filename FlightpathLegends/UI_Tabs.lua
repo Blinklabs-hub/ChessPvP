@@ -32,23 +32,8 @@ local function FactionColor(f)
 end
 
 ------------------------------------------------------------------------
--- Lobby
+-- Lobby (one per game)
 ------------------------------------------------------------------------
-local lobby = { filter = "all" }
-T.lobby = lobby
-
-local STATUS_TEXT = {
-    i = "|cff40ff40Ready for battle|r",
-    r = "|cffffd100In the rated queue|r",
-    c = "|cff80c0ffIn the casual queue|r",
-    b = "|cff9ac8ffLooking for a Battleship battle|r",
-    s = "|cffffd100Seeking a match|r",
-    d = "|cff808080Do not disturb|r",
-}
-
--- Lobby order: looking for a battle first, then ready, then busy.
-local STATUS_ORDER = { r = 1, c = 1, b = 1, s = 1, i = 2, g = 3, d = 4 }
-
 local function RecordText(rec, prefix)
     if not rec then return "" end
     return string.format("%s|cff40ff40%d|r-|cffff5040%d|r-|cffaaaaaa%d|r", prefix, rec.w or rec.cw, rec.l or rec.cl, rec.d or rec.cd)
@@ -66,143 +51,184 @@ function T.JoinQueue(rated)
     end
 end
 
-function T.BuildLobby(page)
-    lobby.page = page
-    lobby.title = W.Title(page, 20, "Players Online")
-    lobby.title:SetPoint("TOPLEFT", 4, -4)
+local GAME_NAME = { chess = "chess", bs = "Battleship" }
+local PLAY_TAB = { chess = "play", bs = "bsplay" }
 
-    lobby.count = W.Label(page, "GameFontHighlightSmall", "")
-    lobby.count:SetPoint("LEFT", lobby.title, "RIGHT", 10, -2)
-
-    lobby.list = W.List(page, 52, function(row)
-        W.Gradient(row, { 0.14, 0.11, 0.07, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
-        W.Background(row, 0, 0, 0, 0, { 0.5, 0.4, 0.16, 0.7 })
-        local hl = row:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints()
-        hl:SetColorTexture(1, 0.85, 0.4, 0.07)
-        row.portrait = W.Portrait(row, 44)
-        row.portrait:SetPoint("LEFT", 4, 0)
-        row.name = W.Title(row, 16)
-        row.name:SetPoint("TOPLEFT", 54, -7)
-        row.name:SetWordWrap(false)
-        row.rank = row:CreateTexture(nil, "ARTWORK")
-        row.rank:SetSize(16, 16)
-        row.rank:SetPoint("BOTTOMLEFT", 54, 8)
-        row.sub = W.Label(row, "GameFontHighlightSmall")
-        row.sub:SetPoint("BOTTOMLEFT", 74, 10)
-        row.sub:SetWordWrap(false)
-        row.statusIcon = row:CreateTexture(nil, "ARTWORK")
-        row.statusIcon:SetSize(14, 14)
-        row.status = W.Label(row, "GameFontHighlightSmall")
-        row.status:SetWordWrap(false)
-        row.challenge = W.Button(row, "Challenge", 90, 24, function()
-            if row.item then
-                G.Invite(row.item.name)
-                ns.UI.ShowTab("play")
-            end
-        end)
-        row.challenge:SetPoint("RIGHT", -8, 0)
-        row.watch = W.Button(row, "Watch", 66, 24, function()
-            if row.item then
-                G.Watch(row.item.name)
-                ns.UI.ShowTab("play")
-            end
-        end)
-        row.watch:SetPoint("RIGHT", row.challenge, "LEFT", -4, 0)
-        row:SetScript("OnClick", function(self)
-            if self.item then ns.UI.ShowProfile(self.item.name) end
-        end)
-        W.Tooltip(row, function(self, tip)
-            local item = self.item
-            if not item then return false end
-            tip:SetText(ns.ShortName(item.name), 1, 0.82, 0)
-            tip:AddLine("Click to see their profile", 0.7, 0.7, 0.7)
-        end)
-        function row:OnResize(w)
-            local statusX = max(250, w * 0.5)
-            self.name:SetWidth(max(80, statusX - 64))
-            self.sub:SetWidth(max(80, statusX - 84))
-            self.statusIcon:ClearAllPoints()
-            self.statusIcon:SetPoint("LEFT", self, "LEFT", statusX, 0)
-            self.status:ClearAllPoints()
-            self.status:SetPoint("LEFT", self.statusIcon, "RIGHT", 4, 0)
-            self.status:SetWidth(max(60, w - statusX - 190))
-        end
-    end, function(row, item)
-        local faction = item.f and A.ARMIES[item.f]
-        row.portrait:SetPlayer(item.name, item.ch, item.f)
-        row.name:SetText(W.ClassName(item.name, item.ch, faction and faction.color) .. "  |cffaaaaaa" .. A.CharLine(item.ch) .. "|r")
-        local idx = RankIndex(item.r, item.g)
-        if idx then W.SetRankIcon(row.rank, idx) else row.rank:Hide() end
-        local rating = item.verified and ("|cffffffff" .. item.r .. "|r") or ("|cff808080~" .. item.r .. "?|r")
-        local casual = item.casual and RecordText(item.casual, "   |cff80c0ffcasual|r ") or ""
-        row.sub:SetText(P.TitleText(item.t, item.r, item.g) .. "   " .. rating .. casual)
-        W.SetStatusIcon(row.statusIcon, (item.status == "r" or item.status == "c" or item.status == "b") and "s" or item.status)
-        if item.status == "g" then
-            row.status:SetText("|cffff9040In battle vs " .. (item.opp and ns.ShortName(item.opp) or "?") .. "|r")
-            row.watch:Show()
-            row.challenge:Disable()
-        else
-            row.status:SetText(STATUS_TEXT[item.status] or STATUS_TEXT.i)
-            row.watch:Hide()
-            if item.status == "d" then row.challenge:Disable() else row.challenge:Enable() end
-        end
-    end, 4)
-    lobby.list:SetPoint("TOPLEFT", 0, -34)
-
-    lobby.empty = CreateFrame("Frame", nil, page)
-    lobby.empty:SetSize(400, 140)
-    lobby.empty:SetPoint("CENTER", 0, -20)
-    local e1 = lobby.empty:CreateTexture(nil, "ARTWORK")
-    e1:SetSize(64, 64)
-    e1:SetPoint("TOP")
-    e1:SetAlpha(0.5)
-    lobby.emptyCrest = e1
-    lobby.emptyText = W.Label(lobby.empty, "GameFontHighlight", "")
-    lobby.emptyText:SetPoint("TOP", e1, "BOTTOM", 0, -10)
-    lobby.emptyText:SetWidth(400)
-    lobby.emptyText:SetJustifyH("CENTER")
-    lobby.emptyText:SetSpacing(4)
-end
-
-function T.LayoutLobby(w, h)
-    lobby.list:Resize(w, h - 34)
-end
-
-function T.RefreshLobby()
-    local all = P.OnlineList()
-    local rows = {}
-    for _, row in ipairs(all) do rows[#rows + 1] = row end
-    table.sort(rows, function(a, b)
-        local oa, ob = STATUS_ORDER[a.status] or 2, STATUS_ORDER[b.status] or 2
-        if oa ~= ob then return oa < ob end
-        if a.r ~= b.r then return a.r > b.r end
-        return a.name < b.name
-    end)
-    lobby.list:SetData(rows)
-    W.SetCrest(lobby.emptyCrest, A.MyFaction())
-    if #rows == 0 then
-        local text
-        if not C.Joined() then
-            text = "Connecting to the chess network..."
-        else
-            text = "No other Flightpath Legends players are online right now.\nChallenge a friend by name from the Battle tab, or practise against the computer."
-        end
-        lobby.emptyText:SetText(text)
-        lobby.empty:Show()
-    else
-        lobby.empty:Hide()
+-- What a player is doing, as seen from one game's lobby.
+local function StatusLine(item, game)
+    local st = item.status
+    if st == "g" then
+        local bg = item.battle and item.battle.game or "chess"
+        return "|cffff9040In a " .. GAME_NAME[bg] .. " battle vs " .. (item.opp and ns.ShortName(item.opp) or "?") .. "|r"
+    elseif st == "b" then
+        return game == "bs" and "|cffffd100Looking for a battle|r" or "|cff9ac8ffLooking for a Battleship battle|r"
+    elseif st == "r" or st == "c" then
+        local kind = st == "r" and "rated" or "casual"
+        return game == "chess" and ("|cffffd100Looking for a " .. kind .. " game|r") or ("|cff9ac8ffLooking for a " .. kind .. " chess game|r")
+    elseif st == "d" then
+        return "|cff808080Do not disturb|r"
     end
-    lobby.count:SetText(#all .. " online")
-
+    return "|cff40ff40Ready for battle|r"
 end
 
-------------------------------------------------------------------------
--- Live Battles: every game in progress, ready to watch
-------------------------------------------------------------------------
-local live = {}
-T.live = live
+-- Order: looking for this game first, then ready, then busy elsewhere.
+local ORDER = {
+    chess = { r = 1, c = 1, s = 1, i = 2, b = 3, g = 4, d = 5 },
+    bs = { b = 1, i = 2, r = 3, c = 3, s = 3, g = 4, d = 5 },
+}
 
+local function MakeLobby(game)
+    local lobby = { game = game }
+    local self = { state = lobby }
+
+    function self.Build(page)
+        lobby.page = page
+        lobby.title = W.Title(page, 20, game == "bs" and "Battleship Lobby" or "Chess Lobby")
+        lobby.title:SetPoint("TOPLEFT", 4, -4)
+        lobby.count = W.Label(page, "GameFontHighlightSmall", "")
+        lobby.count:SetPoint("LEFT", lobby.title, "RIGHT", 10, -2)
+
+        lobby.list = W.List(page, 52, function(row)
+            W.Gradient(row, { 0.14, 0.11, 0.07, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
+            W.Background(row, 0, 0, 0, 0, { 0.5, 0.4, 0.16, 0.7 })
+            local hl = row:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetColorTexture(1, 0.85, 0.4, 0.07)
+            row.portrait = W.Portrait(row, 44)
+            row.portrait:SetPoint("LEFT", 4, 0)
+            row.name = W.Title(row, 16)
+            row.name:SetPoint("TOPLEFT", 54, -7)
+            row.name:SetWordWrap(false)
+            row.rank = row:CreateTexture(nil, "ARTWORK")
+            row.rank:SetSize(16, 16)
+            row.rank:SetPoint("BOTTOMLEFT", 54, 8)
+            row.sub = W.Label(row, "GameFontHighlightSmall")
+            row.sub:SetPoint("BOTTOMLEFT", 74, 10)
+            row.sub:SetWordWrap(false)
+            row.statusIcon = row:CreateTexture(nil, "ARTWORK")
+            row.statusIcon:SetSize(14, 14)
+            row.status = W.Label(row, "GameFontHighlightSmall")
+            row.status:SetWordWrap(false)
+            row.challenge = W.Button(row, "Challenge", 90, 24, function()
+                if row.item then
+                    G.Invite(row.item.name, { game = game })
+                    ns.UI.ShowTab(PLAY_TAB[game])
+                end
+            end)
+            row.challenge:SetPoint("RIGHT", -8, 0)
+            row.watch = W.Button(row, "Watch", 66, 24, function()
+                if row.item then
+                    G.Watch(row.item.name)
+                    local bg = row.item.battle and row.item.battle.game or "chess"
+                    if bg ~= "bs" then ns.UI.ShowTab("play") end
+                end
+            end)
+            row.watch:SetPoint("RIGHT", row.challenge, "LEFT", -4, 0)
+            row:SetScript("OnClick", function(r) if r.item then ns.UI.ShowProfile(r.item.name) end end)
+            W.Tooltip(row, function(r, tip)
+                if not r.item then return false end
+                tip:SetText(ns.ShortName(r.item.name), 1, 0.82, 0)
+                tip:AddLine("Click to see their profile", 0.7, 0.7, 0.7)
+            end)
+            function row:OnResize(w)
+                local statusX = max(250, w * 0.5)
+                self.name:SetWidth(max(80, statusX - 64))
+                self.sub:SetWidth(max(80, statusX - 84))
+                self.statusIcon:ClearAllPoints()
+                self.statusIcon:SetPoint("LEFT", self, "LEFT", statusX, 0)
+                self.status:ClearAllPoints()
+                self.status:SetPoint("LEFT", self.statusIcon, "RIGHT", 4, 0)
+                self.status:SetWidth(max(60, w - statusX - 190))
+            end
+        end, function(row, item)
+            local faction = item.f and A.ARMIES[item.f]
+            row.portrait:SetPlayer(item.name, item.ch, item.f)
+            row.name:SetText(W.ClassName(item.name, item.ch, faction and faction.color) .. "  |cffaaaaaa" .. A.CharLine(item.ch) .. "|r")
+            if game == "bs" then
+                row.rank:Hide()
+                local rec = item.bs
+                row.sub:ClearAllPoints()
+                row.sub:SetPoint("BOTTOMLEFT", 54, 10)
+                row.sub:SetText(P.BsTitleText(item.bt) .. "   " ..
+                    (rec and string.format("|cff40ff40%d|r won  |cffff5040%d|r lost", rec.bw, rec.bl) or "|cffaaaaaaNo battles yet|r"))
+            else
+                local idx = RankIndex(item.r, item.g)
+                row.sub:ClearAllPoints()
+                if idx then W.SetRankIcon(row.rank, idx); row.sub:SetPoint("BOTTOMLEFT", 74, 10)
+                else row.rank:Hide(); row.sub:SetPoint("BOTTOMLEFT", 54, 10) end
+                local rating = item.verified and ("|cffffffff" .. item.r .. "|r") or ("|cff808080~" .. item.r .. "?|r")
+                local casual = item.casual and RecordText(item.casual, "   |cff80c0ffcasual|r ") or ""
+                row.sub:SetText(P.TitleText(item.t, item.r, item.g) .. "   " .. rating .. casual)
+            end
+            local seeking = item.status == "r" or item.status == "c" or item.status == "b"
+            W.SetStatusIcon(row.statusIcon, seeking and "s" or item.status)
+            row.status:SetText(StatusLine(item, game))
+            if item.status == "g" then
+                row.watch:Show()
+                row.challenge:Disable()
+            else
+                row.watch:Hide()
+                if item.status == "d" then row.challenge:Disable() else row.challenge:Enable() end
+            end
+        end, 4)
+        lobby.list:SetPoint("TOPLEFT", 0, -34)
+
+        lobby.empty = CreateFrame("Frame", nil, page)
+        lobby.empty:SetSize(400, 140)
+        lobby.empty:SetPoint("CENTER", 0, -20)
+        local e1 = lobby.empty:CreateTexture(nil, "ARTWORK")
+        e1:SetSize(64, 64)
+        e1:SetPoint("TOP")
+        e1:SetAlpha(0.5)
+        lobby.emptyIcon = e1
+        lobby.emptyText = W.Label(lobby.empty, "GameFontHighlight", "")
+        lobby.emptyText:SetPoint("TOP", e1, "BOTTOM", 0, -10)
+        lobby.emptyText:SetWidth(400)
+        lobby.emptyText:SetJustifyH("CENTER")
+        lobby.emptyText:SetSpacing(4)
+    end
+
+    function self.Layout(w, h)
+        lobby.list:Resize(w, h - 34)
+    end
+
+    function self.Refresh()
+        local all = P.OnlineList()
+        local rows = {}
+        for _, row in ipairs(all) do rows[#rows + 1] = row end
+        local order = ORDER[game]
+        table.sort(rows, function(a, b)
+            local oa, ob = order[a.status] or 2, order[b.status] or 2
+            if oa ~= ob then return oa < ob end
+            if game == "bs" then
+                local wa, wb = a.bs and a.bs.bw or 0, b.bs and b.bs.bw or 0
+                if wa ~= wb then return wa > wb end
+            elseif a.r ~= b.r then
+                return a.r > b.r
+            end
+            return a.name < b.name
+        end)
+        lobby.list:SetData(rows)
+        if game == "bs" then W.SetIcon(lobby.emptyIcon, A.ShipIcon(2, A.MyFaction())) else W.SetCrest(lobby.emptyIcon, A.MyFaction()) end
+        if #rows == 0 then
+            lobby.emptyText:SetText((not C.Joined() and #C.GroupDists() == 0) and "Connecting to the network..."
+                or ("No other Flightpath Legends players are online right now.\nChallenge a friend by name from the Battle tab, or play the computer."))
+            lobby.empty:Show()
+        else
+            lobby.empty:Hide()
+        end
+        lobby.count:SetText(#all .. " online")
+    end
+    return self
+end
+
+T.lobbies = { chess = MakeLobby("chess"), bs = MakeLobby("bs") }
+T.lobby = T.lobbies.chess.state
+T.bslobby = T.lobbies.bs.state
+
+------------------------------------------------------------------------
+-- Live Battles (one per game)
+------------------------------------------------------------------------
 local function PlayerSide(row, side, align)
     local p = {}
     p.portrait = W.Portrait(row, 50)
@@ -228,116 +254,139 @@ local function PlayerSide(row, side, align)
     row[side] = p
 end
 
-local function FillSide(p, name)
+local function FillSide(p, name, game)
     local e = P.players[name]
     local info = W.CharInfo(name)
-    local faction = e and e.f
-    local v = ns.Ledger.Get(name)
-    local rating = v and v.r or (e and e.r) or D.START_RATING
-    local games = v and v.games or 0
+    local faction = ns.SameName(name, ns.me) and A.MyFaction() or (e and e.f)
     local army = faction and A.ARMIES[faction]
     p.portrait:SetPlayer(name, info, faction)
     p.name:SetText(W.ClassName(name, info, army and army.color))
-    p.title:SetText(P.TitleText(e and e.t or "", rating, games) .. "  |cffaaaaaa" .. A.CharLine(info) .. "|r")
-    p.rating:SetText(v and rating or ("|cff808080" .. rating .. "?|r"))
-end
-
-function T.BuildLive(page)
-    live.page = page
-    local title = W.Title(page, 20, "Live Battles")
-    title:SetPoint("TOPLEFT", 4, -4)
-    live.count = W.Label(page, "GameFontHighlightSmall", "")
-    live.count:SetPoint("LEFT", title, "RIGHT", 10, -2)
-    local hint = W.Label(page, "GameFontDisableSmall", "Watch any battle in progress (up to 5 spectators each).")
-    hint:SetPoint("TOPRIGHT", -4, -8)
-
-    live.list = W.List(page, 78, function(row)
-        W.Gradient(row, { 0.15, 0.11, 0.07, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
-        W.Background(row, 0, 0, 0, 0, { 0.55, 0.43, 0.18, 0.8 })
-        PlayerSide(row, "a", "LEFT")
-        PlayerSide(row, "b", "RIGHT")
-        row.vs = W.Title(row, 26, "VS")
-        row.vs:SetPoint("TOP", 0, -8)
-        row.vs:SetJustifyH("CENTER")
-        row.kind = W.Label(row, "GameFontHighlightSmall")
-        row.kind:SetPoint("TOP", row.vs, "BOTTOM", 0, -1)
-        row.kind:SetJustifyH("CENTER")
-        row.watch = W.Button(row, "Watch", 80, 22, function()
-            if row.item then
-                G.Watch(row.item.host)
-                if not (row.item.battle and row.item.battle.game == "bs") then ns.UI.ShowTab("play") end
-            end
-        end)
-        row.watch:SetPoint("BOTTOM", 0, 6)
-        function row:OnResize(w)
-            local half = w / 2 - 110
-            for _, p in ipairs({ self.a, self.b }) do
-                p.name:SetWidth(max(60, half))
-                p.title:SetWidth(max(60, half))
-            end
-        end
-    end, function(row, item)
-        FillSide(row.a, item.a)
-        FillSide(row.b, item.b)
-        local bt = item.battle
-        if bt and bt.game == "bs" then
-            row.kind:SetText(string.format("|cff9ac8ffBattleship|r  ·  shot %d", (bt.moves or 0) + 1))
-        elseif bt then
-            row.kind:SetText(string.format("Chess  ·  %s  ·  %s  ·  move %d", bt.rated and "|cffffd100Rated|r" or "|cff80c0ffCasual|r",
-                ns.PlayView.TimeControlName(bt.base, bt.inc), math.floor((bt.moves or 0) / 2) + 1))
-        else
-            row.kind:SetText("")
-        end
-        if ns.SameName(item.a, ns.me) or ns.SameName(item.b, ns.me) then row.watch:Disable() else row.watch:Enable() end
-    end, 6)
-    live.list:SetPoint("TOPLEFT", 0, -34)
-
-    live.empty = W.Label(page, "GameFontHighlight", "")
-    live.empty:SetPoint("CENTER", 0, -10)
-    live.empty:SetJustifyH("CENTER")
-    live.empty:SetSpacing(4)
-end
-
-function T.LayoutLive(w, h)
-    live.list:Resize(w, h - 34)
-end
-
-function T.RefreshLive()
-    local seen, rows = {}, {}
-    for name, o in pairs(P.online) do
-        if o.status == "g" and o.opp then
-            local a, b = name, o.opp
-            if b < a then a, b = b, a end
-            local key = a .. "|" .. b
-            local r = seen[key]
-            if not r then
-                r = { a = a, b = b, host = name }
-                seen[key] = r
-                rows[#rows + 1] = r
-            end
-            r.battle = r.battle or o.battle
-        end
-    end
-    -- Our own battle is listed too (it cannot be watched by ourselves).
-    local g = G.current
-    if g and g.state == "active" and g.mode == "online" then
-        local a, b = ns.me, g.opp
-        if b < a then a, b = b, a end
-        if not seen[a .. "|" .. b] then
-            rows[#rows + 1] = { a = a, b = b, host = ns.me,
-                battle = { rated = g.rated, base = g.base, inc = g.inc, moves = #g.moves, game = "chess" } }
-        end
-    end
-    table.sort(rows, function(x, y) return x.a < y.a end)
-    live.list:SetData(rows)
-    live.count:SetText(#rows .. (#rows == 1 and " battle" or " battles"))
-    if #rows == 0 then
-        live.empty:SetText("No battles are being fought right now.\nWhen players start one, it appears here.")
-        live.empty:Show()
+    if game == "bs" then
+        local rec = L.Battleship(name)
+        local bt = ns.SameName(name, ns.me) and P.MyTitleId("bs") or (e and e.bt)
+        p.title:SetText(P.BsTitleText(bt) .. "  |cffaaaaaa" .. A.CharLine(info) .. "|r")
+        p.rating:SetText(rec and string.format("|cff40ff40%d|r - |cffff5040%d|r", rec.bw, rec.bl) or "|cff808080new captain|r")
     else
-        live.empty:Hide()
+        local v = ns.Ledger.Get(name)
+        local rating = v and v.r or (e and e.r) or D.START_RATING
+        p.title:SetText(P.TitleText(e and e.t or "", rating, v and v.games or 0) .. "  |cffaaaaaa" .. A.CharLine(info) .. "|r")
+        p.rating:SetText(v and rating or ("|cff808080" .. rating .. "?|r"))
     end
 end
+
+local function MakeLive(game)
+    local live = { game = game }
+    local self = { state = live }
+
+    function self.Build(page)
+        live.page = page
+        local title = W.Title(page, 20, game == "bs" and "Live Sea Battles" or "Live Chess Battles")
+        title:SetPoint("TOPLEFT", 4, -4)
+        live.count = W.Label(page, "GameFontHighlightSmall", "")
+        live.count:SetPoint("LEFT", title, "RIGHT", 10, -2)
+        local hint = W.Label(page, "GameFontDisableSmall", "Watch any battle in progress (up to 5 spectators each).")
+        hint:SetPoint("TOPRIGHT", -4, -8)
+
+        live.list = W.List(page, 78, function(row)
+            W.Gradient(row, { 0.15, 0.11, 0.07, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
+            W.Background(row, 0, 0, 0, 0, { 0.55, 0.43, 0.18, 0.8 })
+            PlayerSide(row, "a", "LEFT")
+            PlayerSide(row, "b", "RIGHT")
+            row.vs = W.Title(row, 26, "VS")
+            row.vs:SetPoint("TOP", 0, -8)
+            row.vs:SetJustifyH("CENTER")
+            row.kind = W.Label(row, "GameFontHighlightSmall")
+            row.kind:SetPoint("TOP", row.vs, "BOTTOM", 0, -1)
+            row.kind:SetJustifyH("CENTER")
+            row.watch = W.Button(row, "Watch", 80, 22, function()
+                if row.item then
+                    G.Watch(row.item.host)
+                    if game ~= "bs" then ns.UI.ShowTab("play") end
+                end
+            end)
+            row.watch:SetPoint("BOTTOM", 0, 6)
+            function row:OnResize(w)
+                local half = w / 2 - 110
+                for _, p in ipairs({ self.a, self.b }) do
+                    p.name:SetWidth(max(60, half))
+                    p.title:SetWidth(max(60, half))
+                end
+            end
+        end, function(row, item)
+            FillSide(row.a, item.a, game)
+            FillSide(row.b, item.b, game)
+            local bt = item.battle
+            if game == "bs" then
+                row.kind:SetText(string.format("shot %d", ((bt and bt.moves) or 0) + 1))
+            elseif bt then
+                row.kind:SetText(string.format("%s  ·  %s  ·  move %d", bt.rated and "|cffffd100Rated|r" or "|cff80c0ffCasual|r",
+                    ns.PlayView.TimeControlName(bt.base, bt.inc), math.floor((bt.moves or 0) / 2) + 1))
+            else
+                row.kind:SetText("")
+            end
+            if ns.SameName(item.a, ns.me) or ns.SameName(item.b, ns.me) then row.watch:Disable() else row.watch:Enable() end
+        end, 6)
+        live.list:SetPoint("TOPLEFT", 0, -34)
+
+        live.empty = W.Label(page, "GameFontHighlight", "")
+        live.empty:SetPoint("CENTER", 0, -10)
+        live.empty:SetJustifyH("CENTER")
+        live.empty:SetSpacing(4)
+    end
+
+    function self.Layout(w, h)
+        live.list:Resize(w, h - 34)
+    end
+
+    function self.Refresh()
+        local seen, rows = {}, {}
+        for name, o in pairs(P.online) do
+            local bg = o.battle and o.battle.game or "chess"
+            if o.status == "g" and o.opp and bg == game then
+                local a, b = name, o.opp
+                if b < a then a, b = b, a end
+                local key = a .. "|" .. b
+                local r = seen[key]
+                if not r then
+                    r = { a = a, b = b, host = name }
+                    seen[key] = r
+                    rows[#rows + 1] = r
+                end
+                r.battle = r.battle or o.battle
+            end
+        end
+        -- Our own battle is listed too (it cannot be watched by ourselves).
+        local mine
+        if game == "chess" then
+            local g = G.current
+            if g and g.state == "active" and g.mode == "online" then
+                mine = { opp = g.opp, battle = { rated = g.rated, base = g.base, inc = g.inc, moves = #g.moves, game = "chess" } }
+            end
+        elseif ns.Battleship.Busy() then
+            local s = ns.Battleship.current
+            mine = { opp = s.opp, battle = { game = "bs", moves = #s.myLog + #s.theirLog } }
+        end
+        if mine then
+            local a, b = ns.me, mine.opp
+            if b < a then a, b = b, a end
+            if not seen[a .. "|" .. b] then rows[#rows + 1] = { a = a, b = b, host = ns.me, battle = mine.battle } end
+        end
+        table.sort(rows, function(x, y) return x.a < y.a end)
+        live.list:SetData(rows)
+        live.count:SetText(#rows .. (#rows == 1 and " battle" or " battles"))
+        if #rows == 0 then
+            live.empty:SetText("No " .. GAME_NAME[game] .. " battles are being fought right now.\nWhen players start one, it appears here.")
+            live.empty:Show()
+        else
+            live.empty:Hide()
+        end
+    end
+    return self
+end
+
+T.lives = { chess = MakeLive("chess"), bs = MakeLive("bs") }
+T.live = T.lives.chess.state
+T.bslive = T.lives.bs.state
 
 ------------------------------------------------------------------------
 -- Ladder
@@ -641,7 +690,7 @@ function T.BuildAdmirals(page)
         row.portrait:SetPlayer(it.name, info, it.f)
         local fc = it.f and A.ARMIES[it.f] and A.ARMIES[it.f].color
         row.name:SetText(W.ClassName(it.name, info, fc))
-        row.title:SetText(P.TitleText(it.t, 1200, 0) .. "  |cffaaaaaa" .. A.CharLine(info) .. "|r")
+        row.title:SetText(P.BsTitleText(it.t) .. "  |cffaaaaaa" .. A.CharLine(info) .. "|r")
         row.w:SetText(it.w)
         row.l:SetText(it.l)
         row.ratio:SetText(string.format("%d%%", floor(it.ratio * 100 + 0.5)))
@@ -673,7 +722,7 @@ function T.RefreshAdmirals()
     for i, r in ipairs(rows) do if r.me then myRank = i end end
     local card, info = adm.me, A.MyCharInfo()
     card.portrait:SetPlayer(ns.me, info, A.MyFaction())
-    card.title:SetText(W.ClassName(ns.me, info) .. "  " .. P.TitleText(P.MyTitleId(), P.me.rating, P.RatedGames()))
+    card.title:SetText(W.ClassName(ns.me, info) .. "  " .. P.BsTitleText(P.MyTitleId("bs")))
     local rec = L.Battleship(ns.me)
     local line
     if rec then
@@ -691,16 +740,6 @@ end
 ------------------------------------------------------------------------
 -- Collection
 ------------------------------------------------------------------------
-local coll = { section = "pieces" }
-T.coll = coll
-
-local SECTIONS = {
-    { id = "boards", name = "Battlefields", icon = "Interface\\Icons\\inv_misc_map_01" },
-    { id = "pieces", name = "Styles", icon = "Interface\\Icons\\inv_bannerpvp_02" },
-    { id = "titles", name = "Titles", icon = "Interface\\PvPRankBadges\\PvPRank06" },
-    { id = "badges", name = "Feats", icon = "Interface\\Icons\\achievement_pvp_a_04" },
-}
-
 local function TileFrame(tile, w, h)
     tile:SetSize(w, h)
     W.Gradient(tile, { 0.15, 0.12, 0.08, 0.96 }, { 0.06, 0.05, 0.04, 0.96 })
@@ -879,7 +918,7 @@ local function BuildTitleTile(tile)
     tile:SetScript("OnClick", function(self)
         if self.item and self.item.available then
             ns.Sound("click")
-            P.SetTitle(self.item.id)
+            P.SetTitle(self.item.id, self.item.game)
             G.Announce()
         end
     end)
@@ -967,120 +1006,159 @@ local GRID_SPEC = {
     badges = { 300, 66, BuildBadgeTile, UpdateBadgeTile },
 }
 
-function T.BuildCollection(page)
-    coll.page = page
-    coll.nav = {}
-    for i, s in ipairs(SECTIONS) do
-        local b = CreateFrame("Button", nil, page)
-        b:SetSize(150, 40)
-        b:SetPoint("TOPLEFT", 0, -(i - 1) * 46)
-        W.Gradient(b, { 0.16, 0.12, 0.08, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
-        W.Background(b, 0, 0, 0, 0, { 0.5, 0.4, 0.16, 0.8 })
-        b.icon = b:CreateTexture(nil, "ARTWORK")
-        b.icon:SetSize(30, 30)
-        b.icon:SetPoint("LEFT", 6, 0)
-        W.SetIcon(b.icon, s.icon)
-        b.text = W.Title(b, 15, s.name)
-        b.text:SetPoint("LEFT", 44, 0)
-        b.sel = b:CreateTexture(nil, "BORDER")
-        b.sel:SetAllPoints()
-        b.sel:SetColorTexture(1, 0.82, 0, 0.18)
-        local hl = b:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints()
-        hl:SetColorTexture(1, 0.85, 0.4, 0.08)
-        b:SetScript("OnClick", function()
-            ns.Sound("click")
-            coll.section = s.id
-            ns.UI.Layout()
-            ns.UI.Refresh()
-        end)
-        coll.nav[s.id] = b
-    end
-    coll.points = W.Title(page, 15)
-    coll.points:SetPoint("TOPLEFT", 4, -(#SECTIONS * 46 + 10))
-    coll.pointsSub = W.Label(page, "GameFontDisableSmall", "Every feat awards a title.\nBattlefields and styles\nare all free to use.")
-    coll.pointsSub:SetPoint("TOPLEFT", coll.points, "BOTTOMLEFT", 0, -4)
-    coll.pointsSub:SetWidth(150)
+-- One Collection per game: chess has battlefields, piece styles, titles and feats;
+-- Battleship has its own titles and feats.
+local SECTIONS_BY_GAME = {
+    chess = {
+        { id = "boards", name = "Battlefields", icon = "Interface\\Icons\\inv_misc_map_01" },
+        { id = "pieces", name = "Styles", icon = "Interface\\Icons\\inv_bannerpvp_02" },
+        { id = "titles", name = "Titles", icon = "Interface\\PvPRankBadges\\PvPRank06" },
+        { id = "badges", name = "Feats", icon = "Interface\\Icons\\achievement_pvp_a_04" },
+    },
+    bs = {
+        { id = "titles", name = "Titles", icon = "Interface\\Icons\\inv_misc_anchor" },
+        { id = "badges", name = "Feats", icon = "Interface\\Icons\\inv_garrison_carrier" },
+    },
+}
 
-    coll.header = W.Title(page, 20)
-    coll.header:SetPoint("TOPLEFT", 166, -2)
-    coll.grids = {}
-    for id, spec in pairs(GRID_SPEC) do
-        local grid = W.Grid(page, spec[1], spec[2], spec[3], spec[4], 10)
-        grid:SetPoint("TOPLEFT", 166, -32)
-        grid:Hide()
-        coll.grids[id] = grid
-    end
-end
+local function MakeCollection(game)
+    local coll = { game = game, section = game == "bs" and "titles" or "pieces" }
+    local self = { state = coll }
+    local SECTIONS = SECTIONS_BY_GAME[game]
 
-function T.LayoutCollection(w, h)
-    for id, grid in pairs(coll.grids) do
-        grid:Resize(max(150, w - 166), max(100, h - 32))
-    end
-end
+    function self.Build(page)
+        coll.page = page
+        coll.nav = {}
+        for i, s in ipairs(SECTIONS) do
+            local b = CreateFrame("Button", nil, page)
+            b:SetSize(150, 40)
+            b:SetPoint("TOPLEFT", 0, -(i - 1) * 46)
+            W.Gradient(b, { 0.16, 0.12, 0.08, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
+            W.Background(b, 0, 0, 0, 0, { 0.5, 0.4, 0.16, 0.8 })
+            b.icon = b:CreateTexture(nil, "ARTWORK")
+            b.icon:SetSize(30, 30)
+            b.icon:SetPoint("LEFT", 6, 0)
+            W.SetIcon(b.icon, s.icon)
+            b.text = W.Title(b, 15, s.name)
+            b.text:SetPoint("LEFT", 44, 0)
+            b.sel = b:CreateTexture(nil, "BORDER")
+            b.sel:SetAllPoints()
+            b.sel:SetColorTexture(1, 0.82, 0, 0.18)
+            local hl = b:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetColorTexture(1, 0.85, 0.4, 0.08)
+            b:SetScript("OnClick", function()
+                ns.Sound("click")
+                coll.section = s.id
+                ns.UI.Layout()
+                ns.UI.Refresh()
+            end)
+            coll.nav[s.id] = b
+        end
+        coll.points = W.Title(page, 15)
+        coll.points:SetPoint("TOPLEFT", 4, -(#SECTIONS * 46 + 10))
+        coll.pointsSub = W.Label(page, "GameFontDisableSmall", game == "bs"
+            and "Every Battleship feat\nawards a title you can\nshow in Battleship."
+            or "Every chess feat awards\na title. Battlefields and\nstyles are free to use.")
+        coll.pointsSub:SetPoint("TOPLEFT", coll.points, "BOTTOMLEFT", 0, -4)
+        coll.pointsSub:SetWidth(150)
 
-function T.RefreshCollection()
-    local p = P.me
-    for id, b in pairs(coll.nav) do
-        if id == coll.section then b.sel:Show() else b.sel:Hide() end
+        coll.header = W.Title(page, 20)
+        coll.header:SetPoint("TOPLEFT", 166, -2)
+        coll.grids = {}
+        for _, s in ipairs(SECTIONS) do
+            local spec = GRID_SPEC[s.id]
+            local grid = W.Grid(page, spec[1], spec[2], spec[3], spec[4], 10)
+            grid:SetPoint("TOPLEFT", 166, -32)
+            grid:Hide()
+            coll.grids[s.id] = grid
+        end
     end
-    for id, grid in pairs(coll.grids) do
-        if id == coll.section then grid:Show() else grid:Hide() end
+
+    function self.Layout(w, h)
+        for _, grid in pairs(coll.grids) do
+            grid:Resize(max(150, w - 166), max(100, h - 32))
+        end
     end
-    local earned = 0
-    for _ in pairs(p.badges) do earned = earned + 1 end
-    coll.points:SetText(string.format("Feat points: |cffffffff%d|r", P.Points(p)))
-    local data = {}
-    local section = coll.section
-    if section == "boards" then
-        coll.header:SetText("Battlefields")
-        for i = 1, #D.THEMES do
-            local t = D.THEMES[i]
-            local ok, req = P.IsUnlocked(t)
-            data[i] = { item = t, unlocked = ok, req = req, selected = (P.Theme() == t) }
+
+    function self.Refresh()
+        local p = P.me
+        for id, b in pairs(coll.nav) do
+            if id == coll.section then b.sel:Show() else b.sel:Hide() end
         end
-    elseif section == "pieces" then
-        coll.header:SetText("Piece styles  |cffaaaaaaWarcraft matchups|r")
-        for i = 1, #D.PIECES do
-            local t = D.PIECES[i]
-            local ok, req = P.IsUnlocked(t)
-            data[i] = { item = t, unlocked = ok, req = req, selected = (P.PieceSet() == t) }
+        for id, grid in pairs(coll.grids) do
+            if id == coll.section then grid:Show() else grid:Hide() end
         end
-    elseif section == "titles" then
-        coll.header:SetText("Titles")
-        data[1] = { id = nil, name = "Current rank (automatic)", color = "ffffffff", available = true, selected = p.title == nil }
-        local avail = {}
-        for _, t in ipairs(P.AvailableTitles()) do avail[t.id] = true end
-        for i = 1, #D.RANKS do
-            local r = D.RANKS[i]
-            data[#data + 1] = {
-                id = r.id, name = r.name, color = r.color, available = avail[r.id], selected = p.title == r.id,
-                req = "Reach " .. r.min .. " (after " .. D.PLACEMENT_GAMES .. " rated games)",
-            }
-        end
+        -- this game's feats only
+        local feats, earned = {}, 0
         for i = 1, #D.BADGES do
             local b = D.BADGES[i]
-            if b.title then
-                local id = "b:" .. b.id
-                data[#data + 1] = {
-                    id = id, badge = b.id, name = b.title, color = "ffffd100", available = avail[id],
-                    selected = p.title == id, req = "Feat: " .. b.name,
-                }
+            if P.BadgeGame(b) == game then
+                feats[#feats + 1] = b
+                if p.badges[b.id] then earned = earned + 1 end
             end
         end
-    else
-        coll.header:SetText(string.format("Feats  |cffaaaaaa%d / %d|r", earned, #D.BADGES))
-        for i = 1, #D.BADGES do
-            local b = D.BADGES[i]
-            data[i] = { badge = b, earned = p.badges[b.id] }
+        coll.points:SetText(string.format("Feat points: |cffffffff%d|r", P.Points(p, game)))
+        local data = {}
+        local section = coll.section
+        if section == "boards" then
+            coll.header:SetText("Battlefields")
+            for i = 1, #D.THEMES do
+                local t = D.THEMES[i]
+                local ok, req = P.IsUnlocked(t)
+                data[i] = { item = t, unlocked = ok, req = req, selected = (P.Theme() == t) }
+            end
+        elseif section == "pieces" then
+            coll.header:SetText("Piece styles  |cffaaaaaaWarcraft matchups|r")
+            for i = 1, #D.PIECES do
+                local t = D.PIECES[i]
+                local ok, req = P.IsUnlocked(t)
+                data[i] = { item = t, unlocked = ok, req = req, selected = (P.PieceSet() == t) }
+            end
+        elseif section == "titles" then
+            local current = game == "bs" and p.bsTitle or p.title
+            coll.header:SetText(game == "bs" and "Battleship titles" or "Chess titles")
+            local avail = {}
+            for _, t in ipairs(P.AvailableTitles(game)) do avail[t.id] = true end
+            if game == "bs" then
+                data[1] = { id = nil, game = game, name = "No title (Landlubber)", color = "ff909090", available = true, selected = current == nil }
+            else
+                data[1] = { id = nil, game = game, name = "Current rank (automatic)", color = "ffffffff", available = true, selected = current == nil }
+                for i = 1, #D.RANKS do
+                    local r = D.RANKS[i]
+                    data[#data + 1] = {
+                        id = r.id, game = game, name = r.name, color = r.color, available = avail[r.id], selected = current == r.id,
+                        req = "Reach " .. r.min .. " (after " .. D.PLACEMENT_GAMES .. " rated games)",
+                    }
+                end
+            end
+            for _, b in ipairs(feats) do
+                if b.title then
+                    local id = "b:" .. b.id
+                    data[#data + 1] = {
+                        id = id, game = game, badge = b.id, name = b.title, color = "ffffd100", available = avail[id],
+                        selected = current == id, req = "Feat: " .. b.name,
+                    }
+                end
+            end
+        else
+            coll.header:SetText(string.format("%s feats  |cffaaaaaa%d / %d|r", game == "bs" and "Battleship" or "Chess", earned, #feats))
+            for _, b in ipairs(feats) do
+                data[#data + 1] = { badge = b, earned = p.badges[b.id] }
+            end
+            table.sort(data, function(a, b)
+                if (a.earned ~= nil) ~= (b.earned ~= nil) then return a.earned ~= nil end
+                return a.badge.points < b.badge.points
+            end)
         end
-        table.sort(data, function(a, b)
-            if (a.earned ~= nil) ~= (b.earned ~= nil) then return a.earned ~= nil end
-            return a.badge.points < b.badge.points
-        end)
+        coll.grids[section]:SetData(data)
     end
-    coll.grids[section]:SetData(data)
+    return self
 end
+
+T.collections = { chess = MakeCollection("chess"), bs = MakeCollection("bs") }
+T.coll = T.collections.chess.state
+T.bscoll = T.collections.bs.state
 
 ------------------------------------------------------------------------
 -- Settings

@@ -254,9 +254,7 @@ local function UpdateStrip(s, name, isComputer, toMove, shipsAfloat, timeLeft)
     s.portrait:SetPlayer(name, info, faction or (isComputer and "Horde" or nil))
     local title = ""
     if not isComputer then
-        local v = L.Any(name)
-        local rating = v and v.r or (e and e.r) or D.START_RATING
-        title = "  " .. P.TitleText(ns.SameName(name, ns.me) and P.MyTitleId() or (e and e.t) or "", rating, (v and v.games) or 0)
+        title = "  " .. P.BsTitleText(ns.SameName(name, ns.me) and P.MyTitleId("bs") or (e and e.bt) or "")
     end
     s.name:SetText(W.ClassName(name, info, faction and A.ARMIES[faction].color) .. title)
     local rec = L.Battleship(name)

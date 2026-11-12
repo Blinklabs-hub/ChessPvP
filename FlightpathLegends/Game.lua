@@ -204,7 +204,7 @@ function G.Announce(force)
         battle = table.concat({ cur.rated and "r" or "c", cur.base, cur.inc, #cur.moves }, ",")
     end
     C.Presence("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(),
-        char, guild, battle)
+        char, guild, battle, P.MyTitleId("bs"))
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -216,6 +216,7 @@ C.handlers.PF = function(sender, dist, parts)
     if faction == "Horde" or faction == "Alliance" then P.players[sender].f = faction end
     local ch = ns.Assets.UnpackChar(parts[12], parts[13])
     if ch then P.players[sender].ch = ch end
+    if parts[15] and #parts[15] <= 24 then P.players[sender].bt = parts[15] end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
     local kind, base, inc, moves = string.match(parts[14] or "", "^([rcb]),(%d+),(%d+),(%d+)$")
@@ -866,7 +867,7 @@ C.handlers.PQ = function(sender, dist)
         if P.me.badges[D.BADGES[i].id] then list[#list + 1] = i end
     end
     local char, guild = ns.Assets.PackChar(ns.Assets.MyCharInfo())
-    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild)
+    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild, P.MyTitleId("bs"))
 end
 
 C.handlers.PR = function(sender, dist, parts)
@@ -886,6 +887,7 @@ C.handlers.PR = function(sender, dist, parts)
     e.feats = feats
     local ch = ns.Assets.UnpackChar(parts[5], parts[6])
     if ch then e.ch = ch end
+    if parts[7] and #parts[7] <= 24 then e.bt = parts[7] end
     e.profileAt = ns.ServerTime()
     ns.Fire("CHESS_PROFILE_INFO", sender)
 end

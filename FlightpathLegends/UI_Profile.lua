@@ -193,7 +193,12 @@ local function Refresh()
     local rating = rated and rated.r or (me and P.me.rating) or (known and known.r) or D.START_RATING
     local games = rated and rated.games or 0
     local titleId = me and P.MyTitleId() or (known and known.t) or ""
-    f.titleText:SetText(P.TitleText(titleId, rating, games))
+    local bsMode = ns.UI.Game() == "bs"
+    if bsMode then
+        f.titleText:SetText(P.BsTitleText(me and P.MyTitleId("bs") or (known and known.bt)))
+    else
+        f.titleText:SetText(P.TitleText(titleId, rating, games))
+    end
     if games >= D.PLACEMENT_GAMES then
         local idx = 1
         for i = 1, #D.RANKS do if rating >= D.RANKS[i].min then idx = i end end
@@ -293,6 +298,16 @@ local function Refresh()
     else
         feats = known and known.feats
     end
+    -- only this game's feats
+    if feats then
+        local game = bsMode and "bs" or "chess"
+        local only = {}
+        for _, id in ipairs(feats) do
+            local b = D.BADGE_BY_ID[id]
+            if b and P.BadgeGame(b) == game then only[#only + 1] = id end
+        end
+        feats = only
+    end
     local faction = (info and info.side) or "Alliance"
     for i, b in ipairs(f.feats) do
         local id = feats and feats[i]
@@ -313,7 +328,9 @@ local function Refresh()
         f.featTitle:SetText("Feats")
         f.featNote:SetText("No feats earned yet.")
     else
-        f.featTitle:SetText(string.format("Feats  |cffaaaaaa%d / %d|r", #feats, #D.BADGES))
+        local total = 0
+        for _, b in ipairs(D.BADGES) do if P.BadgeGame(b) == (bsMode and "bs" or "chess") then total = total + 1 end end
+        f.featTitle:SetText(string.format("%s feats  |cffaaaaaa%d / %d|r", bsMode and "Battleship" or "Chess", #feats, total))
         f.featNote:SetText("")
     end
 
