@@ -697,7 +697,7 @@ if want("ui") then
     UI.SetCollapsed(false)
     d = UI.Debug()
     check(not d.collapsed and d.tabsVisible, "arrow brings the panels back")
-    eq(d.size.w, foldedW + c.ns.PlayView.SIDE + c.ns.PlayView.GAP, "window widens by exactly the side panel")
+    eq(d.size.w, foldedW + c.ns.PlayView.SIDE + c.ns.PlayView.GAP + 188, "window widens by exactly the side panel and the sidebar")
     UI.SetCollapsed(true)
 
     section("ui: resizing scales the board and the window hugs it")
@@ -2010,10 +2010,10 @@ if want("vbui") then
     UI.Show()
     UI.ShowTab("games")
     check(UI.IsVisibleTab("games"), "the Games tab opens")
-    eq(#T.games.cards, 4, "a card for each game")
+    eq(#T.games.cards, 5, "a card for each game")
     local names = {}
     for _, card in ipairs(T.games.cards) do names[#names + 1] = card.name:GetText() end
-    eq(table.concat(names, ","), "Chess,Battleship,Four in a Row,Vault Breaker", "in order")
+    eq(table.concat(names, ","), "Chess,Battleship,Four in a Row,Vault Breaker,Hidden Army", "in order")
     T.games.cards[3].play:Click()
     eq(UI.Game(), "c4", "Play on a card switches the game")
     check(UI.IsVisibleTab("c4play"), "and opens it")
@@ -2112,6 +2112,298 @@ if want("vbui") then
     check(only, "the Vault Breaker collection holds its ten feats")
     for _, cl in ipairs({ a, b }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
     net.forever = false
+end
+
+------------------------------------------------------------------------
+if want("army") then
+    section("hidden army: rules")
+    local c = NewClient("Rules")
+    local HA = c.ns.Army
+    eq(HA.Fight("W", "C"), "a", "the higher rank wins")
+    eq(HA.Fight("F", "K"), "d", "the lower rank loses")
+    eq(HA.Fight("K", "K"), "both", "equal ranks both fall")
+    eq(HA.Fight("R", "W"), "a", "the Assassin strikes down the Warlord")
+    eq(HA.Fight("W", "R"), "a", "but not when the Warlord attacks")
+    eq(HA.Fight("C", "B"), "d", "a Bomb destroys an attacker")
+    eq(HA.Fight("S", "B"), "defuse", "a Sapper defuses it")
+    eq(HA.Fight("X", "N"), "banner", "taking the Banner wins")
+    for _ = 1, 20 do
+        local w = HA.RandomLayout("w", true)
+        local b = HA.RandomLayout("b", false)
+        if not (HA.ValidLayout(w) and HA.ValidLayout(b)) then check(false, "random setups are legal armies") break end
+    end
+    check(true, "random setups are legal armies")
+    local smart = HA.RandomLayout("w", true)
+    local nAt = string.find(smart, "N")
+    check(nAt and nAt <= 8, "the computer keeps its Banner in the back row")
+    check(not HA.ValidLayout(string.rep(".", 24)), "an empty setup is not an army")
+    eq(#HA.Occupancy(smart), 24, "occupancy marks all 24 setup squares")
+
+    -- moves on a tiny board
+    local cells = {
+        [HA.Index(1, 3)] = { side = "w" }, [HA.Index(2, 3)] = { side = "w" },
+        [HA.Index(1, 6)] = { side = "b" },
+    }
+    local ranks = { [HA.Index(1, 3)] = "X", [HA.Index(2, 3)] = "F" }
+    local moves = HA.LegalMoves(cells, "w", function(i) return ranks[i] end)
+    local scoutReach, footman = {}, 0
+    for _, m in ipairs(moves) do
+        if m.from == HA.Index(1, 3) then scoutReach[m.to] = m.attack end
+        if m.from == HA.Index(2, 3) then footman = footman + 1 end
+    end
+    check(scoutReach[HA.Index(1, 6)] == true, "a Scout runs up the file and attacks at the end")
+    check(scoutReach[HA.Index(1, 5)] == false, "and may stop on the way")
+    eq(scoutReach[HA.Index(1, 7)], nil, "but not jump over a unit")
+    eq(footman, 3, "a Footman steps one square (forward, right; its own Scout blocks the left)")
+    check(not HA.PathOK(cells, "w", HA.Index(2, 3), HA.Index(3, 4)), "no diagonal moves")
+    check(not HA.PathOK(cells, "w", HA.Index(2, 3), HA.Index(3, 3)) == false, "sideways is fine")
+    check(not HA.PathOK({ [HA.Index(3, 3)] = { side = "w" } }, "w", HA.Index(3, 3), HA.Index(3, 4)), "lakes cannot be entered")
+
+    -- the replay check
+    local wl, bl = HA.RandomLayout("w", false), HA.RandomLayout("b", false)
+    local function UnitAt(layout, side, rank)
+        for k, idx in ipairs(HA.ZONE[side]) do if string.sub(layout, k, k) == rank then return idx end end
+    end
+    local bomb = UnitAt(bl, "b", "B")
+    local okReplay = HA.Replay({ w = wl, b = bl }, { { side = "b", from = bomb, to = bomb - 8 } }, "b")
+    check(not okReplay, "a moving Bomb is caught by the replay")
+    RemoveClient(c)
+
+    section("hidden army: an online battle, witnessed")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    local w = NewClient("Wit", nil, "Ness")
+    Advance(25)
+    local CA, JK = "Canga Prime", "Just Keepingcalm"
+    a.ns.Game.Invite(JK, { game = "ha" }); Advance(1)
+    local inv = b.ns.Game.LatestInvite()
+    check(inv and inv.game == "ha", "a Hidden Army challenge arrives")
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    local sa, sb = a.ns.Army.current, b.ns.Army.current
+    check(sa and sb and sa.id == sb.id and sa.phase == "setup", "both are deploying")
+    check(sa.mySide ~= sb.mySide, "one side is white, one black")
+    local white = sa.mySide == "w" and a or b
+    local black = white == a and b or a
+    local sw, sbk = white.ns.Army.current, black.ns.Army.current
+    -- arrange: white Scout on a3 and a Footman on h3; black Banner on a6 and a Footman on b6
+    local function Put(s, side, rank, col, row)
+        local want = HA.IN_ZONE[side][HA.Index(col, row)]
+        local have
+        for k = 1, 24 do if string.sub(s.layout, k, k) == rank and k ~= want then have = k break end end
+        if string.sub(s.layout, want, want) == rank then return end
+        local t = {}
+        for k = 1, 24 do t[k] = string.sub(s.layout, k, k) end
+        t[want], t[have] = t[have], t[want]
+        s.layout = table.concat(t)
+    end
+    Put(sw, "w", "X", 1, 3); Put(sw, "w", "F", 8, 3)
+    Put(sbk, "b", "N", 1, 6); Put(sbk, "b", "F", 2, 6)
+    -- the a7 square behind the banner must not block the test either way
+    check(white.ns.Army.Swap(HA.Index(4, 1), HA.Index(4, 1)) == false, "swapping a square with itself does nothing")
+    white.ns.Army.Ready(); Advance(1)
+    eq(sbk.phase, "setup", "waiting for the other army")
+    black.ns.Army.Ready(); Advance(2)
+    eq(sw.phase, "play", "the battle begins")
+    eq(sbk.phase, "play", "on both sides")
+    check(white.ns.Army.MyTurn(), "white moves first")
+    check(sbk.cells[HA.Index(1, 3)] and sbk.cells[HA.Index(1, 3)].rank == nil, "black sees white's units but not their ranks")
+    check(white.ns.Army.Move(HA.Index(8, 3), HA.Index(8, 4)), "white marches a Footman")
+    Advance(2)
+    eq(#sbk.moves, 1, "black sees the move")
+    w.ns.Game.Watch(CA); Advance(3)
+    local sw2 = w.ns.Army.current
+    check(sw2 and sw2.mode == "spectate", "a spectator can watch")
+    eq(sw2 and #sw2.moves, 1, "and sees the battle so far")
+    check(black.ns.Army.Move(HA.Index(2, 6), HA.Index(2, 5)), "black answers")
+    Advance(2)
+    -- the Scout runs up the a-file and takes the Banner
+    check(white.ns.Army.Move(HA.Index(1, 3), HA.Index(1, 6)), "white's Scout charges the Banner")
+    Advance(6)
+    eq(sw.outcome, "win", "taking the Banner wins")
+    eq(sbk.outcome, "loss", "black loses")
+    eq(sw.reason, "banner", "by the Banner")
+    Advance(5)
+    eq(sbk.verified, true, "black checked white's setup against every move: honest")
+    eq(sw.verified, true, "and the other way round")
+    eq(sw2.phase, "over", "the spectator saw the end")
+    local winner, loser = white.ns.me, black.ns.me
+    local rec = w.ns.Ledger.Record(winner, "ha")
+    check(rec and rec.w == 1, "the witness records the win")
+    check(w.ns.Ledger.Record(loser, "ha") and w.ns.Ledger.Record(loser, "ha").l == 1, "and the loss")
+    eq(w.ns.Ledger.Rating(winner), 1200, "Hidden Army never touches chess ratings")
+    check(white.ns.Profile.me.badges.ha_win1, "the winner earns Banner Taken (the Tactician)")
+    check(white.ns.Profile.me.badges.ha_scout, "with a Scout: the Pathfinder")
+    check(black.ns.Profile.me.badges.ha_play, "the loser earns First Muster")
+    local board = w.ns.Profile.RecordBoard("ha")
+    eq(board[1] and board[1].name, winner, "the winner tops the Generals")
+
+    section("hidden army: a false rank is caught")
+    a.ns.Game.Invite(JK, { game = "ha" }); Advance(1)
+    for _ = 1, 20 do if b.ns.Game.LatestInvite() then break end Advance(0.5) end
+    b.ns.Game.AnswerLatest(true); Advance(3)
+    sa, sb = a.ns.Army.current, b.ns.Army.current
+    white = sa.mySide == "w" and a or b
+    black = white == a and b or a
+    sw, sbk = white.ns.Army.current, black.ns.Army.current
+    Put(sw, "w", "X", 1, 3)
+    Put(sbk, "b", "N", 1, 6)
+    white.ns.Army.Ready(); black.ns.Army.Ready(); Advance(3)
+    -- black's client claims its Banner is a Warlord when attacked
+    sbk.cells[HA.Index(1, 6)].rank = "W"
+    white.ns.Army.Move(HA.Index(1, 3), HA.Index(1, 6)); Advance(4)
+    eq(sw.phase, "play", "the lie saves the Banner for now")
+    eq(sw.cells[HA.Index(1, 3)], nil, "and white's Scout falls")
+    black.ns.Army.Resign(); Advance(6)
+    eq(sw.outcome, "win", "black gives up")
+    eq(sw.verified, false, "white's check of black's setup fails")
+    check(sw.cheat and sw.cheat:find("wrong rank") ~= nil, "because of the false rank (" .. tostring(sw.cheat) .. ")")
+
+    section("hidden army: the turn timer")
+    a.ns.Game.Invite(JK, { game = "ha" }); Advance(1)
+    for _ = 1, 20 do if b.ns.Game.LatestInvite() then break end Advance(0.5) end
+    b.ns.Game.AnswerLatest(true); Advance(3)
+    sa, sb = a.ns.Army.current, b.ns.Army.current
+    Advance(125)
+    check(sa.phase == "play" and sb.phase == "play", "armies deploy themselves when setup time runs out")
+    local idle = sa.mySide == "w" and a or b
+    local other = idle == a and b or a
+    local si = idle.ns.Army.current
+    for _ = 1, 400 do
+        local so = other.ns.Army.current
+        if so.phase ~= "play" then break end
+        if other.ns.Army.MyTurn() then
+            -- step back and forth without attacking
+            for _, m in ipairs(other.ns.Army.MyMoves()) do
+                if not m.attack then other.ns.Army.Move(m.from, m.to) break end
+            end
+        end
+        Advance(1)
+    end
+    check(si.phase == "over", "the battle ends")
+    if si.reason == "time" then
+        eq(si.outcome, "loss", "three missed turns lose the battle")
+    else
+        check(true, "random moves decided it first (" .. tostring(si.reason) .. ")")
+    end
+
+    section("hidden army: queue and practice")
+    Advance(5)
+    a.ns.Game.StartSeek(0, 0, false, true, "ha")
+    b.ns.Game.StartSeek(0, 0, false, true, "vb")
+    Advance(30)
+    check(not a.ns.Army.Busy(), "a Hidden Army queue never pairs with a Vault Breaker queue")
+    a.ns.Game.Announce(true); Advance(3)
+    eq(w.ns.Profile.online[CA] and w.ns.Profile.online[CA].status, "a", "the lobby shows Canga looking for Hidden Army")
+    b.ns.Game.StopSeek()
+    b.ns.Game.StartSeek(0, 0, false, true, "ha")
+    Advance(30)
+    check(a.ns.Army.Busy() and b.ns.Army.Busy(), "two Hidden Army queuers are paired")
+    a.ns.Army.Resign(); Advance(2)
+    local s3 = a.ns.Army.StartAI(3)
+    a.ns.Army.Ready()
+    eq(s3.phase, "play", "a practice battle starts at once")
+    for _ = 1, 900 do
+        if s3.phase ~= "play" then break end
+        if a.ns.Army.MyTurn() then
+            local ms = a.ns.Army.MyMoves()
+            local m = ms[math.random(1, #ms)]
+            a.ns.Army.Move(m.from, m.to)
+        end
+        Advance(1)
+    end
+    eq(s3.phase, "over", "a practice battle against the Master finishes")
+    local exposed = 0
+    for _, u in pairs(s3.cells) do if u.side == s3.theirSide and u.rank then exposed = exposed + 1 end end
+    local alive = 0
+    for _, u in pairs(s3.cells) do if u.side == s3.theirSide then alive = alive + 1 end end
+    eq(exposed, alive, "the computer's army is shown at the end")
+    for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
+if want("nav") then
+    section("sidebar: Home, games, pages, How to play, Settings")
+    local a = NewClient("Canga", nil, "Prime")
+    Advance(25)
+    local UI, T = a.ns.UI, a.ns.Tabs
+    UI.Show()
+    local nav = UI.nav
+    check(nav ~= nil, "the window has a sidebar")
+    local n = 0
+    for _ in pairs(nav.games) do n = n + 1 end
+    eq(n, 5, "a sidebar entry for each game")
+    nav.games.ha:Click()
+    check(UI.IsVisibleTab("haplay"), "clicking a game opens it")
+    eq(UI.Game(), "ha", "and selects it")
+    check(nav.subs.ha.lobby:IsShown(), "the chosen game shows its pages")
+    check(not nav.subs.chess.lobby:IsShown(), "other games' pages are folded away")
+    nav.subs.ha.board:Click()
+    check(UI.IsVisibleTab("haboard"), "the Generals page opens from the sidebar")
+    check(nav.subs.ha.board.bar:IsShown(), "and is marked as the current page")
+    nav.home:Click()
+    check(UI.IsVisibleTab("games"), "Home shows every game")
+    nav.settings:Click()
+    check(UI.IsVisibleTab("settings"), "Settings opens")
+    nav.help:Click()
+    check(UI.helpFrame and UI.helpFrame:IsShown(), "How to play opens")
+    eq(UI.helpFrame.title:GetText(), "How to play: Hidden Army", "for the chosen game")
+    check(UI.helpFrame.text:GetText():find("Sapper") ~= nil, "with its rules")
+    UI.helpFrame:Hide()
+    UI.ShowTab("games")
+    T.games.cards[3].help:Click()
+    eq(UI.helpFrame.title:GetText(), "How to play: Four in a Row", "each Home card has its own How to play")
+    for _, key in ipairs(a.ns.Data.GAME_ORDER) do
+        check((a.ns.Data.GAMES[key].rules or "") ~= "", a.ns.Data.GAMES[key].name .. " has rules")
+    end
+
+    section("hidden army ui: deploying and moving")
+    local HA, v = a.ns.Army, a.ns.ArmyView.view
+    local s = HA.StartAI(1)
+    Advance(1)
+    check(UI.IsVisibleTab("haplay"), "a new battle shows the battlefield")
+    eq(v.turn.text:GetText(), "DEPLOY YOUR ARMY", "the banner says to deploy")
+    local zone = HA.ZONE[s.mySide]
+    local first, empty
+    for _, idx in ipairs(zone) do
+        if HA.SetupRank(idx) and not first then first = idx end
+        if not HA.SetupRank(idx) and not empty then empty = idx end
+    end
+    local rank = HA.SetupRank(first)
+    v.board.squares[first]:Click()
+    eq(v.sel, first, "clicking a unit picks it")
+    v.board.squares[empty]:Click()
+    eq(HA.SetupRank(empty), rank, "clicking another square moves it there")
+    eq(HA.SetupRank(first), nil, "leaving its old square empty")
+    v.ready:Click()
+    eq(s.phase, "play", "Ready starts the battle against the computer")
+    for _ = 1, 10 do if HA.MyTurn() then break end Advance(1) end
+    check(HA.MyTurn(), "our move comes")
+    eq(v.turn.text:GetText(), "YOUR MOVE!", "the banner says so")
+    local m = HA.MyMoves()[1]
+    v.board.squares[m.from]:Click()
+    eq(v.sel, m.from, "clicking a unit selects it")
+    local before = #s.moves
+    v.board.squares[m.to]:Click()
+    eq(#s.moves, before + 1, "clicking a highlighted square moves it")
+    check(#v.log.data >= 1, "the move is in the battle log")
+
+    section("hidden army ui: resizing")
+    UI.SetCollapsed(false)
+    UI.DebugResize(1500, 1000)
+    local big = a.ns.db.settings.haCell
+    UI.DebugResize(1000, 700)
+    local small = a.ns.db.settings.haCell
+    check(big and small and big > small, "a bigger window means a bigger battlefield (" .. tostring(big) .. " > " .. tostring(small) .. ")")
+    UI.SetCollapsed(true)
+    check(not nav:IsShown(), "the sidebar folds away with the side panel")
+    UI.SetCollapsed(false)
+    check(nav:IsShown(), "and comes back")
+    HA.Resign(); Advance(2)
+    check(v.banner:IsShown(), "the result banner appears")
+    eq(#a.errors, 0, "no Lua errors")
+    RemoveClient(a)
 end
 
 ------------------------------------------------------------------------

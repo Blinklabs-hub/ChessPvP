@@ -236,7 +236,7 @@ function G.Announce(force)
         battle = table.concat({ cur.rated and "r" or "c", cur.base, cur.inc, #cur.moves }, ",")
     end
     C.Presence("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(),
-        char, guild, battle, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"))
+        char, guild, battle, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"), P.MyTitleId("ha"))
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -251,9 +251,10 @@ C.handlers.PF = function(sender, dist, parts)
     if parts[15] and #parts[15] <= 24 then P.players[sender].bt = parts[15] end
     if parts[16] and #parts[16] <= 24 then P.players[sender].ft = parts[16] end
     if parts[17] and #parts[17] <= 24 then P.players[sender].vt = parts[17] end
+    if parts[18] and #parts[18] <= 24 then P.players[sender].at = parts[18] end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
-    local kind, base, inc, moves = string.match(parts[14] or "", "^([rcbfv]),(%d+),(%d+),(%d+)$")
+    local kind, base, inc, moves = string.match(parts[14] or "", "^([rcbfva]),(%d+),(%d+),(%d+)$")
     if kind and opp then
         P.online[sender].battle = { rated = kind == "r", game = D.KIND_GAME[kind] or "chess",
             base = tonumber(base), inc = tonumber(inc), moves = tonumber(moves) }
@@ -901,7 +902,7 @@ C.handlers.PQ = function(sender, dist)
         if P.me.badges[D.BADGES[i].id] then list[#list + 1] = i end
     end
     local char, guild = ns.Assets.PackChar(ns.Assets.MyCharInfo())
-    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"))
+    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"), P.MyTitleId("ha"))
 end
 
 C.handlers.PR = function(sender, dist, parts)
@@ -924,6 +925,7 @@ C.handlers.PR = function(sender, dist, parts)
     if parts[7] and #parts[7] <= 24 then e.bt = parts[7] end
     if parts[8] and #parts[8] <= 24 then e.ft = parts[8] end
     if parts[9] and #parts[9] <= 24 then e.vt = parts[9] end
+    if parts[10] and #parts[10] <= 24 then e.at = parts[10] end
     e.profileAt = ns.ServerTime()
     ns.Fire("CHESS_PROFILE_INFO", sender)
 end

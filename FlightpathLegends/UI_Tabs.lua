@@ -914,6 +914,7 @@ end
 T.boards = {
     c4 = MakeRecordBoard("c4", { title = "Tavern Champions", who = "Champion", icon = function() return A.CoinIcon(1) end }),
     vb = MakeRecordBoard("vb", { title = "Master Safecrackers", who = "Safecracker", icon = function() return D.GameIcon("vb") end }),
+    ha = MakeRecordBoard("ha", { title = "Generals", who = "General", icon = function() return D.GameIcon("ha") end }),
 }
 T.tavern = T.boards.c4.state
 T.BuildTavern, T.LayoutTavern, T.RefreshTavern = T.boards.c4.Build, T.boards.c4.Layout, T.boards.c4.Refresh
@@ -953,7 +954,7 @@ function T.BuildGames(page)
     games.page = page
     games.title = W.Title(page, 20, "Choose a game")
     games.title:SetPoint("TOPLEFT", 4, -4)
-    games.hint = W.Label(page, "GameFontDisableSmall", "Each game has its own lobby, leaderboard, titles and feats.")
+    games.hint = W.Label(page, "GameFontDisableSmall", "Each game has its own lobby, leaderboard, titles and feats. Pick one here or in the sidebar.")
     games.hint:SetPoint("LEFT", games.title, "RIGHT", 12, -2)
     for i, key in ipairs(D.GAME_ORDER) do
         local g = D.GAMES[key]
@@ -993,6 +994,8 @@ function T.BuildGames(page)
         card.activity:SetWordWrap(false)
         card.play = W.Button(card, "Play", 96, 26, function() T.OpenGame(key) end)
         card.play:SetPoint("BOTTOMRIGHT", -10, 10)
+        card.help = W.Button(card, "How to play", 96, 22, function() ns.UI.ShowHelp(key) end)
+        card.help:SetPoint("BOTTOMRIGHT", card.play, "TOPRIGHT", 0, 4)
         card:SetScript("OnClick", function() T.OpenGame(key) end)
         games.cards[i] = card
     end
@@ -1010,13 +1013,13 @@ function T.LayoutGames(w, h)
     local gap = 10
     local top = 34
     local cw = floor((w - gap * (cols - 1)) / cols)
-    local ch = max(120, min(170, floor((h - top - gap * (rows - 1)) / rows)))
+    local ch = max(124, min(170, floor((h - top - gap * (rows - 1)) / rows)))
     for i, card in ipairs(games.cards) do
         local c, r = (i - 1) % cols, floor((i - 1) / cols)
         card:ClearAllPoints()
         card:SetPoint("TOPLEFT", games.page, "TOPLEFT", c * (cw + gap), -(top + r * (ch + gap)))
         card:SetSize(cw, ch)
-        card.blurb:SetWidth(max(80, cw - 100))
+        card.blurb:SetWidth(max(80, cw - 100 - 104))
         card.record:SetWidth(max(80, cw - 130))
         card.activity:SetWidth(max(80, cw - 130))
     end
@@ -1339,6 +1342,10 @@ local SECTIONS_BY_GAME = {
         { id = "titles", name = "Titles", icon = "Interface\\Icons\\inv_misc_key_03" },
         { id = "badges", name = "Feats", icon = "Interface\\Icons\\inv_misc_lockbox_1" },
     },
+    ha = {
+        { id = "titles", name = "Titles", icon = "Interface\\Icons\\inv_bannerpvp_03" },
+        { id = "badges", name = "Feats", icon = "Interface\\Icons\\ability_warrior_battleshout" },
+    },
 }
 
 local function MakeCollection(game)
@@ -1381,6 +1388,7 @@ local function MakeCollection(game)
             and "Every Battleship feat\nawards a title you can\nshow in Battleship.")
             or (game == "c4" and "Every Four in a Row feat\nawards a title you can\nshow at the tavern table.")
             or (game == "vb" and "Every Vault Breaker feat\nawards a title you can\nshow at the vaults.")
+            or (game == "ha" and "Every Hidden Army feat\nawards a title you can\nshow on the battlefield.")
             or "Every chess feat awards\na title. Battlefields and\nstyles are free to use.")
         coll.pointsSub:SetPoint("TOPLEFT", coll.points, "BOTTOMLEFT", 0, -4)
         coll.pointsSub:SetWidth(150)
@@ -1542,6 +1550,8 @@ function T.BuildSettings(page)
         .. "|cffffd100Four in a Row:|r wins, losses and draws. Every move is checked by both players as it is made.\n\n"
         .. "|cffffd100Vault Breaker:|r wins, losses and draws. Vault codes are sealed before the first guess and checked "
         .. "afterwards, so nobody can give false pins.\n\n"
+        .. "|cffffd100Hidden Army:|r wins, losses and draws. Setups are sealed before the first move and every move and fight "
+        .. "is replayed against them afterwards.\n\n"
         .. "|cffffd100Witnessed results:|r every battle is confirmed by both players and each player's addon "
         .. "rebuilds the records from those confirmations. Disagreements do not count.\n\n"
         .. "|cffffd100Commands|r\n/fpl  -  open or close\n/chess  /  /battleship\n/fpl accept  /  decline\n/fpl dnd  /  online\n/fpl reset  /  debug")

@@ -215,6 +215,28 @@ D.BADGES = {
         check = function(p, s) return s.mode == "vb" and not s.vsAI and s.outcome == "draw" end },
     { id = "vb_ai", game = "vb", title = "the Gnomish Engineer", name = "Gnomish Engineer", points = 10, desc = "Beat the Master computer at Vault Breaker.",
         check = function(p, s) return s.mode == "vb" and s.vsAI and s.outcome == "win" and s.aiLevel >= 3 end },
+
+    -- Hidden Army (game = "ha")
+    { id = "ha_play", game = "ha", title = "the Field Officer", name = "First Muster", points = 5, desc = "Finish a game of Hidden Army against another player.",
+        check = function(p, s) return s.mode == "ha" and not s.vsAI end },
+    { id = "ha_win1", game = "ha", title = "the Tactician", name = "Banner Taken", points = 10, desc = "Win a game of Hidden Army against another player.",
+        check = function(p, s) return s.mode == "ha" and not s.vsAI and s.outcome == "win" end },
+    { id = "ha_win10", game = "ha", title = "Warmaster", name = "Warmaster", points = 15, desc = "Win 10 games of Hidden Army.",
+        check = function(p) return (p.haw or 0) >= 10 end, progress = function(p) return p.haw or 0, 10 end },
+    { id = "ha_win50", game = "ha", title = "Supreme Commander", name = "Supreme Commander", points = 50, desc = "Win 50 games of Hidden Army.",
+        check = function(p) return (p.haw or 0) >= 50 end, progress = function(p) return p.haw or 0, 50 end },
+    { id = "ha_streak5", game = "ha", title = "the Unbroken", name = "Unbroken", points = 25, desc = "Win 5 games of Hidden Army in a row.",
+        check = function(p) return (p.haBest or 0) >= 5 end, progress = function(p) return p.haBest or 0, 5 end },
+    { id = "ha_kingslayer", game = "ha", title = "the Kingslayer", name = "Kingslayer", points = 15, desc = "Strike down the enemy Warlord with your Assassin.",
+        check = function(p, s) return s.mode == "ha" and not s.vsAI and s.kingslayer end },
+    { id = "ha_sapper", game = "ha", title = "the Demolitionist", name = "Demolitionist", points = 15, desc = "Defuse two enemy bombs in one game.",
+        check = function(p, s) return s.mode == "ha" and not s.vsAI and (s.defused or 0) >= 2 end },
+    { id = "ha_scout", game = "ha", title = "the Pathfinder", name = "Pathfinder", points = 20, desc = "Capture the enemy banner with a Scout.",
+        check = function(p, s) return s.mode == "ha" and not s.vsAI and s.outcome == "win" and s.bannerBy == "X" end },
+    { id = "ha_lionheart", game = "ha", title = "the Lionheart", name = "Lionheart", points = 20, desc = "Capture the enemy banner with your Warlord.",
+        check = function(p, s) return s.mode == "ha" and not s.vsAI and s.outcome == "win" and s.bannerBy == "W" end },
+    { id = "ha_ai", game = "ha", title = "the Strategist", name = "Strategist", points = 10, desc = "Beat the Master computer at Hidden Army.",
+        check = function(p, s) return s.mode == "ha" and s.vsAI and s.outcome == "win" and s.aiLevel >= 3 end },
 }
 
 -- The games of Flightpath Legends.
@@ -234,8 +256,63 @@ D.GAMES = {
     vb = { name = "Vault Breaker", kind = "v", seek = "v", module = "Vault", noTitle = "Apprentice Locksmith", word = "game", draws = true,
         play = "vbplay", icon = "inv_misc_lockbox_1", where = "at the vaults",
         blurb = "Lock a gnomish vault with four gems and crack theirs first. Gold pins, silver pins, ten guesses." },
+    ha = { name = "Hidden Army", kind = "a", seek = "a", module = "Army", noTitle = "Fresh Recruit", word = "battle", draws = true,
+        play = "haplay", icon = "inv_bannerpvp_03", where = "on the battlefield",
+        blurb = "Hide your army's ranks, then march. Ranks are revealed only when units clash. Take their banner." },
 }
-D.GAME_ORDER = { "chess", "bs", "c4", "vb" }
+D.GAME_ORDER = { "chess", "bs", "c4", "vb", "ha" }
+
+-- How to play (shown in the How to play window). |cffffd100...|r marks headings.
+local H = function(t) return "|cffffd100" .. t .. "|r" end
+D.GAMES.chess.rules = table.concat({
+    H("The goal"), "Checkmate the enemy king: attack it so it cannot escape. Normal chess rules: castling, en passant and promotion all work.",
+    "", H("Rated or casual"), "Rated games change your rating (Elo) and need a clock. You can only play rated against someone within one league of yours. Casual games only count as wins, losses and draws.",
+    "", H("Ranks and leagues"), "After a few rated games you get a rank (shown as a badge) and a league: Recruit, Veteran, Champion or Warlord. Your rank is also a title you can show.",
+    "", H("Playing"), "Click a piece, then a highlighted square. Drag also works. The clock of the player to move runs down; running out of time loses.",
+    "", H("Finding a game"), "Find Random Opponent pairs you with someone looking for the same kind of game. Challenge by name sends a challenge to one player. Play vs Computer is practice and never counts.",
+}, "\n")
+D.GAMES.bs.rules = table.concat({
+    H("The goal"), "Sink all five enemy ships before they sink yours.",
+    "", H("Your fleet"), "Carrier (5 squares), Dreadnaught (4), Cargo Galleon (3), Submarine (3) and Destroyer (2). Ships are placed randomly to start. Click a ship to pick it up and click to drop it; right-click, the mouse wheel or Rotate turns it. Ships cannot overlap. Press Ready when your fleet is set.",
+    "", H("Firing"), "Take turns firing one shot into Enemy Waters. You see a splash for a miss and fire for a hit. When every square of a ship is hit, it sinks and is shown.",
+    "", H("Time"), "You have a minute per shot. If time runs out a random shot is fired for you; three missed turns in a row lose the battle.",
+    "", H("Fair play"), "Your fleet is sealed (SHA-256) before the first shot and revealed at the end, so both sides can check every hit and miss was answered honestly. A battle with a false answer is disputed and does not count.",
+}, "\n")
+D.GAMES.c4.rules = table.concat({
+    H("The goal"), "Get four of your coins in a line: across, up and down, or diagonally.",
+    "", H("Playing"), "Take turns dropping a coin into one of the seven columns: it falls to the lowest free hole. The first player drops gold coins, the second silver. Hover a column to see where your coin will land, then click.",
+    "", H("Draws"), "If the board fills up with no four in a line, the game is a draw.",
+    "", H("Time"), "A minute per move. If time runs out a coin is dropped for you; three missed turns in a row lose the game.",
+    "", H("Tips"), "The middle column is part of the most lines. Watch for your opponent's three in a row and block it, and try to make two threats at once.",
+}, "\n")
+D.GAMES.vb.rules = table.concat({
+    H("The goal"), "Crack your opponent's vault code before they crack yours.",
+    "", H("Locking your vault"), "Pick four gems for your code from the six in the palette (repeats are allowed), or press Random. Then press Seal Vault. Click a gem in your code to take it out again.",
+    "", H("Guessing"), "Every round you both guess at the same time: pick four gems and press Lock In. You get pins back:",
+    "  " .. "|cffffcc33gold pin|r" .. " - one of your gems is right and in the right slot",
+    "  " .. "|cffd8e0f0silver pin|r" .. " - one of your gems is in their code but in another slot",
+    "The pins do not say which gems they mean: working that out is the puzzle. Four gold pins open the vault.",
+    "", H("Winning"), "The first to crack the other vault wins. Cracking it in the same round is a draw, and so is nobody cracking it in ten rounds.",
+    "", H("Time"), "A minute per guess. If time runs out a random guess is made for you; three missed rounds lose the game.",
+    "", H("Fair play"), "Codes are sealed before the first guess and revealed at the end, so every pin is checked. A game with false pins is disputed and does not count.",
+}, "\n")
+D.GAMES.ha.rules = table.concat({
+    H("The goal"), "Capture the enemy Banner, or leave the enemy with no unit that can move.",
+    "", H("Your army"), "16 units, highest rank first:",
+    "  Warlord (10) x1, Champion (8) x1, Knight (6) x2, Footman (4) x3,",
+    "  Sapper (3) x2, Scout (2) x2, Assassin (1) x1,",
+    "  Bomb x3 and Banner x1 (these never move).",
+    "", H("Setting up"), "Your units start in your three back rows. Click a unit, then another square in your rows to move or swap it. Shuffle gives a new random setup. Press Ready when done. Your opponent sees where your units are, but not which is which.",
+    "", H("Moving"), "Take turns moving one unit one square up, down, left or right. Scouts move any distance in a straight line. Units cannot enter the two lakes or squares held by their own side.",
+    "", H("Fights"), "Moving onto an enemy unit starts a fight and both ranks are revealed:",
+    "  - the higher rank wins and the loser is removed; equal ranks both fall",
+    "  - the Assassin defeats the Warlord, but only when the Assassin attacks",
+    "  - a Bomb destroys any attacker except a Sapper, which defuses it",
+    "  - attacking the Banner captures it and wins the battle",
+    "Revealed units stay revealed. Units that have moved cannot be Bombs or the Banner.",
+    "", H("Time"), "A minute per move. If time runs out a random move is made for you; three missed turns in a row lose the battle. After 300 moves the battle is a draw.",
+    "", H("Fair play"), "Each setup is sealed (SHA-256) before the first move and revealed at the end. Every fight and move is replayed against the real setups, so a false rank or a moving Bomb is caught and the battle is disputed.",
+}, "\n")
 -- Which game a witnessed-record kind or a lobby status belongs to.
 D.KIND_GAME, D.SEEK_GAME = { c = "chess" }, { c = "chess" }
 for key, g in pairs(D.GAMES) do D.KIND_GAME[g.kind] = key; D.SEEK_GAME[g.seek] = key end
@@ -301,6 +378,16 @@ D.BADGE_ICONS = {
     vb_last = "inv_misc_key_05",
     vb_draw = "inv_misc_gem_pearl_05",
     vb_ai = "inv_misc_enggizmos_05",
+    ha_play = "inv_bannerpvp_03",
+    ha_win1 = { Alliance = "inv_bannerpvp_02", Horde = "inv_bannerpvp_01" },
+    ha_win10 = "ability_warrior_battleshout",
+    ha_win50 = { Alliance = "achievement_leader_king_varian_wrynn", Horde = "achievement_leader_sylvanas" },
+    ha_streak5 = "ability_warrior_defensivestance",
+    ha_kingslayer = "ability_stealth",
+    ha_sapper = "inv_gizmo_supersappercharge",
+    ha_scout = "ability_hunter_eagleeye",
+    ha_lionheart = "ability_warrior_charge",
+    ha_ai = "inv_misc_bomb_05",
 }
 
 function D.BadgeIcon(id, faction)

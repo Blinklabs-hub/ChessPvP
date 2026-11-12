@@ -47,9 +47,9 @@ end
 -- Records a statement by `sender` about game `id`. res is a result or nil (started).
 -- Returns true when something changed.
 -- kind: "r" rated chess, "c" casual chess, "b" battleship.
-local KINDS = { r = true, c = true, b = true, f = true, v = true }
+local KINDS = { r = true, c = true, b = true, f = true, v = true, a = true }
 -- kinds with a plain win/loss/draw record (everything but chess)
-local RECORD_KINDS = { b = true, f = true, v = true }
+local RECORD_KINDS = { b = true, f = true, v = true, a = true }
 local function KindOf(g) return g.kind or (g.casual and "c" or "r") end
 L.KindOf = KindOf
 

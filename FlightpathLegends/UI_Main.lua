@@ -1,5 +1,6 @@
--- Flightpath Legends - the main window - frame, tabs, resizing and responsive layout, folding the
--- side panel during battles, challenge popup, toasts, launcher and event wiring.
+-- Flightpath Legends - the main window: header, sidebar (Home, the games and their pages,
+-- How to play, Settings), resizing and responsive layout, folding the sidebar and side panel
+-- away during battles, challenge popup, toasts, launcher and event wiring.
 local _, ns = ...
 
 local UI = {}
@@ -9,11 +10,12 @@ local G, P, C, D, A, W, Board, PV, T = ns.Game, ns.Profile, ns.Comm, ns.Data, ns
 local BV, BS = ns.BattleView, ns.Battleship
 local FV, FR = ns.FourView, ns.FourRow
 local VV, VB = ns.VaultView, ns.Vault
+local HV, HA = ns.ArmyView, ns.Army
 local floor, max, min = math.floor, math.max, math.min
 
 local PAD = 12
-local HEAD = 56 -- title row with the character card
-local TABBAR = 30 -- tab buttons
+local HEAD = 60 -- title row with the character card
+local NAV_W = 178 -- the sidebar
 local MIN_BOARD, MAX_BOARD = 300, 1000
 
 local main
@@ -24,7 +26,7 @@ local size = { w = 0, h = 0 } -- current window size (tracked here, not read bac
 
 -- game: tab only shown for that game ("chess", "bs", "c4", "vb"); shared tabs have none.
 local TABS = {
-    { id = "games", text = "Games", build = T.BuildGames, refresh = T.RefreshGames, layout = T.LayoutGames },
+    { id = "games", text = "Home", build = T.BuildGames, refresh = T.RefreshGames, layout = T.LayoutGames },
     { id = "play", game = "chess", text = "Battle", build = PV.Build, refresh = PV.Refresh },
     { id = "bsplay", game = "bs", text = "Battle", build = BV.Build, refresh = BV.Refresh },
     { id = "lobby", game = "chess", text = "Lobby", build = T.lobbies.chess.Build, refresh = T.lobbies.chess.Refresh, layout = T.lobbies.chess.Layout },
@@ -45,22 +47,31 @@ local TABS = {
     { id = "vblive", game = "vb", text = "Live Games", build = T.lives.vb.Build, refresh = T.lives.vb.Refresh, layout = T.lives.vb.Layout },
     { id = "vbboard", game = "vb", text = "Safecrackers", build = T.boards.vb.Build, refresh = T.boards.vb.Refresh, layout = T.boards.vb.Layout },
     { id = "vbcollection", game = "vb", text = "Collection", build = T.collections.vb.Build, refresh = T.collections.vb.Refresh, layout = T.collections.vb.Layout },
+    { id = "haplay", game = "ha", text = "Battle", build = HV.Build, refresh = HV.Refresh },
+    { id = "halobby", game = "ha", text = "Lobby", build = T.lobbies.ha.Build, refresh = T.lobbies.ha.Refresh, layout = T.lobbies.ha.Layout },
+    { id = "halive", game = "ha", text = "Live Battles", build = T.lives.ha.Build, refresh = T.lives.ha.Refresh, layout = T.lives.ha.Layout },
+    { id = "haboard", game = "ha", text = "Generals", build = T.boards.ha.Build, refresh = T.boards.ha.Refresh, layout = T.boards.ha.Layout },
+    { id = "hacollection", game = "ha", text = "Collection", build = T.collections.ha.Build, refresh = T.collections.ha.Refresh, layout = T.collections.ha.Layout },
     { id = "settings", text = "Settings", build = T.BuildSettings, refresh = T.RefreshSettings, layout = T.LayoutSettings },
 }
 -- The same kind of tab in each game.
 local KIND = {
-    play = "play", bsplay = "play", c4play = "play", vbplay = "play",
-    lobby = "lobby", bslobby = "lobby", c4lobby = "lobby", vblobby = "lobby",
-    live = "live", bslive = "live", c4live = "live", vblive = "live",
-    ladder = "board", admirals = "board", c4board = "board", vbboard = "board",
-    collection = "coll", bscollection = "coll", c4collection = "coll", vbcollection = "coll",
+    play = "play", bsplay = "play", c4play = "play", vbplay = "play", haplay = "play",
+    lobby = "lobby", bslobby = "lobby", c4lobby = "lobby", vblobby = "lobby", halobby = "lobby",
+    live = "live", bslive = "live", c4live = "live", vblive = "live", halive = "live",
+    ladder = "board", admirals = "board", c4board = "board", vbboard = "board", haboard = "board",
+    collection = "coll", bscollection = "coll", c4collection = "coll", vbcollection = "coll", hacollection = "coll",
 }
 local TAB_FOR = {
     chess = { play = "play", lobby = "lobby", live = "live", board = "ladder", coll = "collection" },
     bs = { play = "bsplay", lobby = "bslobby", live = "bslive", board = "admirals", coll = "bscollection" },
     c4 = { play = "c4play", lobby = "c4lobby", live = "c4live", board = "c4board", coll = "c4collection" },
     vb = { play = "vbplay", lobby = "vblobby", live = "vblive", board = "vbboard", coll = "vbcollection" },
+    ha = { play = "haplay", lobby = "halobby", live = "halive", board = "haboard", coll = "hacollection" },
 }
+local KINDS_ORDER = { "play", "lobby", "live", "board", "coll" }
+local TAB_BY_ID = {}
+for _, t in ipairs(TABS) do TAB_BY_ID[t.id] = t end
 
 local function Game()
     local g = ns.db and ns.db.settings.game
@@ -83,7 +94,12 @@ local function TabsVisible()
 end
 
 local function ContentTop()
-    return HEAD + (TabsVisible() and TABBAR or 0)
+    return HEAD + 4
+end
+
+-- Left edge of the page (right of the sidebar while it is shown).
+local function ContentLeft()
+    return PAD + (TabsVisible() and (NAV_W + 10) or 0)
 end
 
 local function ShowSide()
@@ -92,7 +108,7 @@ end
 
 -- Window size that exactly fits a board of boardPx in the play tab.
 local function PlaySizeFor(boardPx)
-    local w = PAD + boardPx + PV.GAP + PV.HANDLE + PAD
+    local w = ContentLeft() + boardPx + PV.GAP + PV.HANDLE + PAD
     if ShowSide() then w = w + PV.GAP + PV.SIDE end
     local h = ContentTop() + PV.STRIP * 2 + PV.GAP * 2 + boardPx + PAD
     if ShowSide() then
@@ -104,7 +120,7 @@ end
 
 -- Largest board that fits the window size.
 local function BoardFor(w, h)
-    local availW = w - PAD * 2 - PV.GAP - PV.HANDLE - (ShowSide() and (PV.GAP + PV.SIDE) or 0)
+    local availW = w - ContentLeft() - PAD - PV.GAP - PV.HANDLE - (ShowSide() and (PV.GAP + PV.SIDE) or 0)
     local availH = h - ContentTop() - PV.STRIP * 2 - PV.GAP * 2 - PAD
     return max(MIN_BOARD, min(MAX_BOARD, floor(min(availW, availH))))
 end
@@ -115,13 +131,14 @@ local PAGES = {
     bsplay = { view = BV, key = "bsCell", def = 34, min = 20 },
     c4play = { view = FV, key = "c4Cell", def = 56, min = 30 },
     vbplay = { view = VV, key = "vbCell", def = 36, min = 24 },
+    haplay = { view = HV, key = "haCell", def = 52, min = 30 },
 }
 local function PageSizeFor(pg, cellPx)
     local w, h = pg.view.SizeFor(cellPx, ShowSide())
-    return w + PAD * 2, h + ContentTop() + PAD
+    return w + ContentLeft() + PAD, h + ContentTop() + PAD
 end
 local function PageCellFor(pg, w, h)
-    return pg.view.CellFor(w - PAD * 2, h - ContentTop() - PAD, ShowSide())
+    return pg.view.CellFor(w - ContentLeft() - PAD, h - ContentTop() - PAD, ShowSide())
 end
 
 local function SetMinSize()
@@ -132,7 +149,7 @@ local function SetMinSize()
     elseif currentTab == "play" then
         minW, minH = PlaySizeFor(MIN_BOARD)
     else
-        minW, minH = 640, 460
+        minW, minH = ContentLeft() + 600, 480
     end
     if main.SetResizeBounds then
         pcall(main.SetResizeBounds, main, minW, minH, 2400, 1600)
@@ -157,28 +174,15 @@ function UI.Layout()
     else
         main.me:Hide()
     end
-    -- tab buttons share the width (up to 98px each)
-    local shown = 0
-    for i = 1, #TABS do if TabVisible(TABS[i]) then shown = shown + 1 end end
-    local tabW = max(70, min(98, floor((w - PAD * 2) / max(1, shown)) - 3))
-    local x = PAD
+    local left = ContentLeft()
     for i = 1, #TABS do
-        local tab = TABS[i]
-        local page = main.pages[tab.id]
+        local page = main.pages[TABS[i].id]
         page:ClearAllPoints()
-        page:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -top)
-        page:SetSize(max(10, w - PAD * 2), max(10, h - top - PAD))
-        local b = main.tabs[tab.id]
-        if TabsVisible() and TabVisible(tab) then
-            b:ClearAllPoints()
-            b:SetPoint("TOPLEFT", main, "TOPLEFT", x, -HEAD)
-            b:SetWidth(tabW)
-            x = x + tabW + 3
-            b:Show()
-        else
-            b:Hide()
-        end
+        page:SetPoint("TOPLEFT", main, "TOPLEFT", left, -top)
+        page:SetSize(max(10, w - left - PAD), max(10, h - top - PAD))
     end
+    if TabsVisible() then main.nav:Show() else main.nav:Hide() end
+    UI.LayoutNav()
     local pg = PAGES[currentTab]
     if pg then
         pg.view.Layout(PageCellFor(pg, w, h), ShowSide())
@@ -187,7 +191,7 @@ function UI.Layout()
     else
         local tab
         for i = 1, #TABS do if TABS[i].id == currentTab then tab = TABS[i] end end
-        if tab and tab.layout then tab.layout(max(10, w - PAD * 2), max(10, h - top - PAD)) end
+        if tab and tab.layout then tab.layout(max(10, w - ContentLeft() - PAD), max(10, h - top - PAD)) end
     end
 end
 
@@ -291,28 +295,19 @@ local function Build()
 
     local title = W.Title(main, 24, "Flightpath Legends")
     title:SetPoint("TOPLEFT", PAD, -6)
-    -- The game being played (click to choose another in the Games tab).
-    local gl = CreateFrame("Button", nil, main)
-    gl:SetSize(220, 20)
-    gl:SetPoint("TOPLEFT", PAD, -33)
-    gl.icon = gl:CreateTexture(nil, "ARTWORK")
-    gl.icon:SetSize(18, 18)
-    gl.icon:SetPoint("LEFT", 0, 0)
-    gl.text = W.Title(gl, 14)
-    gl.text:SetPoint("LEFT", 24, 0)
-    gl.text:SetWordWrap(false)
-    local glHl = gl:CreateTexture(nil, "HIGHLIGHT")
-    glHl:SetAllPoints()
-    glHl:SetColorTexture(1, 0.85, 0.4, 0.08)
-    gl:SetScript("OnClick", function()
-        ns.Sound("click")
-        UI.ShowTab("games")
-    end)
-    W.Tooltip(gl, function(_, tip)
-        tip:SetText("Choose a game", 1, 0.82, 0)
-        tip:AddLine("Opens the Games tab.", 1, 1, 1)
-    end)
-    main.gameLabel = gl
+    -- Where you are: "Four in a Row  >  Lobby"
+    main.crumbIcon = main:CreateTexture(nil, "ARTWORK")
+    main.crumbIcon:SetSize(18, 18)
+    main.crumbIcon:SetPoint("TOPLEFT", PAD, -36)
+    main.crumb = W.Title(main, 14)
+    main.crumb:SetPoint("LEFT", main.crumbIcon, "RIGHT", 6, 0)
+    main.crumb:SetWordWrap(false)
+    -- a gold line under the header
+    local rule = main:CreateTexture(nil, "ARTWORK")
+    rule:SetColorTexture(0.6, 0.48, 0.2, 0.7)
+    rule:SetHeight(1)
+    rule:SetPoint("TOPLEFT", PAD, -(HEAD - 2))
+    rule:SetPoint("TOPRIGHT", -PAD, -(HEAD - 2))
 
     -- Your character card (armory style), top right. Click for your full profile.
     local card = CreateFrame("Button", nil, main)
@@ -357,18 +352,15 @@ local function Build()
     local close = CreateFrame("Button", nil, main, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
 
-    main.tabs, main.pages = {}, {}
-    local x = PAD
+    main.pages = {}
     for i = 1, #TABS do
         local tab = TABS[i]
-        local b = W.Button(main, tab.text, 98, 24, function() UI.ShowTab(tab.id) end)
-        b:SetPoint("TOPLEFT", x, -HEAD)
-        main.tabs[tab.id] = b
         local page = CreateFrame("Frame", nil, main)
         page:Hide()
         main.pages[tab.id] = page
         tab.build(page)
     end
+    UI.BuildNav()
 
     -- Resize grip (bottom-right corner).
     local grip = CreateFrame("Button", nil, main)
@@ -431,8 +423,15 @@ end
 function UI.Refresh()
     if not built or not main:IsShown() or not P.me then return end
     local p = P.me
-    W.SetIcon(main.gameLabel.icon, D.GameIcon(Game()))
-    main.gameLabel.text:SetText(D.GAMES[Game()].name .. "  |cff8a7a5a(change)|r")
+    local tabDef = TAB_BY_ID[currentTab]
+    if tabDef and tabDef.game then
+        W.SetIcon(main.crumbIcon, D.GameIcon(tabDef.game))
+        main.crumb:SetText(D.GAMES[tabDef.game].name .. "  |cff8a7a5a>|r  |cffffffff" .. (KIND[currentTab] == "play" and "Play" or tabDef.text) .. "|r")
+    else
+        W.SetIcon(main.crumbIcon, currentTab == "settings" and "Interface\\Icons\\trade_engineering" or "Interface\\Icons\\inv_misc_map_01")
+        main.crumb:SetText(tabDef and tabDef.text or "")
+    end
+    UI.RefreshNav()
     local card, info = main.me, A.MyCharInfo()
     card.portrait:SetPlayer(ns.me, info, A.MyFaction())
     local bsMode = Game() ~= "chess"
@@ -467,11 +466,9 @@ function UI.Refresh()
         local tab = TABS[i]
         if tab.id == currentTab then
             main.pages[tab.id]:Show()
-            main.tabs[tab.id]:Disable()
             tab.refresh()
         else
             main.pages[tab.id]:Hide()
-            main.tabs[tab.id]:Enable()
         end
     end
 end
@@ -492,6 +489,224 @@ function UI.SetGame(game)
         collapsed = false
         UI.ShowTab(target, true)
     end
+end
+
+------------------------------------------------------------------------
+-- Sidebar: Home, each game (the chosen one opens to show its pages), How to play, Settings
+------------------------------------------------------------------------
+local function NavItem(parent, height, indent, big)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetHeight(height)
+    b.sel = b:CreateTexture(nil, "BACKGROUND", nil, 1)
+    b.sel:SetAllPoints()
+    b.sel:SetColorTexture(0.55, 0.4, 0.1, 0.45)
+    b.sel:Hide()
+    b.bar = b:CreateTexture(nil, "BORDER")
+    b.bar:SetPoint("TOPLEFT")
+    b.bar:SetPoint("BOTTOMLEFT")
+    b.bar:SetWidth(3)
+    b.bar:SetColorTexture(1, 0.82, 0.2, 1)
+    b.bar:Hide()
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 0.85, 0.4, 0.1)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    local isz = big and 22 or 16
+    b.icon:SetSize(isz, isz)
+    b.icon:SetPoint("LEFT", 6 + indent, 0)
+    if big then
+        b.text = W.Title(b, 15)
+    else
+        b.text = W.Label(b, "GameFontHighlight")
+    end
+    b.text:SetPoint("LEFT", b.icon, "RIGHT", 7, 0)
+    b.text:SetPoint("RIGHT", -14, 0)
+    b.text:SetWordWrap(false)
+    b.dot = b:CreateTexture(nil, "OVERLAY")
+    b.dot:SetTexture(W.TEX .. "dot")
+    b.dot:SetSize(8, 8)
+    b.dot:SetPoint("RIGHT", -6, 0)
+    b.dot:SetVertexColor(0.3, 1, 0.3)
+    b.dot:Hide()
+    function b:SetSelected(on, strong)
+        if on then self.sel:Show() else self.sel:Hide() end
+        if on and strong then self.bar:Show() else self.bar:Hide() end
+    end
+    return b
+end
+
+local SUB_ICON = {
+    play = "Interface\\Icons\\ability_warrior_charge",
+    lobby = "Interface\\Icons\\inv_misc_groupneedmore",
+    live = "Interface\\Icons\\ability_eyeoftheowl",
+    board = "Interface\\Icons\\achievement_pvp_a_14",
+    coll = "Interface\\Icons\\inv_misc_book_09",
+}
+
+function UI.BuildNav()
+    local nav = CreateFrame("Frame", nil, main)
+    nav:SetWidth(NAV_W)
+    nav:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -(HEAD + 4))
+    nav:SetPoint("BOTTOMLEFT", main, "BOTTOMLEFT", PAD, PAD)
+    W.Gradient(nav, { 0.12, 0.09, 0.06, 0.96 }, { 0.06, 0.05, 0.04, 0.96 })
+    W.Background(nav, 0, 0, 0, 0, { 0.5, 0.4, 0.16, 0.8 })
+    main.nav = nav
+    UI.nav = nav
+    nav.items = {}
+
+    local home = NavItem(nav, 30, 0, true)
+    home.text:SetText("Home")
+    W.SetIcon(home.icon, "Interface\\Icons\\inv_misc_map_01")
+    home:SetScript("OnClick", function() ns.Sound("click"); UI.ShowTab("games") end)
+    nav.home = home
+
+    nav.gamesHead = W.Label(nav, "GameFontDisableSmall", "GAMES")
+    nav.games, nav.subs = {}, {}
+    for _, key in ipairs(D.GAME_ORDER) do
+        local g = NavItem(nav, 30, 0, true)
+        g.text:SetText(D.GAMES[key].name)
+        W.SetIcon(g.icon, D.GameIcon(key))
+        g:SetScript("OnClick", function()
+            ns.Sound("click")
+            UI.SetGame(key)
+            UI.ShowTab(TAB_FOR[key].play)
+        end)
+        nav.games[key] = g
+        nav.subs[key] = {}
+        for _, kind in ipairs(KINDS_ORDER) do
+            local id = TAB_FOR[key][kind]
+            local sb = NavItem(nav, 24, 14, false)
+            sb.text:SetText(kind == "play" and "Play" or TAB_BY_ID[id].text)
+            W.SetIcon(sb.icon, SUB_ICON[kind])
+            sb:SetScript("OnClick", function() ns.Sound("click"); UI.ShowTab(id) end)
+            sb.id = id
+            nav.subs[key][kind] = sb
+        end
+    end
+
+    local help = NavItem(nav, 26, 0, false)
+    help.text:SetText("How to play")
+    W.SetIcon(help.icon, "Interface\\Icons\\inv_misc_questionmark")
+    help:SetScript("OnClick", function() ns.Sound("click"); UI.ShowHelp(Game()) end)
+    nav.help = help
+    local settings = NavItem(nav, 26, 0, false)
+    settings.text:SetText("Settings")
+    W.SetIcon(settings.icon, "Interface\\Icons\\trade_engineering")
+    settings:SetScript("OnClick", function() ns.Sound("click"); UI.ShowTab("settings") end)
+    nav.settings = settings
+end
+
+function UI.LayoutNav()
+    local nav = main and main.nav
+    if not nav then return end
+    local y = -6
+    local function Put(item, h)
+        item:ClearAllPoints()
+        item:SetPoint("TOPLEFT", nav, "TOPLEFT", 2, y)
+        item:SetPoint("TOPRIGHT", nav, "TOPRIGHT", -2, y)
+        item:Show()
+        y = y - h
+    end
+    Put(nav.home, 32)
+    y = y - 6
+    nav.gamesHead:ClearAllPoints()
+    nav.gamesHead:SetPoint("TOPLEFT", nav, "TOPLEFT", 10, y)
+    y = y - 16
+    local current = Game()
+    for _, key in ipairs(D.GAME_ORDER) do
+        Put(nav.games[key], 31)
+        for _, kind in ipairs(KINDS_ORDER) do
+            local sb = nav.subs[key][kind]
+            if key == current then Put(sb, 24) else sb:Hide() end
+        end
+        if key == current then y = y - 4 end
+    end
+    nav.settings:ClearAllPoints()
+    nav.settings:SetPoint("BOTTOMLEFT", nav, "BOTTOMLEFT", 2, 4)
+    nav.settings:SetPoint("BOTTOMRIGHT", nav, "BOTTOMRIGHT", -2, 4)
+    nav.help:ClearAllPoints()
+    nav.help:SetPoint("BOTTOMLEFT", nav.settings, "TOPLEFT", 0, 2)
+    nav.help:SetPoint("BOTTOMRIGHT", nav.settings, "TOPRIGHT", 0, 2)
+end
+
+-- Whether we have an unfinished game of a kind (shown as a green dot in the sidebar).
+local function InProgress(key)
+    if key == "chess" then
+        local g = G.current
+        return g and g.state == "active" and g.mode ~= "spectate"
+    end
+    local m = G.Module(key)
+    return m and m.Active() and m.current and m.current.mode ~= "spectate"
+end
+
+function UI.RefreshNav()
+    local nav = main and main.nav
+    if not nav then return end
+    UI.LayoutNav()
+    nav.home:SetSelected(currentTab == "games", true)
+    nav.settings:SetSelected(currentTab == "settings", true)
+    nav.help.text:SetText("How to play: " .. D.GAMES[Game()].name)
+    local current = Game()
+    for _, key in ipairs(D.GAME_ORDER) do
+        local g = nav.games[key]
+        g:SetSelected(key == current and currentTab ~= "games" and currentTab ~= "settings", false)
+        g.text:SetTextColor(key == current and 1 or 0.85, key == current and 0.85 or 0.72, key == current and 0.3 or 0.45)
+        if InProgress(key) then g.dot:Show() else g.dot:Hide() end
+        for _, kind in ipairs(KINDS_ORDER) do
+            local sb = nav.subs[key][kind]
+            sb:SetSelected(sb.id == currentTab, true)
+        end
+    end
+end
+
+-- The How to play window (one per screen, shows the chosen game's rules).
+local helpFrame
+function UI.ShowHelp(game)
+    game = (game and D.GAMES[game]) and game or Game()
+    if not helpFrame then
+        local f = CreateFrame("Frame", "FlightpathLegendsHelp", UIParent)
+        f:SetSize(470, 520)
+        f:SetPoint("CENTER", 0, 20)
+        f:SetFrameStrata("DIALOG")
+        f:SetToplevel(true)
+        f:EnableMouse(true)
+        f:SetMovable(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+        W.Background(f, 0.05, 0.04, 0.04, 0.97)
+        W.Tile(f, "dialogBg", 0.95)
+        W.Chrome(f, "goldBorder", 5, 24)
+        f.icon = f:CreateTexture(nil, "ARTWORK")
+        f.icon:SetSize(36, 36)
+        f.icon:SetPoint("TOPLEFT", 16, -14)
+        f.title = W.Title(f, 22)
+        f.title:SetPoint("LEFT", f.icon, "RIGHT", 10, 0)
+        local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        close:SetPoint("TOPRIGHT", 2, 2)
+        local sf = CreateFrame("ScrollFrame", "FlightpathLegendsHelpScroll", f, "UIPanelScrollFrameTemplate")
+        sf:SetPoint("TOPLEFT", 18, -62)
+        sf:SetPoint("BOTTOMRIGHT", -34, 16)
+        local child = CreateFrame("Frame", nil, sf)
+        child:SetSize(410, 10)
+        sf:SetScrollChild(child)
+        f.text = W.Label(child, "GameFontHighlight")
+        f.text:SetPoint("TOPLEFT", 0, 0)
+        f.text:SetWidth(408)
+        f.text:SetJustifyV("TOP")
+        f.text:SetSpacing(3)
+        f.child = child
+        table.insert(UISpecialFrames, "FlightpathLegendsHelp")
+        helpFrame = f
+        UI.helpFrame = f
+    end
+    W.SetIcon(helpFrame.icon, D.GameIcon(game))
+    helpFrame.title:SetText("How to play: " .. D.GAMES[game].name)
+    helpFrame.text:SetText(D.GAMES[game].rules or "")
+    helpFrame.game = game
+    local h = helpFrame.text.GetStringHeight and helpFrame.text:GetStringHeight()
+    helpFrame.child:SetHeight(max(10, (h or 400) + 10))
+    helpFrame:Show()
 end
 
 function UI.IsVisibleTab(id)
@@ -619,6 +834,7 @@ local function RefreshInvite()
         (inv.game == "bs" and ((inv.theirColor == "w") and "you fire second" or "you fire first"))
             or (inv.game == "c4" and ((inv.theirColor == "w") and "you drop second (silver)" or "you drop first (gold)"))
             or (inv.game == "vb" and "you both guess at once")
+            or (inv.game == "ha" and ((inv.theirColor == "w") and "you move second" or "you move first"))
             or ((inv.theirColor == "w") and "you play Black" or "you play White")))
     invitePopup:Show()
 end
@@ -889,6 +1105,8 @@ function UI.UpdateAlert()
     if FR.MyTurn() then myTurn = true end
     local v = VB.current
     if VB.CanGuess() or (v and v.phase == "set" and not v.ready and v.mode ~= "spectate") then myTurn = true end
+    local h = HA.current
+    if HA.MyTurn() or (h and h.phase == "setup" and not h.ready and h.mode ~= "spectate") then myTurn = true end
     if myTurn and not (built and main:IsShown()) then launcher.alert:Show() else launcher.alert:Hide() end
 end
 
@@ -971,6 +1189,33 @@ ns.On("VB_CHANGED", function()
     if built and main:IsShown() and currentTab == "vbplay" then VV.Refresh() end
     UI.UpdateStatus()
     UI.UpdateAlert()
+end)
+
+ns.On("HA_STARTED", function(s)
+    if s.mode == "online" then
+        ns.Print("Hidden Army battle started against " .. ns.ShortName(s.opp) .. ". Deploy your army!")
+        if RaidNotice_AddMessage and RaidWarningFrame then
+            pcall(RaidNotice_AddMessage, RaidWarningFrame, "Hidden Army vs " .. ns.ShortName(s.opp) .. ": deploy your army!", { r = 1, g = 0.82, b = 0 })
+        end
+        if FlashClientIcon then pcall(FlashClientIcon) end
+    end
+    collapsed = false
+    UI.SetGame("ha")
+    UI.ShowTab("haplay")
+end)
+
+ns.On("HA_CHANGED", function()
+    if built and main:IsShown() and currentTab == "haplay" then HV.Refresh() end
+    UI.UpdateStatus()
+    UI.UpdateAlert()
+end)
+
+ns.On("HA_OVER", function(s)
+    if s.mode == "online" and s.outcome and s.outcome ~= "abort" then
+        local text = (s.outcome == "win" and "you won") or (s.outcome == "loss" and "you lost") or
+            (s.outcome == "draw" and "the battle was drawn") or "the battle is disputed"
+        ns.Print(text .. " at Hidden Army against " .. ns.ShortName(s.opp) .. ".")
+    end
 end)
 
 ns.On("VB_OVER", function(s)

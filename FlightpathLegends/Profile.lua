@@ -160,7 +160,7 @@ function P.BsTitleText(id)
 end
 
 -- A player's title id in a game, from what they announced (or our own).
-local TITLE_FIELD = { bs = "bt", c4 = "ft", vb = "vt" }
+local TITLE_FIELD = { bs = "bt", c4 = "ft", vb = "vt", ha = "at" }
 P.TITLE_FIELD = TITLE_FIELD
 function P.TitleOf(name, game)
     if ns.SameName(name, ns.me) then return P.MyTitleId(game) end
@@ -281,7 +281,7 @@ function P.RecordGame(s)
     s.ratingBefore = p.rating
     local delta = 0
 
-    if (s.mode == "c4" or s.mode == "vb") and not s.vsAI then
+    if (s.mode == "c4" or s.mode == "vb" or s.mode == "ha") and not s.vsAI then
         -- local counters (only for feats; the record itself is witnessed): c4w, c4Streak, c4Best, vbw, ...
         local W, S, B = s.mode .. "w", s.mode .. "Streak", s.mode .. "Best"
         if s.outcome == "win" then
@@ -485,7 +485,7 @@ function P.OnlineList()
                 name = name, status = o.status, opp = o.opp,
                 -- Witnessed rating when known; otherwise what they claim, marked unverified.
                 r = v and v.r or (e and e.r) or D.START_RATING, verified = v ~= nil,
-                t = e and e.t or "", bt = e and e.bt, ft = e and e.ft, vt = e and e.vt, f = e and e.f, ch = e and e.ch, battle = o.battle,
+                t = e and e.t or "", bt = e and e.bt, ft = e and e.ft, vt = e and e.vt, at = e and e.at, f = e and e.f, ch = e and e.ch, battle = o.battle,
                 bs = ns.Ledger.Battleship(name), c4 = ns.Ledger.FourRow(name),
                 g = v and v.games or 0, casual = ns.Ledger.Casual(name),
             }

@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: |cffffd100Flightpath|r Legends
-## Notes: Board games with other players while you fly: Chess, Battleship, Four in a Row and Vault Breaker, with leagues, records, titles and Warcraft artwork.
+## Notes: Board games with other players while you fly: Chess, Battleship, Four in a Row, Vault Breaker and Hidden Army, with leagues, records, titles and Warcraft artwork.
 ## Author: Muke
-## Version: 2.3.0
+## Version: 2.4.0
 ## SavedVariables: FlightpathLegendsDB, CheckmateAzerothDB, ChessPvPDB
 ## IconTexture: Interface\AddOns\FlightpathLegends\Textures\logo.tga
 ## AddonCompartmentFunc: FlightpathLegends_OnAddonCompartmentClick
@@ -21,12 +21,14 @@ Game.lua
 Battleship.lua
 FourRow.lua
 Vault.lua
+Army.lua
 UI_Widgets.lua
 UI_Board.lua
 UI_Play.lua
 UI_Battleship.lua
 UI_FourRow.lua
 UI_Vault.lua
+UI_Army.lua
 UI_Tabs.lua
 UI_Main.lua
 UI_Profile.lua

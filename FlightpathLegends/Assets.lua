@@ -106,6 +106,26 @@ function A.GemIcon(n)
     return nil
 end
 
+-- Hidden Army: an icon per rank, Alliance and Horde.
+local UNIT_ICONS = {
+    W = { Alliance = "achievement_leader_king_varian_wrynn", Horde = "achievement_leader_sylvanas" },
+    C = { Alliance = "ability_warrior_battleshout", Horde = "ability_warrior_warcry" },
+    K = { Alliance = "ability_mount_charger", Horde = "ability_mount_blackdirewolf" },
+    F = { Alliance = "achievement_character_human_male", Horde = "achievement_character_orc_male" },
+    S = { Alliance = "inv_gizmo_supersappercharge", Horde = "inv_gizmo_goblinboombox_01" },
+    X = { Alliance = "ability_hunter_eagleeye", Horde = "ability_hunter_pathfinding" },
+    R = { Alliance = "ability_stealth", Horde = "ability_rogue_ambush" },
+    B = { Alliance = "inv_misc_bomb_05", Horde = "inv_misc_bomb_02" },
+    N = { Alliance = "inv_bannerpvp_02", Horde = "inv_bannerpvp_01" },
+}
+function A.UnitIcon(rank, faction)
+    local set = UNIT_ICONS[rank]
+    if not set then return nil end
+    local path = Icon(set[faction] or set.Alliance)
+    if A.HasFile(path) then return path end
+    return nil
+end
+
 function A.CoinIcon(who)
     local c = A.COINS[who]
     if not c then return nil end
@@ -476,6 +496,12 @@ A.SOUNDS = {
     vbChest = { files = { 565749, 565636 }, random = true }, -- treasure: you cracked it
     vbShut = { files = { 565478 }, kits = { 847 } }, -- an iron door slams: your vault was cracked
     vbTurn = { files = { 565752 }, kits = { 8960 } }, -- a new round
+    -- Hidden Army
+    haMarch = { files = { 567275 }, kits = { 8459 } }, -- war drum: the armies take the field
+    haClash = { files = { 567865, 567867, 567869, 567871, 567877, 567879 }, random = true, kits = { 838 } }, -- swords clash
+    haBoom = { files = { 565570 }, kits = { 838 } }, -- a bomb goes off
+    haFlag = { files = { 567434, 567423 }, kits = { 8455 } }, -- the banner is taken
+    haStep = { kits = { 856 } }, -- a unit moves
 }
 
 A.RegisterArmySounds()
