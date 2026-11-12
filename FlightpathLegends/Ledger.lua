@@ -46,7 +46,14 @@ end
 
 -- Records a statement by `sender` about game `id`. res is a result or nil (started).
 -- Returns true when something changed.
-function L.AddStatement(sender, id, white, black, ts, res, casual)
+-- kind: "r" rated chess, "c" casual chess, "b" battleship.
+local KINDS = { r = true, c = true, b = true }
+local function KindOf(g) return g.kind or (g.casual and "c" or "r") end
+L.KindOf = KindOf
+
+function L.AddStatement(sender, id, white, black, ts, res, kind)
+    if kind == true then kind = "c" elseif kind == false or kind == nil then kind = "r" end
+    if not KINDS[kind] then return false end
     if not db then return false end
     if type(id) ~= "string" or not string.match(id, "^%w+$") or #id > 12 then return false end
     if type(white) ~= "string" or type(black) ~= "string" or white == black then return false end
@@ -58,9 +65,9 @@ function L.AddStatement(sender, id, white, black, ts, res, casual)
     local g = db.games[id]
     if not g then
         if CountStatements(sender) >= MAX_PER_PLAYER then return false end
-        g = { w = white, b = black, st = {}, casual = casual and true or nil }
+        g = { w = white, b = black, st = {}, kind = kind }
         db.games[id] = g
-    elseif g.w ~= white or g.b ~= black or (g.casual or false) ~= (casual and true or false) then
+    elseif g.w ~= white or g.b ~= black or KindOf(g) ~= kind then
         return false -- the first description of a game id wins
     end
     local st = g.st[sender]
@@ -94,7 +101,7 @@ local function Get(players, name)
     local p = players[name]
     if not p then
         p = { r = START, w = 0, l = 0, d = 0, games = 0, peak = START, beaten = 0, opps = {}, disputed = 0,
-            cw = 0, cl = 0, cd = 0, recent = {} }
+            cw = 0, cl = 0, cd = 0, bw = 0, bl = 0, bstreak = 0, bbest = 0, recent = {} }
         players[name] = p
     end
     return p
@@ -152,7 +159,20 @@ function L.Recompute()
         if disputed then
             Get(players, g.w).disputed = Get(players, g.w).disputed + 1
             Get(players, g.b).disputed = Get(players, g.b).disputed + 1
-        elseif res and g.casual then
+        elseif res and KindOf(g) == "b" then
+            -- Battleship: witnessed wins and losses, no rating.
+            local pw, pb = Get(players, g.w), Get(players, g.b)
+            local winner, loser = pw, pb
+            if res == "0-1" then winner, loser = pb, pw end
+            if res ~= "1/2" then
+                winner.bw, loser.bl = winner.bw + 1, loser.bl + 1
+                winner.bstreak, loser.bstreak = winner.bstreak + 1, 0
+                if winner.bstreak > winner.bbest then winner.bbest = winner.bstreak end
+            end
+            local sw = (res == "1-0" and 1) or 0
+            table.insert(pw.recent, { opp = g.b, s = sw, game = "b", ts = e.ts })
+            table.insert(pb.recent, { opp = g.w, s = 1 - sw, game = "b", ts = e.ts })
+        elseif res and KindOf(g) == "c" then
             -- Casual: witnessed win/loss/draw record, no rating, no daily cap.
             local pw, pb = Get(players, g.w), Get(players, g.b)
             local sw = (res == "1-0" and 1) or (res == "1/2" and 0.5) or 0
@@ -242,12 +262,15 @@ function L.Any(name)
 end
 
 -- Head-to-head between a and b, from a's point of view: { w, l, d }.
-function L.HeadToHead(a, b)
+-- game: "chess" (rated + casual) or "b" (battleship); nil counts everything.
+function L.HeadToHead(a, b, game)
     local r = { w = 0, l = 0, d = 0 }
     if not db then return r end
     local now = ns.ServerTime()
     for _, g in pairs(db.games) do
-        if (g.w == a and g.b == b) or (g.w == b and g.b == a) then
+        local k = KindOf(g)
+        local wanted = not game or (game == "b" and k == "b") or (game == "chess" and k ~= "b")
+        if wanted and ((g.w == a and g.b == b) or (g.w == b and g.b == a)) then
             local res = Outcome(g, now)
             if res then
                 local aWhite = g.w == a
@@ -258,6 +281,13 @@ function L.HeadToHead(a, b)
         end
     end
     return r
+end
+
+-- Battleship record, or nil if no witnessed battleship games.
+function L.Battleship(name)
+    local p = L.players[name]
+    if p and (p.bw + p.bl) > 0 then return p end
+    return nil
 end
 
 function L.Rating(name)
@@ -272,7 +302,7 @@ end
 local function Record(id, g, name)
     local st = g.st[name]
     if not st then return nil end
-    return table.concat({ id, g.w, g.b, st.ts, st.res or "-", g.casual and "c" or "r" }, ",")
+    return table.concat({ id, g.w, g.b, st.ts, st.res or "-", KindOf(g) }, ",")
 end
 
 -- Broadcasts our own statements for the given game ids (packed, 255-byte limit).
@@ -312,7 +342,7 @@ end
 function L.StateOwn(g, res)
     if not db or g.mode ~= "online" then return end
     g.ledgerTs = g.ledgerTs or ns.ServerTime()
-    L.AddStatement(ns.me, g.id, g.white, g.black, g.ledgerTs, res, not g.rated)
+    L.AddStatement(ns.me, g.id, g.white, g.black, g.ledgerTs, res, g.kind or (g.rated and "r" or "c"))
     Share({ g.id })
 end
 
@@ -321,7 +351,7 @@ ns.Comm.handlers.GB = function(sender, dist, parts)
         local f = ns.Split(parts[i], ",")
         if #f == 5 or #f == 6 then
             local res = f[5] ~= "-" and f[5] or nil
-            L.AddStatement(sender, f[1], f[2], f[3], f[4], res, f[6] == "c")
+            L.AddStatement(sender, f[1], f[2], f[3], f[4], res, f[6] or "r")
         end
     end
 end

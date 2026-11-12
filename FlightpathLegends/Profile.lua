@@ -229,6 +229,17 @@ function P.RecordGame(s)
     s.ratingBefore = p.rating
     local delta = 0
 
+    if s.mode == "bs" and not s.vsAI then
+        -- local Battleship counters (only for feats; the record itself is witnessed)
+        if s.outcome == "win" then
+            p.bsw = (p.bsw or 0) + 1
+            p.bsStreak = (p.bsStreak or 0) + 1
+            if p.bsStreak > (p.bsBest or 0) then p.bsBest = p.bsStreak end
+        elseif s.outcome == "loss" then
+            p.bsl = (p.bsl or 0) + 1
+            p.bsStreak = 0
+        end
+    end
     if s.mode == "online" then
         p.games = p.games + 1
         if s.opp and not p.rivals[s.opp] then
@@ -333,6 +344,31 @@ function P.Board()
     end
     table.sort(rows, function(a, b)
         if a.r ~= b.r then return a.r > b.r end
+        return a.name < b.name
+    end)
+    return rows
+end
+
+-- Battleship leaderboard: witnessed wins and losses, best win ratio first.
+function P.AdmiralBoard()
+    local rows = {}
+    for name, e in pairs(ns.Ledger.players) do
+        local n = (e.bw or 0) + (e.bl or 0)
+        if n > 0 then
+            local known = P.players[name]
+            rows[#rows + 1] = {
+                name = name, w = e.bw, l = e.bl, games = n, ratio = e.bw / n, best = e.bbest, streak = e.bstreak,
+                me = name == ns.me, t = name == ns.me and P.MyTitleId() or (known and known.t) or "",
+                f = name == ns.me and ns.Assets.MyFaction() or (known and known.f), ch = known and known.ch,
+            }
+        end
+    end
+    -- Ratio first, but a few battles are needed before a perfect record counts as best.
+    local function Score(r) return (r.w + 1) / (r.games + 2) end
+    table.sort(rows, function(a, b)
+        local sa, sb = Score(a), Score(b)
+        if sa ~= sb then return sa > sb end
+        if a.w ~= b.w then return a.w > b.w end
         return a.name < b.name
     end)
     return rows

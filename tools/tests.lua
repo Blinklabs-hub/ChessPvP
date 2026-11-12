@@ -1008,6 +1008,230 @@ if want("status") then
 end
 
 ------------------------------------------------------------------------
+if want("hash") then
+    section("hash: SHA-256 test vectors")
+    local c = NewClient("Hash")
+    local H = c.ns.Hash
+    eq(H.SHA256(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "empty string")
+    eq(H.SHA256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "abc")
+    eq(H.SHA256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+        "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1", "two blocks")
+    eq(H.SHA256(string.rep("a", 1000)), "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3", "1000 a's")
+    check(H.Salt() ~= H.Salt(), "salts differ")
+    RemoveClient(c)
+end
+
+------------------------------------------------------------------------
+if want("battleship") then
+    section("battleship: rules and sealed fleets")
+    local c = NewClient("Rules")
+    local BS = c.ns.Battleship
+    for _ = 1, 50 do
+        local layout = BS.RandomLayout()
+        local occ = BS.Occupancy(layout)
+        local n = 0
+        for _ in pairs(occ) do n = n + 1 end
+        if n ~= 17 then check(false, "random fleet has 17 squares") break end
+        local back = BS.Decode(BS.Encode(layout))
+        if BS.Encode(back) ~= BS.Encode(layout) then check(false, "encode/decode round trip") break end
+    end
+    check(true, "50 random fleets are legal and round-trip")
+    check(BS.Decode("00h00h00h00h00h") == nil, "overlapping fleet rejected")
+    check(BS.Decode("09h10h20h30h40h") == nil, "ship off the sea rejected")
+    local layout = BS.RandomLayout()
+    local occ, hits = BS.Occupancy(layout), {}
+    local answers = {}
+    for cell = 0, 99 do answers[#answers + 1] = { cell = cell, res = BS.Resolve(occ, hits, cell) } end
+    check(BS.AllSunk(occ, hits), "firing everywhere sinks the fleet")
+    local sunk = 0
+    for _, e in ipairs(answers) do if e.res:find("^s") then sunk = sunk + 1 end end
+    eq(sunk, 5, "five 'sunk' answers")
+    local salt = c.ns.Hash.Salt()
+    local seal = BS.Seal(layout, salt)
+    check(BS.Verify(seal, BS.Encode(layout), salt, answers), "honest answers verify")
+    local lie = { table.unpack(answers) }
+    for i, e in ipairs(lie) do if e.res == "h" then lie[i] = { cell = e.cell, res = "m" } break end end
+    check(not BS.Verify(seal, BS.Encode(layout), salt, lie), "a single lie is caught")
+    local moved = BS.RandomLayout()
+    check(not BS.Verify(seal, BS.Encode(moved), salt, {}), "a different fleet does not match the seal")
+    check(not BS.Verify(seal, BS.Encode(layout), salt .. "x", {}), "a wrong salt does not match the seal")
+
+    section("battleship: computer admirals")
+    local totals = {}
+    for level = 1, 3 do
+        local sum = 0
+        for _ = 1, 12 do
+            local fleet = BS.Occupancy(BS.RandomLayout())
+            local h, known, shots = {}, {}, 0
+            local sunkShips = {}
+            while not BS.AllSunk(fleet, h) and shots < 100 do
+                local remaining = {}
+                for i = 1, 5 do if not sunkShips[i] then remaining[#remaining + 1] = BS.FLEET[i].len end end
+                local cell = BS.AIShot(level, known, remaining)
+                local res = BS.Resolve(fleet, h, cell)
+                shots = shots + 1
+                if res == "m" then known[cell] = "m" else known[cell] = "h" end
+                local i = tonumber(res:match("^s(%d)$"))
+                if i then
+                    sunkShips[i] = true
+                    for c2, j in pairs(fleet) do if j == i then known[c2] = "s" end end
+                end
+            end
+            sum = sum + shots
+        end
+        totals[level] = sum / 12
+        check(totals[level] <= 100, BS.LEVELS[level] .. " finishes (" .. totals[level] .. " shots on average)")
+    end
+    check(totals[3] < totals[1], "the Admiral beats the Cadet (" .. totals[3] .. " vs " .. totals[1] .. " shots)")
+    RemoveClient(c)
+
+    -- Plays an online battle: the shooter peeks at the other fleet (test only) and sinks it.
+    local function SinkAll(shooter, target)
+        local tB = target.ns.Battleship.current
+        local cells = {}
+        for cell in pairs(tB.occ) do cells[#cells + 1] = cell end
+        table.sort(cells)
+        local i = 1
+        local guard = 0
+        while shooter.ns.Battleship.current.phase == "battle" and guard < 1200 do
+            guard = guard + 1
+            local sB = shooter.ns.Battleship.current
+            if sB.myTurn and not sB.awaiting then
+                local cell = cells[i]
+                i = i + 1
+                if cell then shooter.ns.Battleship.FireAt(cell) end
+            elseif target.ns.Battleship.current.myTurn and not target.ns.Battleship.current.awaiting then
+                -- the other side fires a miss-prone shot
+                local tB2 = target.ns.Battleship.current
+                for cell = 0, 99 do
+                    if not tB2.myShots[cell] then target.ns.Battleship.FireAt(cell) break end
+                end
+            end
+            Advance(0.5)
+        end
+    end
+
+    section("battleship: an online battle, witnessed")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    local w = NewClient("Wit", nil, "Ness")
+    Advance(25)
+    local CA, JK = "Canga Prime", "Just Keepingcalm"
+    a.ns.Game.Invite(JK, { game = "bs" }); Advance(1)
+    local inv = b.ns.Game.LatestInvite()
+    check(inv and inv.game == "bs", "a Battleship challenge arrives")
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    local sa, sb = a.ns.Battleship.current, b.ns.Battleship.current
+    check(sa and sb and sa.id == sb.id and sa.phase == "place", "both are placing their fleets")
+    check(sa.iFirst ~= sb.iFirst, "exactly one side fires first")
+    a.ns.Battleship.Shuffle()
+    a.ns.Battleship.Ready(); Advance(1)
+    eq(sb.phase, "place", "waiting for the other admiral")
+    b.ns.Battleship.Ready(); Advance(2)
+    eq(sa.phase, "battle", "battle begins")
+    eq(sb.phase, "battle", "on both sides")
+    w.ns.Game.Watch(CA); Advance(3)
+    local sw = w.ns.Battleship.current
+    check(sw and sw.mode == "spectate", "a spectator can watch")
+    SinkAll(a, b)
+    Advance(10)
+    eq(sa.outcome, "win", "Canga sank the whole fleet")
+    eq(sb.outcome, "loss", "Keepingcalm lost")
+    eq(sa.verified, true, "Canga checked Keepingcalm's fleet: honest")
+    eq(sb.verified, true, "Keepingcalm checked Canga's fleet: honest")
+    eq(sw.phase, "over", "the spectator saw the end")
+    local count = 0
+    for _ in pairs(sw.myShots) do count = count + 1 end
+    eq(count, #sa.myLog, "the spectator saw every shot")
+    local rec = w.ns.Ledger.Battleship(CA)
+    check(rec and rec.bw == 1, "the witness records Canga's win")
+    check(w.ns.Ledger.Battleship(JK) and w.ns.Ledger.Battleship(JK).bl == 1, "and Keepingcalm's loss")
+    eq(w.ns.Ledger.Rating(CA), 1200, "Battleship never touches chess ratings")
+    check(a.ns.Profile.me.badges.bs_win1, "Canga earns First Broadside (the Gunner)")
+    local board = w.ns.Profile.AdmiralBoard()
+    eq(board[1] and board[1].name, CA, "Canga tops the Admirals board")
+
+    section("battleship: a cheater who lies about hits is caught")
+    b.ns.Battleship.Resolve = function() return "m" end -- Keepingcalm's client always answers "miss"
+    a.ns.Game.Invite(JK, { game = "bs" }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    a.ns.Battleship.Ready(); b.ns.Battleship.Ready(); Advance(2)
+    sa, sb = a.ns.Battleship.current, b.ns.Battleship.current
+    -- Both aim at the real ships. Canga's hits are answered "miss" by the liar, so Canga
+    -- can never sink that fleet, while Keepingcalm sinks Canga's.
+    local function Aimed(shooter, target)
+        local s, occ = shooter.ns.Battleship.current, target.ns.Battleship.current.occ
+        local cells = {}
+        for cell in pairs(occ) do cells[#cells + 1] = cell end
+        table.sort(cells)
+        for _, cell in ipairs(cells) do
+            if not s.myShots[cell] then return shooter.ns.Battleship.FireAt(cell) end
+        end
+        for cell = 0, 99 do if not s.myShots[cell] then return shooter.ns.Battleship.FireAt(cell) end end
+    end
+    for _ = 1, 1200 do
+        if sb.phase ~= "battle" then break end
+        if sa.myTurn and not sa.awaiting then Aimed(a, b) end
+        if sb.myTurn and not sb.awaiting then Aimed(b, a) end
+        Advance(0.5)
+    end
+    Advance(10)
+    eq(sb.outcome, "win", "the liar 'wins'")
+    eq(sa.verified, false, "but Canga's check of the revealed fleet fails")
+    eq(sa.outcome, "disputed", "the battle is disputed")
+    Advance(5)
+    local liar = w.ns.Ledger.Battleship(JK)
+    check(not liar or liar.bw == 0, "the liar gets no win on the record")
+    check(w.ns.Ledger.players[JK].disputed >= 1, "and is marked as disputing")
+    b.ns.Battleship.Resolve = nil -- restore (falls back to the module function)
+    b.ns.Battleship.Resolve = a.ns.Battleship.Resolve
+
+    section("battleship: the turn timer")
+    a.ns.Game.Invite(JK, { game = "bs" }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    a.ns.Battleship.Ready(); b.ns.Battleship.Ready(); Advance(2)
+    sa, sb = a.ns.Battleship.current, b.ns.Battleship.current
+    local idle = sa.myTurn and a or b
+    local other = (idle == a) and b or a
+    -- the idle player never shoots; the other one always does
+    for _ = 1, 400 do
+        local so = other.ns.Battleship.current
+        if so.phase ~= "battle" then break end
+        if so.myTurn and not so.awaiting then
+            for cell = 0, 99 do if not so.myShots[cell] then other.ns.Battleship.FireAt(cell) break end end
+        end
+        Advance(1)
+    end
+    eq(idle.ns.Battleship.current.outcome, "loss", "three missed turns forfeit the battle")
+    eq(idle.ns.Battleship.current.reason, "time", "lost on time")
+    eq(other.ns.Battleship.current.outcome, "win", "the opponent wins")
+
+    section("battleship: queue and practice")
+    a.ns.Game.StartSeek(0, 0, false, true, "bs")
+    b.ns.Game.StartSeek(600, 0, true, true, "chess")
+    Advance(30)
+    check(not a.ns.Battleship.Busy(), "a Battleship queue never pairs with a chess queue")
+    b.ns.Game.StopSeek()
+    b.ns.Game.StartSeek(0, 0, false, true, "bs")
+    Advance(30)
+    check(a.ns.Battleship.Busy() and b.ns.Battleship.Busy(), "two Battleship queuers are paired")
+    a.ns.Battleship.Resign(); Advance(2)
+    local s3 = a.ns.Battleship.StartAI(3)
+    a.ns.Battleship.Ready()
+    for _ = 1, 400 do
+        if s3.phase ~= "battle" then break end
+        if s3.myTurn and not s3.awaiting then
+            for cell = 0, 99 do if not s3.myShots[cell] then a.ns.Battleship.FireAt(cell) break end end
+        end
+        Advance(1)
+    end
+    eq(s3.phase, "over", "a practice battle against the Admiral finishes")
+    for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
 if want("cheat") then
     section("validation")
     local c = NewClient("Val")

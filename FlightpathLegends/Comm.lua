@@ -100,6 +100,14 @@ function C.SendRaw(dist, target, text, bulk)
     Pump()
 end
 
+-- True while a message is still waiting in our send queue (not sent yet).
+function C.IsQueued(text)
+    for i = 1, #queue do
+        if queue[i].text == text then return true end
+    end
+    return false
+end
+
 function C.Whisper(target, ...)
     C.SendRaw("WHISPER", target, ns.Join(...))
 end

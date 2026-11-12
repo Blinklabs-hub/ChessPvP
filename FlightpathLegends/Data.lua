@@ -151,6 +151,26 @@ D.BADGES = {
         check = function(p) return p.peak >= 1800 end },
     { id = "r2000", title = "Grand Designer", name = "Grand Design", points = 75, desc = "Reach a rating of 2000.",
         check = function(p) return p.peak >= 2000 end },
+
+    -- Battleship (game = "bs")
+    { id = "bs_sail", game = "bs", title = "the Deckhand", name = "Set Sail", points = 5, desc = "Finish a Battleship battle against another player.",
+        check = function(p, s) return s.mode == "bs" and not s.vsAI end },
+    { id = "bs_win1", game = "bs", title = "the Gunner", name = "First Broadside", points = 10, desc = "Win a Battleship battle against another player.",
+        check = function(p, s) return s.mode == "bs" and not s.vsAI and s.outcome == "win" end },
+    { id = "bs_win10", game = "bs", title = "Fleet Captain", name = "Fleet Captain", points = 15, desc = "Win 10 Battleship battles.",
+        check = function(p) return (p.bsw or 0) >= 10 end, progress = function(p) return p.bsw or 0, 10 end },
+    { id = "bs_win50", game = "bs", title = "Grand Admiral", name = "Grand Admiral", points = 50, desc = "Win 50 Battleship battles.",
+        check = function(p) return (p.bsw or 0) >= 50 end, progress = function(p) return p.bsw or 0, 50 end },
+    { id = "bs_streak5", game = "bs", title = "Terror of the Seas", name = "Terror of the Seas", points = 25, desc = "Win 5 Battleship battles in a row.",
+        check = function(p) return (p.bsBest or 0) >= 5 end, progress = function(p) return p.bsBest or 0, 5 end },
+    { id = "bs_flawless", game = "bs", title = "the Untouchable", name = "Untouchable", points = 25, desc = "Win a Battleship battle without losing a single ship.",
+        check = function(p, s) return s.mode == "bs" and not s.vsAI and s.outcome == "win" and s.shipsLeft == 5 end },
+    { id = "bs_sharp", game = "bs", title = "the Sharpshooter", name = "Sharpshooter", points = 20, desc = "Win a Battleship battle in 45 shots or fewer.",
+        check = function(p, s) return s.mode == "bs" and not s.vsAI and s.outcome == "win" and s.shots <= 45 end },
+    { id = "bs_last", game = "bs", title = "Last Ship Standing", name = "Last Ship Standing", points = 15, desc = "Win a Battleship battle with only one ship left afloat.",
+        check = function(p, s) return s.mode == "bs" and not s.vsAI and s.outcome == "win" and s.shipsLeft == 1 end },
+    { id = "bs_ai", game = "bs", title = "the Sea Dog", name = "Sea Dog", points = 10, desc = "Beat the Admiral (the hardest computer) at Battleship.",
+        check = function(p, s) return s.mode == "bs" and s.vsAI and s.outcome == "win" and s.aiLevel >= 3 end },
 }
 
 -- Badge icons (game icons). A table picks the icon by the player's faction.
@@ -180,6 +200,15 @@ D.BADGE_ICONS = {
     r1500 = PvP(7),
     r1800 = PvP(10),
     r2000 = PvP(12),
+    bs_sail = { Alliance = "inv_garrison_alliancedestroyer", Horde = "inv_garrison_hordedestroyer" },
+    bs_win1 = "ability_rogue_cannonballbarrage",
+    bs_win10 = "inv_garrison_dreadnaught",
+    bs_win50 = "inv_garrison_carrier",
+    bs_streak5 = { Alliance = "inv_garrison_alliancesub", Horde = "inv_garrison_hordesub" },
+    bs_flawless = "inv_misc_anchor",
+    bs_sharp = "ability_marksmanship",
+    bs_last = "inv_garrison_cargoship",
+    bs_ai = "ships_ability_depthcharges",
 }
 
 function D.BadgeIcon(id, faction)

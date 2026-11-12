@@ -9,6 +9,7 @@
 ## Category-enUS: Games
 
 Core.lua
+Hash.lua
 Data.lua
 Assets.lua
 Engine.lua
@@ -17,6 +18,7 @@ Profile.lua
 Comm.lua
 Ledger.lua
 Game.lua
+Battleship.lua
 UI_Widgets.lua
 UI_Board.lua
 UI_Play.lua

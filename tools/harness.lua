@@ -1,6 +1,51 @@
 -- Test harness: loads the addon into mocked WoW environments and simulates several clients.
-local FILES = { "Core.lua", "Data.lua", "Assets.lua", "Engine.lua", "AI.lua", "Profile.lua", "Comm.lua", "Ledger.lua", "Game.lua", "UI_Widgets.lua", "UI_Board.lua", "UI_Play.lua", "UI_Tabs.lua", "UI_Main.lua", "UI_Profile.lua" }
+local FILES = { "Core.lua", "Hash.lua", "Data.lua", "Assets.lua", "Engine.lua", "AI.lua", "Profile.lua", "Comm.lua", "Ledger.lua", "Game.lua", "Battleship.lua", "UI_Widgets.lua", "UI_Board.lua", "UI_Play.lua", "UI_Tabs.lua", "UI_Main.lua", "UI_Profile.lua" }
 local REALM = "TestRealm"
+
+-- Like WoW's LuaBitOp "bit" library: 32-bit operations returning signed numbers.
+-- Arithmetic only (the test VM's integers are 32-bit, so native operators cannot be used).
+local TWO32 = 4294967296.0
+local function U32(x) x = math.floor(x) % TWO32; if x < 0 then x = x + TWO32 end; return x end
+local function S32(x) if x >= 2147483648 then return x - TWO32 end; return x end
+local NIB = {} -- NIB[op][a][b] for 4-bit values
+for _, op in ipairs({ "and", "or", "xor" }) do
+    NIB[op] = {}
+    for x = 0, 15 do
+        NIB[op][x] = {}
+        for y = 0, 15 do
+            local r, bitv = 0, 1
+            for _ = 1, 4 do
+                local xb, yb = math.floor(x / bitv) % 2, math.floor(y / bitv) % 2
+                local v = (op == "and" and xb * yb) or (op == "or" and math.max(xb, yb)) or ((xb + yb) % 2)
+                r = r + v * bitv
+                bitv = bitv * 2
+            end
+            NIB[op][x][y] = r
+        end
+    end
+end
+local function Op2(op, x, y)
+    x, y = U32(x), U32(y)
+    local r, mul = 0, 1
+    for _ = 1, 8 do
+        r = r + NIB[op][x % 16][y % 16] * mul
+        x, y, mul = math.floor(x / 16), math.floor(y / 16), mul * 16
+    end
+    return r
+end
+local function Fold(op, init, ...)
+    local r = init
+    for _, v in ipairs({ ... }) do r = Op2(op, r, v) end
+    return S32(r)
+end
+BitLib = {
+    band = function(...) return Fold("and", TWO32 - 1, ...) end,
+    bor = function(...) return Fold("or", 0, ...) end,
+    bxor = function(...) return Fold("xor", 0, ...) end,
+    bnot = function(a) return S32(TWO32 - 1 - U32(a)) end,
+    lshift = function(a, n) return S32((U32(a) * 2 ^ (n % 32)) % TWO32) end,
+    rshift = function(a, n) return S32(math.floor(U32(a) / 2 ^ (n % 32))) end,
+}
 
 T = 1000 -- virtual clock (seconds)
 local timers = {}
@@ -110,6 +155,7 @@ function NewClient(name, savedDB, surname)
     env.NUM_CHAT_WINDOWS = 2
     env.ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
     env.SOUNDKIT = { IG_ABILITY_ICON_DROP = 1, READY_CHECK = 2 }
+    env.bit = BitLib
     client.sounds, client.warnings, client.flashes = {}, {}, 0
     env.PlaySound = function(id) table.insert(client.sounds, id) end
     env.RaidWarningFrame = {}
