@@ -1,4 +1,4 @@
--- ChessPvP: practice opponent. Alpha-beta search run in small slices so the game never freezes.
+-- Checkmate: Azeroth - practice opponent. Alpha-beta search run in small slices so the game never freezes.
 local _, ns = ...
 
 local AI = {}
@@ -296,7 +296,7 @@ local function Step()
         if not ok then
             job = nil
             driver:SetScript("OnUpdate", nil)
-            error("ChessPvP AI: " .. tostring(result), 0)
+            error("Checkmate: Azeroth AI: " .. tostring(result), 0)
         end
         if coroutine.status(job.co) == "dead" then
             job.move = result

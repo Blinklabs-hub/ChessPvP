@@ -1,10 +1,10 @@
--- ChessPvP: core namespace, utilities, saved variables and slash commands.
+-- Checkmate: Azeroth - core namespace, utilities, saved variables and slash commands.
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
 ns.VERSION = "1.1.0"
-ns.PROTO = 1 -- network protocol version; bump when messages change incompatibly
-ChessPvP = ns -- exposed for debugging and the addon compartment
+ns.PROTO = 2 -- network protocol version; bump when messages change incompatibly
+CheckmateAzeroth = ns -- exposed for debugging and the addon compartment
 
 ------------------------------------------------------------------------
 -- Internal event bus (used both for WoW events and addon events)
@@ -46,7 +46,7 @@ end
 function ns.Print(msg)
     local frame = DEFAULT_CHAT_FRAME
     if frame and frame.AddMessage then
-        frame:AddMessage("|cffffd100ChessPvP:|r " .. tostring(msg))
+        frame:AddMessage("|cffffd100Checkmate:|r " .. tostring(msg))
     end
 end
 
@@ -206,8 +206,12 @@ local SETTING_DEFAULTS = {
 
 ns.RegisterEvent("ADDON_LOADED", function(name)
     if name ~= ADDON then return end
-    if type(ChessPvPDB) ~= "table" then ChessPvPDB = {} end
-    local db = ChessPvPDB
+    -- Saved data from the addon's old name (ChessPvP) is adopted once.
+    if type(CheckmateAzerothDB) ~= "table" then
+        CheckmateAzerothDB = type(ChessPvPDB) == "table" and ChessPvPDB or {}
+    end
+    ChessPvPDB = nil
+    local db = CheckmateAzerothDB
     db.settings = db.settings or {}
     for k, v in pairs(SETTING_DEFAULTS) do
         if db.settings[k] == nil then db.settings[k] = v end
@@ -292,9 +296,10 @@ local function Help()
     ns.Print("  /chess debug - show name and connection details (for bug reports)")
 end
 
-SLASH_CHESSPVP1 = "/chess"
-SLASH_CHESSPVP2 = "/chesspvp"
-SlashCmdList["CHESSPVP"] = function(msg)
+SLASH_CHECKMATEAZEROTH1 = "/checkmate"
+SLASH_CHECKMATEAZEROTH2 = "/chess"
+SLASH_CHECKMATEAZEROTH3 = "/cma"
+SlashCmdList["CHECKMATEAZEROTH"] = function(msg)
     msg = msg or ""
     local cmd, rest = string.match(msg, "^%s*(%S*)%s*(.-)%s*$")
     cmd = string.lower(cmd or "")
@@ -354,6 +359,6 @@ SlashCmdList["CHESSPVP"] = function(msg)
     end
 end
 
-function ChessPvP_OnAddonCompartmentClick()
+function CheckmateAzeroth_OnAddonCompartmentClick()
     ns.UI.Toggle()
 end

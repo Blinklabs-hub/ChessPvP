@@ -230,7 +230,7 @@ if want("online") or TEST_FILTER == "debug" then
     check(ga.state == "active" and gb.state == "active", "game still running")
 
     section("online: reload and resume")
-    local aliceDB = DeepCopy(a.env.ChessPvPDB)
+    local aliceDB = DeepCopy(a.env.CheckmateAzerothDB)
     RemoveClient(a)
     -- Bob plays a move while Alice is offline... it is white's turn after 10 plies
     local bobIsWhite = gb.myColor == 1
@@ -447,11 +447,11 @@ if want("forever") then
     }, realms = { Prime = { players = {} }, TestRealm = { players = { ["Just-TestRealm"] = { r = 1200, w = 0, l = 0, d = 0, seen = 0 } } } } }
     local m = NewClient("Canga", old, "Prime")
     eq(m.ns.Profile.me.w, 9, "the profile with most games is kept")
-    eq(m.env.ChessPvPDB.chars["Canga-Prime"], nil, "1.0.0 key removed")
-    eq(m.env.ChessPvPDB.chars["Canga-TestRealm"], nil, "1.0.1 key removed")
+    eq(m.env.CheckmateAzerothDB.chars["Canga-Prime"], nil, "1.0.0 key removed")
+    eq(m.env.CheckmateAzerothDB.chars["Canga-TestRealm"], nil, "1.0.1 key removed")
     eq(m.ns.Profile.GetPlayer("Just-TestRealm"), nil, "old ladder cache cleared")
     RemoveClient(m)
-    local again = NewClient("Canga", m.env.ChessPvPDB, "Prime")
+    local again = NewClient("Canga", m.env.CheckmateAzerothDB, "Prime")
     eq(again.ns.Profile.me.w, 9, "migration only runs once")
     RemoveClient(again)
     net.forever = false

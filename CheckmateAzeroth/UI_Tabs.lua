@@ -1,4 +1,4 @@
--- ChessPvP: Lobby, Ladder, Collection and Settings tabs (cards and tiles, responsive).
+-- Checkmate: Azeroth - Lobby, Ladder, Collection and Settings tabs (cards and tiles, responsive).
 local _, ns = ...
 
 local T = {}
@@ -157,7 +157,7 @@ function T.RefreshLobby()
     lobby.list:SetData(rows)
     if #rows == 0 then
         lobby.emptyText:SetText(C.Joined()
-            and "No other ChessPvP players are online right now.\nChallenge a friend by name from the Play tab, or practise against the computer."
+            and "No other Checkmate: Azeroth players are online right now.\nChallenge a friend by name from the Play tab, or practise against the computer."
             or "Connecting to the chess network...")
         lobby.empty:Show()
     else
@@ -772,7 +772,7 @@ function T.BuildSettings(page)
     local reset = W.Button(ui, "Reset window size and position", 240, 24, function() ns.UI.ResetPosition() end)
     reset:SetPoint("TOPLEFT", 14, -62)
 
-    local about = Section(page, "About ChessPvP " .. ns.VERSION, 392, 0, 300, 332)
+    local about = Section(page, "About Checkmate: Azeroth " .. ns.VERSION, 392, 0, 300, 332)
     settings.about = about
     local text = W.Label(about, "GameFontHighlightSmall",
         "Ratings use the Elo system and start at " .. D.START_RATING .. ". Rated battles always use a clock.\n\n"

@@ -1,4 +1,4 @@
--- ChessPvP: the board widget - squares, Warcraft piece tokens, highlights, click-to-move,
+-- Checkmate: Azeroth - the board widget - squares, Warcraft piece tokens, highlights, click-to-move,
 -- promotion picker, and move/capture/check animations.
 local _, ns = ...
 

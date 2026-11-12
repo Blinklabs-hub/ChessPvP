@@ -1,4 +1,4 @@
--- ChessPvP: the Play tab - board with player strips, a slim action column, and a side
+-- Checkmate: Azeroth - the Play tab - board with player strips, a slim action column, and a side
 -- panel (game setup or move list) that folds away during games.
 local _, ns = ...
 

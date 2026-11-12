@@ -1,11 +1,11 @@
--- ChessPvP: network transport. Addon messages over whispers (games) and a hidden channel (ladder, lobby).
+-- Checkmate: Azeroth - network transport. Addon messages over whispers (games) and a hidden channel (ladder, lobby).
 local _, ns = ...
 
 local C = {}
 ns.Comm = C
 
-local PREFIX = "ChessPvP"
-local CHANNEL = "ChessPvPNet"
+local PREFIX = "CheckmateAz"
+local CHANNEL = "CheckmateAzNet"
 C.PREFIX, C.CHANNEL = PREFIX, CHANNEL
 
 C.handlers = {} -- [command] = function(sender, dist, parts)

@@ -1,4 +1,4 @@
--- ChessPvP: the main window - frame, tabs, resizing and responsive layout, folding the
+-- Checkmate: Azeroth - the main window - frame, tabs, resizing and responsive layout, folding the
 -- side panel during battles, challenge popup, toasts, launcher and event wiring.
 local _, ns = ...
 
@@ -80,6 +80,8 @@ function UI.Layout()
     if not built then return end
     local w, h = size.w, size.h
     local top = ContentTop()
+    -- The player line beside the title only when there is room for it.
+    if w >= 660 then main.me:Show() else main.me:Hide() end
     for i = 1, #TABS do
         local tab = TABS[i]
         local page = main.pages[tab.id]
@@ -159,7 +161,7 @@ local function Build()
     local s = ns.db.settings
     s.scale = 1
 
-    main = CreateFrame("Frame", "ChessPvPFrame", UIParent)
+    main = CreateFrame("Frame", "CheckmateAzerothFrame", UIParent)
     main:SetFrameStrata("MEDIUM")
     main:SetToplevel(true)
     main:SetClampedToScreen(true)
@@ -180,14 +182,14 @@ local function Build()
     W.Background(main, 0.05, 0.04, 0.04, 0.97)
     W.Tile(main, "dialogBg", 0.95)
     W.Chrome(main, "goldBorder", 6, 28)
-    table.insert(UISpecialFrames, "ChessPvPFrame") -- closes with Escape
+    table.insert(UISpecialFrames, "CheckmateAzerothFrame") -- closes with Escape
 
-    -- Title: Alliance crest - ChessPvP - Horde crest
+    -- Title: Alliance crest - Checkmate: Azeroth - Horde crest
     local crestL = main:CreateTexture(nil, "ARTWORK")
     crestL:SetSize(30, 30)
     crestL:SetPoint("TOPLEFT", PAD - 4, -3)
     W.SetCrest(crestL, "Alliance")
-    local title = W.Title(main, 22, "ChessPvP")
+    local title = W.Title(main, 22, "Checkmate: Azeroth")
     title:SetPoint("TOPLEFT", PAD + 28, -8)
     local crestR = main:CreateTexture(nil, "ARTWORK")
     crestR:SetSize(30, 30)
@@ -343,7 +345,7 @@ local function RefreshInvite()
         return
     end
     if not invitePopup then
-        local f = CreateFrame("Frame", "ChessPvPInvite", UIParent)
+        local f = CreateFrame("Frame", "CheckmateAzerothInvite", UIParent)
         f:SetSize(400, 112)
         f:SetPoint("TOP", UIParent, "TOP", 0, -140)
         f:SetFrameStrata("DIALOG")
@@ -470,7 +472,7 @@ function UI.UpdateLauncher()
         return
     end
     if not launcher then
-        local b = CreateFrame("Button", "ChessPvPLauncher", UIParent)
+        local b = CreateFrame("Button", "CheckmateAzerothLauncher", UIParent)
         b:SetSize(36, 36)
         b:SetFrameStrata("MEDIUM")
         b:SetClampedToScreen(true)
@@ -496,7 +498,7 @@ function UI.UpdateLauncher()
         b.alert:Hide()
         b:SetScript("OnClick", function() UI.Toggle() end)
         W.Tooltip(b, function(_, tip)
-            tip:SetText("ChessPvP", 1, 0.82, 0)
+            tip:SetText("Checkmate: Azeroth", 1, 0.82, 0)
             tip:AddLine("Click to open. Drag to move.", 1, 1, 1)
         end)
         if s.launcherPos then

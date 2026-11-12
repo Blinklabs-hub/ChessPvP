@@ -1,4 +1,4 @@
--- ChessPvP: shared UI building blocks with a Warcraft look (game art where available,
+-- Checkmate: Azeroth - shared UI building blocks with a Warcraft look (game art where available,
 -- flat fallbacks otherwise).
 local _, ns = ...
 

@@ -1,11 +1,11 @@
--- ChessPvP: Warcraft look and feel - game art lookups (with safe fallbacks), the two armies,
+-- Checkmate: Azeroth - Warcraft look and feel - game art lookups (with safe fallbacks), the two armies,
 -- sounds, and a small tween engine for animations.
-local _, ns = ...
+local ADDON, ns = ...
 
 local A = {}
 ns.Assets = A
 
-local TEX = "Interface\\AddOns\\ChessPvP\\Textures\\"
+local TEX = "Interface\\AddOns\\" .. ADDON .. "\\Textures\\"
 A.TEX = TEX
 
 ------------------------------------------------------------------------
@@ -212,7 +212,7 @@ local driver = CreateFrame("Frame")
 -- An animation error should never break the game, but should still be visible.
 function A.ReportError(err)
     local handler = geterrorhandler and geterrorhandler()
-    if handler then pcall(handler, "ChessPvP animation: " .. tostring(err)) end
+    if handler then pcall(handler, "Checkmate: Azeroth animation: " .. tostring(err)) end
 end
 
 local function Step(_, elapsed)

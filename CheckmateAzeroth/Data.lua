@@ -1,4 +1,4 @@
--- ChessPvP: static data - rank titles, board themes, piece sets and badges.
+-- Checkmate: Azeroth - static data - rank titles, board themes, piece sets and badges.
 local _, ns = ...
 
 local D = {}
