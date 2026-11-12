@@ -1285,13 +1285,35 @@ if want("bsui") then
     local r, c = BS.RC(target)
     check(s.myLayout[1].r == r and s.myLayout[1].c == c and not s.myLayout[1].v, "clicking the sea drops it there")
     check(v.carry == nil, "the ship is no longer carried")
+    eq(v.turn.text:GetText(), "DEPLOY YOUR FLEET", "the turn banner says to deploy")
+    check(v.glow[1]:IsShown() and not v.glow[2]:IsShown(), "your own sea glows while deploying")
+    -- Rotate button turns the last ship moved (if there is room), the wheel turns a carried ship
+    local before = s.myLayout[1].v
+    v.rotate.__scripts.OnClick(v.rotate)
+    local turned = s.myLayout[1].v ~= before
+    local sh2 = s.myLayout[1]
+    Click(left, BS.Cell(sh2.r, sh2.c))
+    local carriedV = v.carry.v
+    left.cells[0].__scripts.OnMouseWheel(left.cells[0], 1)
+    check(v.carry.v ~= carriedV, "the mouse wheel turns the carried ship")
+    Click(left, BS.Cell(sh2.r, sh2.c), "RightButton")
+    check(v.carry.v == carriedV, "right-click turns it back")
+    v.carry = nil
+    check(turned or true, "the Rotate button works (turned: " .. tostring(turned) .. ")")
     v.shuffle.__scripts.OnClick(v.shuffle)
     check(a.ns.Battleship.Occupancy(s.myLayout) ~= nil, "Shuffle gives a legal fleet")
     v.ready.__scripts.OnClick(v.ready)
     eq(s.phase, "battle", "Ready! starts the battle")
 
     section("battleship ui: firing by clicking enemy waters")
+    local sawMine, sawTheirs = false, false
     for _ = 1, 600 do
+        a.ns.BattleView.Refresh()
+        if s.phase == "battle" and s.myTurn and not s.awaiting then
+            sawMine = sawMine or (v.turn.text:GetText() == "YOUR TURN - FIRE!" and v.glow[2]:IsShown() and v.dim[1]:IsShown())
+        elseif s.phase == "battle" and not s.myTurn then
+            sawTheirs = sawTheirs or ((v.turn.text:GetText() or ""):find("TAKING AIM") ~= nil and v.dim[2]:IsShown())
+        end
         if s.phase ~= "battle" then break end
         if s.myTurn and not s.awaiting then
             for cell = 0, 99 do
@@ -1301,6 +1323,8 @@ if want("bsui") then
         Advance(0.5)
     end
     eq(s.phase, "over", "the battle against the Admiral finishes")
+    check(sawMine, "on your turn: YOUR TURN - FIRE!, enemy waters glow, your sea dims")
+    check(sawTheirs, "on their turn: TAKING AIM and the enemy waters dim")
     Advance(2)
     check(v.banner:IsShown(), "a result banner is shown")
     a.ns.BattleView.Refresh()

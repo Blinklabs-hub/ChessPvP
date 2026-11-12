@@ -420,6 +420,16 @@ A.SOUNDS = {
     bsBoom = { files = { 565570 } }, -- large explosion (ship sunk)
     bsSunk = { files = { 540232 } }, -- giant splash (ship goes down)
     bsBell = { files = { 537384 }, kits = { 8960 } }, -- ship's bell: battle stations
+    bsTurn = { files = { 1129273, 1129274, 1129275 }, random = true, kits = { 8960 } }, -- ship bell chime: your turn
+    bsHorn = { files = { 567094 } }, -- lighthouse foghorn: the battle begins
+    bsWaves = { files = { 839242 } }, -- ocean wave
+    bsGulls = { files = { 559721, 559716 }, random = true }, -- seagulls
+    bsCreak = { files = { 895858, 895860, 895862, 895864, 895866, 895868 }, random = true, kits = { 838 } }, -- ship timbers
+    bsParrot = { files = { 558085, 558086, 558087 }, random = true }, -- the parrot mocks a miss
+    bsArr = { files = { 540807, 540810, 540813 }, random = true }, -- pirate shout: enemy ship sunk
+    bsCheer = { files = { 540808, 540806 }, random = true }, -- pirate cheer: victory
+    bsDying = { files = { 540809 } }, -- pirate death: one of yours goes down
+    bsSonar = { files = { 569006, 568683 }, random = true }, -- sonar ping: a submarine sinks
 }
 
 A.RegisterArmySounds()

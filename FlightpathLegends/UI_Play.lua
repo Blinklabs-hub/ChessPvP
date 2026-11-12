@@ -60,6 +60,18 @@ local function BuildStrip(parent)
     s.clock = W.Title(s, 24)
     s.clock:SetPoint("RIGHT", -10, 0)
     s.clock:SetJustifyH("RIGHT")
+    -- "YOUR MOVE" / "THINKING..." tag, pulsing
+    s.tag = W.Title(s, 15)
+    s.tag:SetPoint("TOPRIGHT", -10, -5)
+    s.tag:SetJustifyH("RIGHT")
+    s.t = 0
+    s:SetScript("OnUpdate", function(self, elapsed)
+        if not self.pulse then return end
+        self.t = self.t + elapsed
+        local a = 0.55 + 0.45 * (0.5 + 0.5 * math.sin(self.t * 5))
+        self.tag:SetAlpha(a)
+        self.glow:SetAlpha(0.4 + 0.6 * a)
+    end)
     s.tray = {}
     for k = 1, 15 do
         local v = Board.CreatePieceView(s, 15)
@@ -122,6 +134,31 @@ local function UpdateStrip(s, g, color)
     s.bg:SetColorTexture(c[1] * k + 0.04, c[2] * k + 0.03, c[3] * k + 0.02, 0.94)
     if toMove then s.glow:Show() else s.glow:Hide() end
     if g and g.timed then s.clock:Show() else s.clock:Hide() end
+    -- Whose move: a clear tag on the strip (the clock moves down when shown)
+    local mine = g and g.myColor and color == g.myColor
+    s.tag:ClearAllPoints()
+    if g and g.timed then s.tag:SetPoint("BOTTOMRIGHT", -10, 5) else s.tag:SetPoint("RIGHT", -10, 0) end
+    s.clock:ClearAllPoints()
+    s.clock:SetPoint("TOPRIGHT", -10, -4)
+    if toMove and g.mode ~= "spectate" and mine then
+        s.tag:SetText("YOUR MOVE")
+        s.tag:SetTextColor(0.3, 1, 0.3)
+        s.pulse = true
+    elseif toMove and g.mode ~= "spectate" then
+        s.tag:SetText(isComputer and "THINKING..." or "THEIR MOVE")
+        s.tag:SetTextColor(1, 0.55, 0.3)
+        s.pulse = false
+        s.tag:SetAlpha(1)
+    elseif toMove then
+        s.tag:SetText("TO MOVE")
+        s.tag:SetTextColor(1, 0.82, 0)
+        s.pulse = false
+        s.tag:SetAlpha(1)
+    else
+        s.tag:SetText("")
+        s.pulse = false
+        s.glow:SetAlpha(1)
+    end
 
     local caps = g and g.captures and g.captures[color] or {}
     local sorted = {}

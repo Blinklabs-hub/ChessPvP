@@ -14,6 +14,7 @@ BV.LABEL = 18 -- room for A-J / 1-10
 BV.BASE = BV.LABEL + BV.CELL * 10
 BV.STRIP = 58
 BV.TITLE = 20
+BV.TURN = 42 -- the "whose turn" banner across both seas
 BV.ROSTER = 38
 BV.GAP = 6
 BV.HANDLE = 30
@@ -145,6 +146,10 @@ local function BuildGrid(parent, kind)
             BV.Refresh()
         end)
         b:SetScript("OnClick", function(self, button) BV.OnCellClick(g, self.cell, button) end)
+        if kind == "mine" then
+            b:EnableMouseWheel(true)
+            b:SetScript("OnMouseWheel", function() BV.Rotate() end)
+        end
         g.cells[cell] = b
     end
     -- effects layer
@@ -407,16 +412,24 @@ local function BuildGamePanel(gp)
     view.status:SetJustifyV("TOP")
     view.status:SetSpacing(3)
 
-    view.shuffle = W.Button(gp, "Shuffle Fleet", 140, 26, function()
+    view.shuffle = W.Button(gp, "Shuffle", 92, 26, function()
         BS.Shuffle()
         view.carry = nil
+        A.Play("bsCreak")
     end)
     view.shuffle:SetPoint("TOPLEFT", 4, -110)
-    view.ready = W.Button(gp, "Ready!", 140, 26, function()
+    view.rotate = W.Button(gp, "Rotate", 92, 26, function() BV.Rotate() end)
+    view.rotate:SetPoint("LEFT", view.shuffle, "RIGHT", 4, 0)
+    W.Tooltip(view.rotate, function(_, tip)
+        tip:SetText("Turn a ship", 1, 0.82, 0)
+        tip:AddLine("Turns the ship you are carrying, or the last ship you moved.", 1, 1, 1, true)
+        tip:AddLine("You can also right-click a ship or use the mouse wheel.", 0.8, 0.8, 0.8, true)
+    end)
+    view.ready = W.Button(gp, "Ready!", 92, 26, function()
         view.carry = nil
         BS.Ready()
     end)
-    view.ready:SetPoint("LEFT", view.shuffle, "RIGHT", 8, 0)
+    view.ready:SetPoint("LEFT", view.rotate, "RIGHT", 4, 0)
 
     local logBox = W.Card(gp)
     logBox:SetPoint("TOPLEFT", 0, -144)
@@ -503,6 +516,68 @@ function BV.Build(page)
     view.leftTitle = W.Title(page, 15, "Your Fleet")
     view.rightTitle = W.Title(page, 15, "Enemy Waters")
     view.strips = { BuildStrip(page), BuildStrip(page) }
+
+    -- Whose turn: a banner across both seas, pulsing.
+    local turn = CreateFrame("Frame", nil, page)
+    turn.bg = turn:CreateTexture(nil, "BACKGROUND")
+    turn.bg:SetAllPoints()
+    turn.shine = turn:CreateTexture(nil, "BORDER")
+    turn.shine:SetAllPoints()
+    turn.shine:SetTexture(W.TEX .. "burst")
+    turn.shine:SetBlendMode("ADD")
+    W.Background(turn, 0, 0, 0, 0, { 0.9, 0.75, 0.3, 0.9 })
+    turn.text = W.Title(turn, 22)
+    turn.text:SetPoint("CENTER", 0, 1)
+    turn.text:SetJustifyH("CENTER")
+    turn.sub = W.Title(turn, 18, nil, { 1, 1, 1 })
+    turn.sub:SetPoint("RIGHT", -12, 0)
+    turn.sub:SetJustifyH("RIGHT")
+    turn.hint = W.Label(turn, "GameFontHighlightSmall")
+    turn.hint:SetPoint("LEFT", 12, 0)
+    turn.hint:SetJustifyH("LEFT")
+    turn.t = 0
+    turn:SetScript("OnUpdate", function(self, elapsed)
+        self.t = self.t + elapsed
+        local p = 0.5 + 0.5 * math.sin(self.t * 4)
+        self.shine:SetAlpha(self.urgent and (0.15 + 0.35 * p) or 0.12)
+        self.text:SetAlpha(self.urgent and (0.75 + 0.25 * p) or 1)
+        for k = 1, 2 do
+            local g = view.glow[k]
+            if g:IsShown() then g:SetAlpha(0.45 + 0.55 * p) end
+        end
+    end)
+    turn:Hide()
+    view.turn = turn
+
+    -- A glowing frame around the sea to look at, and a dimmer for the other one.
+    view.glow, view.dim = {}, {}
+    for k = 1, 2 do
+        local g = CreateFrame("Frame", nil, page)
+        g:SetFrameLevel(page:GetFrameLevel() + 40)
+        g:EnableMouse(false)
+        g.edges = {}
+        for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 4 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 4 },
+            { "TOPLEFT", "BOTTOMLEFT", 4, nil }, { "TOPRIGHT", "BOTTOMRIGHT", 4, nil } }) do
+            local t = g:CreateTexture(nil, "OVERLAY")
+            t:SetPoint(e[1]); t:SetPoint(e[2])
+            if e[3] then t:SetWidth(e[3]) end
+            if e[4] then t:SetHeight(e[4]) end
+            g.edges[#g.edges + 1] = t
+        end
+        function g:SetColor(r, gg, b)
+            for _, t in ipairs(self.edges) do t:SetColorTexture(r, gg, b, 1) end
+        end
+        g:Hide()
+        view.glow[k] = g
+        local d = CreateFrame("Frame", nil, page)
+        d:SetFrameLevel(page:GetFrameLevel() + 39)
+        d:EnableMouse(false)
+        d.tex = d:CreateTexture(nil, "OVERLAY")
+        d.tex:SetAllPoints()
+        d.tex:SetColorTexture(0, 0, 0, 0.42)
+        d:Hide()
+        view.dim[k] = d
+    end
     view.rosters = { BuildRoster(page), BuildRoster(page) }
     view.banner = BuildBanner(page)
 
@@ -531,14 +606,14 @@ end
 function BV.SizeFor(cellPx, showSide)
     local gridPx = BV.BASE * cellPx / BV.CELL
     local w = gridPx * 2 + BV.GAP * 2 + BV.HANDLE + (showSide and (BV.GAP + BV.SIDE) or 0)
-    local h = BV.STRIP + BV.GAP + BV.TITLE + gridPx + BV.GAP + BV.ROSTER + 12
+    local h = BV.STRIP + BV.GAP + BV.TURN + BV.TITLE + gridPx + BV.GAP + BV.ROSTER + 12
     if showSide then h = max(h, BV.SETUP_H) end
     return w, h
 end
 
 function BV.CellFor(w, h, showSide)
     local availW = (w - BV.GAP * 2 - BV.HANDLE - (showSide and (BV.GAP + BV.SIDE) or 0)) / 2
-    local availH = h - BV.STRIP - BV.GAP - BV.TITLE - BV.GAP - BV.ROSTER - 12
+    local availH = h - BV.STRIP - BV.GAP - BV.TURN - BV.TITLE - BV.GAP - BV.ROSTER - 12
     local gridPx = min(availW, availH)
     return max(20, min(48, floor(gridPx / BV.BASE * BV.CELL)))
 end
@@ -554,18 +629,30 @@ function BV.Layout(cellPx, showSide)
         view.strips[k]:SetStripWidth(gridPx)
         local title = k == 1 and view.leftTitle or view.rightTitle
         title:ClearAllPoints()
-        title:SetPoint("TOPLEFT", view.page, "TOPLEFT", x + BV.LABEL * scale, -(S + GAP + 2))
+        title:SetPoint("TOPLEFT", view.page, "TOPLEFT", x + BV.LABEL * scale, -(S + GAP + BV.TURN + 2))
         holder:ClearAllPoints()
-        holder:SetPoint("TOPLEFT", view.page, "TOPLEFT", x, -(S + GAP + BV.TITLE))
+        holder:SetPoint("TOPLEFT", view.page, "TOPLEFT", x, -(S + GAP + BV.TURN + BV.TITLE))
         holder:SetSize(gridPx, gridPx)
+        -- glow frame and dimmer over the sea itself (not the coordinate labels)
+        local seaX, seaY = x + BV.LABEL * scale, -(S + GAP + BV.TURN + BV.TITLE + BV.LABEL * scale)
+        local seaPx = gridPx - BV.LABEL * scale
+        view.glow[k]:ClearAllPoints()
+        view.glow[k]:SetPoint("TOPLEFT", view.page, "TOPLEFT", seaX - 4, seaY + 4)
+        view.glow[k]:SetSize(seaPx + 8, seaPx + 8)
+        view.dim[k]:ClearAllPoints()
+        view.dim[k]:SetPoint("TOPLEFT", view.page, "TOPLEFT", seaX, seaY)
+        view.dim[k]:SetSize(seaPx, seaPx)
         local grid = k == 1 and view.left or view.right
         grid:SetScale(scale)
         view.rosters[k]:ClearAllPoints()
-        view.rosters[k]:SetPoint("TOPLEFT", view.page, "TOPLEFT", x + BV.LABEL * scale, -(S + GAP + BV.TITLE + gridPx + GAP))
+        view.rosters[k]:SetPoint("TOPLEFT", view.page, "TOPLEFT", x + BV.LABEL * scale, -(S + GAP + BV.TURN + BV.TITLE + gridPx + GAP))
         view.rosters[k]:SetWidth(gridPx - BV.LABEL * scale)
         view.rosters[k]:Arrange(gridPx - BV.LABEL * scale)
     end
-    local total = S + GAP + BV.TITLE + gridPx + GAP + BV.ROSTER + 12
+    local total = S + GAP + BV.TURN + BV.TITLE + gridPx + GAP + BV.ROSTER + 12
+    view.turn:ClearAllPoints()
+    view.turn:SetPoint("TOPLEFT", view.page, "TOPLEFT", 0, -(S + GAP))
+    view.turn:SetSize(gridPx * 2 + GAP, BV.TURN - 6)
     view.handle:ClearAllPoints()
     view.handle:SetPoint("TOPLEFT", view.page, "TOPLEFT", gridPx * 2 + GAP * 2, -(S + GAP))
     view.handle:SetHeight(gridPx)
@@ -575,7 +662,7 @@ function BV.Layout(cellPx, showSide)
     if showSide then view.side:Show() else view.side:Hide() end
     view.toggle:SetIcon(nil, showSide and ">" or "<")
     view.banner:ClearAllPoints()
-    view.banner:SetPoint("CENTER", view.page, "TOPLEFT", gridPx + GAP / 2, -(S + GAP + BV.TITLE + gridPx / 2))
+    view.banner:SetPoint("CENTER", view.page, "TOPLEFT", gridPx + GAP / 2, -(S + GAP + BV.TURN + BV.TITLE + gridPx / 2))
     local logH = max(60, max(total, BV.SETUP_H) - 144 - 40)
     view.logBox:SetHeight(logH)
     view.log:Resize(BV.SIDE - 8, logH - 26)
@@ -606,6 +693,27 @@ local function Ghost(s)
     return cells, true
 end
 
+-- Turns the carried ship, or the last ship moved.
+function BV.Rotate()
+    local s = BS.current
+    if not s or s.phase ~= "place" or s.ready or s.mode == "spectate" then return end
+    if view.carry then
+        view.carry.v = not view.carry.v
+        A.Play("bsCreak")
+    elseif view.lastShip then
+        local i = view.lastShip
+        local sh = s.myLayout[i]
+        if BS.MoveShip(i, sh.r, sh.c, not sh.v) then
+            A.Play("bsCreak")
+        else
+            ns.Print("no room to turn the " .. BS.FLEET[i].name .. " there - move it first.")
+        end
+    else
+        ns.Print("click a ship first, then turn it.")
+    end
+    BV.Refresh()
+end
+
 function BV.OnCellClick(g, cell, button)
     local s = BS.current
     if not s then return end
@@ -616,18 +724,20 @@ function BV.OnCellClick(g, cell, button)
             else
                 local i = s.occ[cell]
                 if i then
+                    view.lastShip = i
                     local sh = s.myLayout[i]
                     if not BS.MoveShip(i, sh.r, sh.c, not sh.v) then ns.Print("no room to turn the " .. BS.FLEET[i].name .. " there.") end
                 end
             end
-            ns.Sound("click")
+            A.Play("bsCreak")
             BV.Refresh()
             return
         end
         if view.carry then
             local r, c = BS.RC(cell)
             if BS.MoveShip(view.carry.i, r, c, view.carry.v) then
-                ns.Sound("castle")
+                A.Play("bsCreak")
+                view.lastShip = view.carry.i
                 view.carry = nil
             else
                 ns.Sound("click")
@@ -636,6 +746,7 @@ function BV.OnCellClick(g, cell, button)
             local i = s.occ[cell]
             if i then
                 view.carry = { i = i, v = s.myLayout[i].v }
+                view.lastShip = i
                 ns.Sound("select")
             end
         end
@@ -685,11 +796,14 @@ local function ShotEffect(s, mine, cell, res)
     local i = tonumber(string.match(res or "", "^s(%d)$"))
     if res == "m" then
         A.Play("bsSplash")
+        if math.random() < 0.35 then ns.After(0.4, function() A.Play("bsParrot") end) end
         Burst(g, cell, "splash", 0.8, 0.95, 1, 1.4)
         FloatText(g, cell, "Miss", 0.7, 0.85, 1)
     elseif i then
         A.Play("bsBoom")
         A.Play("bsSunk")
+        ns.After(0.6, function() A.Play(mine and "bsArr" or "bsDying") end)
+        if i == 4 then ns.After(1.2, function() A.Play("bsSonar") end) end
         Burst(g, cell, "burst", 1, 0.4, 0.1, 3, true)
         Burst(g, cell, "splash", 0.9, 0.95, 1, 2.4)
         local name = BS.FLEET[i].name
@@ -718,12 +832,17 @@ ns.On("BS_STARTED", function(s)
     view.carry = nil
     view.showSetup = false
     if view.banner then view.banner:Hide() end
-    if s.mode ~= "spectate" then A.Play("bsBell") end
+    view.wasMyTurn = nil
+    if s.mode ~= "spectate" then
+        A.Play("bsBell")
+        ns.After(0.8, function() A.Play("bsGulls") end)
+    end
 end)
 
 ns.On("BS_BATTLE", function(s)
-    A.Play("bsBell")
-    A.Play("cry" .. A.MyFaction())
+    A.Play("bsHorn")
+    A.Play("bsWaves")
+    ns.After(1.2, function() A.Play("cry" .. A.MyFaction()) end)
 end)
 
 ------------------------------------------------------------------------
@@ -826,6 +945,9 @@ function BV.Refresh()
         end
     end
 
+    -- Whose turn: banner, glowing sea and dimmed sea
+    BV.RefreshTurn(s)
+
     -- Titles, strips and rosters
     if spect then
         view.leftTitle:SetText(ns.ShortName(s.host) .. "'s Fleet")
@@ -886,7 +1008,7 @@ function BV.Refresh()
     end
     view.status:SetText(status)
     local placing = s.phase == "place" and not s.ready and not spect
-    if placing then view.shuffle:Show(); view.ready:Show() else view.shuffle:Hide(); view.ready:Hide() end
+    if placing then view.shuffle:Show(); view.rotate:Show(); view.ready:Show() else view.shuffle:Hide(); view.rotate:Hide(); view.ready:Hide() end
     view.log:SetData(LogLines(s))
     view.log.offset = max(0, #view.log.data - (view.log.visible or 1))
     view.log:Update()
@@ -900,6 +1022,59 @@ function BV.Refresh()
         view.resign:Hide()
         view.newButton:Show()
     end
+end
+
+local GREEN, RED, GOLD, GREY = { 0.1, 0.45, 0.12 }, { 0.5, 0.08, 0.06 }, { 0.5, 0.36, 0.05 }, { 0.2, 0.2, 0.22 }
+
+function BV.RefreshTurn(s)
+    local turn = view.turn
+    local function Glow(k, color)
+        if color then
+            view.glow[k]:SetColor(color[1], color[2], color[3])
+            view.glow[k]:Show()
+        else
+            view.glow[k]:Hide()
+        end
+    end
+    local function Dim(k, on) if on then view.dim[k]:Show() else view.dim[k]:Hide() end end
+    if not s or s.phase == "over" then
+        turn:Hide(); Glow(1); Glow(2); Dim(1, false); Dim(2, false)
+        return
+    end
+    local left = BS.TimeLeft()
+    local secs = string.format("%d", math.ceil(left))
+    local who = s.mode == "ai" and "The computer" or ns.ShortName((s.mode == "spectate" and s.guest) or s.opp or "?")
+    local bg, text, hint, urgent = GREY, "", "", false
+    if s.mode == "spectate" then
+        bg, text = GREY, (s.phase == "place" and "The fleets are deploying..." or "Battle in progress")
+        Glow(1); Glow(2); Dim(1, false); Dim(2, false)
+        secs = ""
+    elseif s.phase == "place" and not s.ready then
+        bg, text, urgent = GOLD, "DEPLOY YOUR FLEET", true
+        hint = "Click a ship to move it - right-click, mouse wheel or Rotate to turn it"
+        Glow(1, { 1, 0.82, 0.2 }); Glow(2); Dim(1, false); Dim(2, true)
+    elseif s.phase == "place" then
+        bg, text = GREY, "Fleet sealed - waiting for " .. who
+        Glow(1); Glow(2); Dim(1, false); Dim(2, true)
+        secs = ""
+    elseif s.myTurn then
+        bg, text, urgent = GREEN, s.awaiting and "CANNONBALL AWAY..." or "YOUR TURN - FIRE!", not s.awaiting
+        hint = s.awaiting and "" or "Click a square in Enemy Waters"
+        if s.missed > 0 then hint = hint .. string.format("   |cffff8040missed %d/%d|r", s.missed, BS.MAX_MISSED) end
+        Glow(1); Glow(2, { 0.3, 1, 0.3 }); Dim(1, true); Dim(2, false)
+    else
+        bg, text = RED, string.upper(who) .. " IS TAKING AIM..."
+        hint = "Your fleet is under fire"
+        Glow(1, { 1, 0.3, 0.2 }); Glow(2); Dim(1, false); Dim(2, true)
+    end
+    turn.bg:SetColorTexture(bg[1], bg[2], bg[3], 0.92)
+    turn.shine:SetVertexColor(bg[1] * 2, bg[2] * 2, bg[3] * 2)
+    turn.text:SetText(text)
+    turn.hint:SetText(hint)
+    turn.sub:SetText(secs ~= "" and (secs .. "s") or "")
+    if urgent and left < 10 then turn.sub:SetTextColor(1, 0.3, 0.2) else turn.sub:SetTextColor(1, 1, 1) end
+    turn.urgent = urgent
+    turn:Show()
 end
 
 function BV.ResultText(s)
@@ -987,13 +1162,25 @@ end
 
 ns.On("BS_OVER", function(s)
     if s.outcome == "win" then
-        ns.Sound("win" .. A.MyFaction())
+        A.Play("bsCheer")
+        ns.After(0.9, function() ns.Sound("win" .. A.MyFaction()) end)
     elseif s.outcome == "loss" then
-        ns.Sound("lose")
+        A.Play("bsDying")
+        ns.After(0.9, function() ns.Sound("lose") end)
     end
     ns.After(0.8, function()
         if BS.current == s and BV.Visible() then BV.ShowBanner(s) end
     end)
+end)
+
+-- A bell when our turn starts (and a taskbar flash when the window is closed).
+ns.On("BS_CHANGED", function(s)
+    local mine = s.phase == "battle" and s.myTurn and not s.awaiting and s.mode ~= "spectate"
+    if mine and not view.wasMyTurn then
+        A.Play("bsTurn")
+        if not BV.Visible() and FlashClientIcon then pcall(FlashClientIcon) end
+    end
+    view.wasMyTurn = mine
 end)
 
 -- Keep the banner text current while the fair-play check completes.

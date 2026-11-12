@@ -902,6 +902,18 @@ ns.On("CHESS_GAME_STARTED", function(g)
     end
 end)
 
+-- A bell when it becomes our move in an online game (and a flash when the window is closed).
+ns.On("CHESS_GAME_MOVED", function(g)
+    if g.mode == "online" and g.state == "active" and g.pos.turn == g.myColor then
+        ns.After(0.5, function()
+            if G.current == g and g.state == "active" and g.pos.turn == g.myColor then
+                A.Play("bsTurn")
+                if not (built and main:IsShown()) and FlashClientIcon then pcall(FlashClientIcon) end
+            end
+        end)
+    end
+end)
+
 ns.On("CHESS_GAME_MOVED", function(g, capture, check)
     if BoardVisible() and PV.play.board then
         PV.play.board:AnimateLast(g, check)
