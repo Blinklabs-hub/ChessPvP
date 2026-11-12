@@ -360,7 +360,7 @@ function P.OnlineList()
                 name = name, status = o.status, opp = o.opp,
                 -- Witnessed rating when known; otherwise what they claim, marked unverified.
                 r = v and v.r or (e and e.r) or D.START_RATING, verified = v ~= nil,
-                t = e and e.t or "", f = e and e.f,
+                t = e and e.t or "", f = e and e.f, ch = e and e.ch, battle = o.battle,
                 g = v and v.games or 0, casual = ns.Ledger.Casual(name),
             }
         end

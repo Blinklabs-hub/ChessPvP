@@ -396,3 +396,68 @@ function W.Bar(parent, width, height)
     end
     return f
 end
+
+------------------------------------------------------------------------
+-- Character identity widgets
+------------------------------------------------------------------------
+-- Identity of any player: own character from the game, others from what their addon shared.
+function W.CharInfo(name)
+    if name and ns.SameName(name, ns.me) then return A.MyCharInfo() end
+    local e = name and ns.Profile.players and ns.Profile.players[name]
+    return e and e.ch or nil
+end
+
+-- Name coloured by class (falls back to the faction/army colour, then white).
+function W.ClassName(name, info, fallback)
+    local c = (info and A.ClassColor(info.class)) or fallback or { 1, 1, 1 }
+    return "|c" .. W.Hex(c) .. ns.ShortName(name) .. "|r"
+end
+
+-- Round character portrait with a class-coloured ring.
+--   :SetPlayer(name, info, faction) - live portrait for yourself (and your target),
+--   race portrait for others, faction crest when nothing is known.
+function W.Portrait(parent, size)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetSize(size, size)
+    f.tex = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.tex:SetPoint("TOPLEFT", size * 0.07, -size * 0.07)
+    f.tex:SetPoint("BOTTOMRIGHT", -size * 0.07, size * 0.07)
+    if f.CreateMaskTexture and f.tex.AddMaskTexture then
+        local mask = f:CreateMaskTexture()
+        if mask then
+            mask:SetAllPoints(f.tex)
+            mask:SetTexture(A.PortraitMask(), "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            f.tex:AddMaskTexture(mask)
+        end
+    end
+    f.ring = f:CreateTexture(nil, "ARTWORK", nil, 3)
+    f.ring:SetAllPoints()
+    f.ring:SetTexture(W.TEX .. "token_ring")
+    function f:SetPlayer(name, info, faction)
+        local unit
+        if name and ns.SameName(name, ns.me) then
+            unit = "player"
+        elseif name and UnitExists and UnitExists("target") and ns.UnitPlayerName and ns.UnitPlayerName("target") == name then
+            unit = "target"
+        end
+        local done = false
+        if unit and SetPortraitTexture then
+            done = pcall(SetPortraitTexture, self.tex, unit)
+            if done then self.tex:SetTexCoord(0, 1, 0, 1) end
+        end
+        if not done then
+            local icon = A.RaceIcon(info)
+            if icon then
+                self.tex:SetTexture(icon)
+                self.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            else
+                local crest, isPortrait = A.Crest(faction or "Alliance")
+                self.tex:SetTexture(crest or "Interface\\Icons\\inv_misc_questionmark")
+                if isPortrait then self.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92) else self.tex:SetTexCoord(0, 0.62, 0, 0.62) end
+            end
+        end
+        local c = (info and A.ClassColor(info.class)) or { 0.85, 0.68, 0.25 }
+        self.ring:SetVertexColor(c[1], c[2], c[3])
+    end
+    return f
+end

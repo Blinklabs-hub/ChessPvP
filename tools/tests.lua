@@ -565,11 +565,13 @@ if want("visual") then
     local c = NewClient("Solo")
     c.ns.db.settings.animations = false
     c.ns.UI.ShowTab("play")
-    c.ns.Game.StartLocal()
-    for _, mv in ipairs({ "e2e4", "d7d5", "e4d5" }) do
-        c.ns.Game.Move(mv)
+    c.ns.Game.StartAI(1, 1)
+    for _, mv in ipairs({ "e2e4", "a2a3", "h2h3" }) do
+        check(c.ns.Game.Move(mv), "move " .. mv)
         Advance(0.1)
         check((BoardMatches(c)), "instant board update with animations off (" .. mv .. ")")
+        Advance(1.5) -- the computer replies
+        check((BoardMatches(c)), "instant board update after the computer's reply")
     end
     eq(#c.errors, 0, "no errors with animations off")
     RemoveClient(c)
@@ -855,6 +857,76 @@ if want("social") then
     a.ns.Tabs.coll.section = "pieces"
     a.ns.UI.Layout(); a.ns.UI.Refresh()
     eq(#a.ns.Tabs.coll.grids.pieces.data, 6, "five Warcraft matchups and classic chess listed")
+    for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
+if want("identity") then
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    local w = NewClient("Wit", nil, "Ness")
+    a.faction, a.race, a.class, a.level, a.guild = "Horde", "Tauren", "WARRIOR", 60, "Peking Malta"
+    b.faction, b.race, b.class, b.sex = "Alliance", "NightElf", "MAGE", 3
+    for _, cl in ipairs({ a, b, w }) do cl.ns.Game.Announce(true) end
+    Advance(25)
+    local CA, JK = "Canga Prime", "Just Keepingcalm"
+
+    section("identity: characters are shared")
+    local ch = w.ns.Profile.players[CA] and w.ns.Profile.players[CA].ch
+    check(ch and ch.race == "Tauren" and ch.class == "WARRIOR" and ch.level == 60, "Canga's character reaches others")
+    eq(ch and ch.guild, "Peking Malta", "guild shared")
+    eq(w.ns.Assets.CharLine(ch), "Level 60 Tauren Warrior", "armory line")
+    local ch2 = w.ns.Profile.players[JK].ch
+    eq(ch2.sex, 3, "Keepingcalm is female")
+    check(w.ns.Assets.RaceIcon(ch2):find("nightelf_female"), "race portrait for others: night elf female")
+
+    section("identity: header card")
+    a.ns.UI.ShowTab("play")
+    a.portraits = 0
+    a.ns.UI.Refresh()
+    check(a.portraits > 0, "your own live character portrait is used")
+
+    section("identity: one simple battle panel")
+    local s = a.ns.db.settings
+    local play = a.ns.PlayView.play
+    play.casualTab:Click()
+    eq(s.rated, false, "Casual toggle")
+    play.ratedTab:Click()
+    eq(s.rated, true, "Rated toggle")
+    s.tc = 0 -- any time control
+    play.findButton:Click()
+    check(a.ns.Game.seek and a.ns.Game.seek.rated and a.ns.Game.seek.any, "Find Random Opponent joins the rated queue with any time control")
+    play.findButton:Click()
+    eq(a.ns.Game.seek, nil, "clicking again leaves the queue")
+    s.tc = 4
+    check(a.ns.Game.StartLocal == nil, "Pass & Play is gone")
+
+    section("identity: live battles and the battle log")
+    a.ns.Game.Invite(JK, { rated = false }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(3)
+    local white = (a.ns.Game.current.myColor == 1) and a or b
+    local black = (white == a) and b or a
+    white.ns.Game.Move("e2e4"); Advance(1)
+    black.ns.Game.Move("d7d5"); Advance(1)
+    white.ns.Game.Move("e4d5"); Advance(20)
+    w.ns.UI.ShowTab("live")
+    local rows = w.ns.Tabs.live.list.data
+    eq(#rows, 1, "the battle is listed once on Live Battles")
+    check(rows[1] and rows[1].battle and rows[1].battle.rated == false, "listed as casual")
+    w.ns.UI.Refresh()
+    local logRows = a.ns.PlayView.LogRows(a.ns.Game.current)
+    eq(#logRows, 2, "battle log: two numbered rows for three moves")
+    check(logRows[2][1].last and not logRows[1][1].last, "the latest move is highlighted")
+    check(logRows[2][1].text:find("ff9040x"), "captures are highlighted")
+    check(logRows[1][1].text:find("|T"), "moves have piece icons")
+    -- watching from the Live tab
+    w.ns.Tabs.live.list.rows[1].watch:Click()
+    Advance(3)
+    eq(w.ns.Game.current and w.ns.Game.current.mode, "spectate", "Watch on the Live tab starts spectating")
+    a.ns.UI.ShowProfile(JK); Advance(3)
+    check(a.ns.UI.profileCard:IsShown(), "profile card with character info")
     for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
     net.forever = false
 end

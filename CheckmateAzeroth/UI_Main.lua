@@ -9,7 +9,7 @@ local G, P, C, D, A, W, Board, PV, T = ns.Game, ns.Profile, ns.Comm, ns.Data, ns
 local floor, max, min = math.floor, math.max, math.min
 
 local PAD = 12
-local HEAD = 34 -- title row
+local HEAD = 56 -- title row with the character card
 local TABBAR = 30 -- tab buttons
 local MIN_BOARD, MAX_BOARD = 300, 1000
 
@@ -22,6 +22,7 @@ local size = { w = 0, h = 0 } -- current window size (tracked here, not read bac
 local TABS = {
     { id = "play", text = "Battle", build = PV.Build, refresh = PV.Refresh },
     { id = "lobby", text = "Lobby", build = T.BuildLobby, refresh = T.RefreshLobby, layout = T.LayoutLobby },
+    { id = "live", text = "Live Battles", build = T.BuildLive, refresh = T.RefreshLive, layout = T.LayoutLive },
     { id = "ladder", text = "Ladder", build = T.BuildLadder, refresh = T.RefreshLadder, layout = T.LayoutLadder },
     { id = "collection", text = "Collection", build = T.BuildCollection, refresh = T.RefreshCollection, layout = T.LayoutCollection },
     { id = "settings", text = "Settings", build = T.BuildSettings, refresh = T.RefreshSettings, layout = T.LayoutSettings },
@@ -81,7 +82,16 @@ function UI.Layout()
     local w, h = size.w, size.h
     local top = ContentTop()
     -- The player line beside the title only when there is room for it.
-    if w >= 660 then main.me:Show() else main.me:Hide() end
+    -- The character card shrinks with the window and hides when there is no room.
+    local cardW = min(360, w - 290)
+    if cardW >= 180 then
+        main.me:SetWidth(cardW)
+        main.me.name:SetWidth(cardW - 52 - 70)
+        main.me.line:SetWidth(cardW - 52 - 50)
+        main.me:Show()
+    else
+        main.me:Hide()
+    end
     for i = 1, #TABS do
         local tab = TABS[i]
         local page = main.pages[tab.id]
@@ -184,19 +194,39 @@ local function Build()
     W.Chrome(main, "goldBorder", 6, 28)
     table.insert(UISpecialFrames, "CheckmateAzerothFrame") -- closes with Escape
 
-    -- Title: Alliance crest - Checkmate: Azeroth - Horde crest
-    local crestL = main:CreateTexture(nil, "ARTWORK")
-    crestL:SetSize(30, 30)
-    crestL:SetPoint("TOPLEFT", PAD - 4, -3)
-    W.SetCrest(crestL, "Alliance")
-    local title = W.Title(main, 22, "Checkmate: Azeroth")
-    title:SetPoint("TOPLEFT", PAD + 28, -8)
-    local crestR = main:CreateTexture(nil, "ARTWORK")
-    crestR:SetSize(30, 30)
-    crestR:SetPoint("LEFT", title, "RIGHT", 2, 3)
-    W.SetCrest(crestR, "Horde")
-    main.me = W.Label(main, "GameFontHighlightSmall", "")
-    main.me:SetPoint("LEFT", crestR, "RIGHT", 10, -2)
+    local title = W.Title(main, 24, "Checkmate: Azeroth")
+    title:SetPoint("TOPLEFT", PAD, -14)
+
+    -- Your character card (armory style), top right. Click for your full profile.
+    local card = CreateFrame("Button", nil, main)
+    card:SetSize(340, 46)
+    card:SetPoint("TOPRIGHT", -30, -5)
+    main.me = card
+    card.portrait = W.Portrait(card, 46)
+    card.portrait:SetPoint("LEFT", 0, 0)
+    card.name = W.Title(card, 16)
+    card.name:SetPoint("TOPLEFT", 52, -5)
+    card.name:SetWordWrap(false)
+    card.line = W.Label(card, "GameFontHighlightSmall")
+    card.line:SetPoint("BOTTOMLEFT", 52, 6)
+    card.line:SetWordWrap(false)
+    card.rating = W.Title(card, 20)
+    card.rating:SetPoint("TOPRIGHT", -2, -4)
+    card.rating:SetJustifyH("RIGHT")
+    card.league = card:CreateTexture(nil, "ARTWORK")
+    card.league:SetSize(20, 20)
+    card.league:SetPoint("BOTTOMRIGHT", -2, 3)
+    card.rank = card:CreateTexture(nil, "ARTWORK")
+    card.rank:SetSize(20, 20)
+    card.rank:SetPoint("RIGHT", card.league, "LEFT", -3, 0)
+    local hl = card:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 0.85, 0.4, 0.07)
+    card:SetScript("OnClick", function() UI.ShowProfile(ns.me) end)
+    W.Tooltip(card, function(_, tip)
+        tip:SetText("Your profile", 1, 0.82, 0)
+        tip:AddLine("Click to see your records, battles and feats.", 1, 1, 1)
+    end)
 
     local close = CreateFrame("Button", nil, main, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
@@ -205,9 +235,9 @@ local function Build()
     local x = PAD
     for i = 1, #TABS do
         local tab = TABS[i]
-        local b = W.Button(main, tab.text, 104, 24, function() UI.ShowTab(tab.id) end)
+        local b = W.Button(main, tab.text, 98, 24, function() UI.ShowTab(tab.id) end)
         b:SetPoint("TOPLEFT", x, -HEAD)
-        x = x + 108
+        x = x + 101
         main.tabs[tab.id] = b
         local page = CreateFrame("Frame", nil, main)
         page:Hide()
@@ -269,8 +299,20 @@ end
 function UI.Refresh()
     if not built or not main:IsShown() or not P.me then return end
     local p = P.me
-    main.me:SetText(string.format("%s   %s  |cffaaaaaa%d|r", ns.ShortName(ns.me),
-        P.TitleText(P.MyTitleId(), p.rating, P.RatedGames()), p.rating))
+    local card, info = main.me, A.MyCharInfo()
+    card.portrait:SetPlayer(ns.me, info, A.MyFaction())
+    card.name:SetText(W.ClassName(ns.me, info) .. "  |cffaaaaaa" .. P.TitleText(P.MyTitleId(), p.rating, P.RatedGames()) .. "|r")
+    card.line:SetText(A.CharLine(info) .. (info.guild and ("  |cff40ff40<" .. info.guild .. ">|r") or ""))
+    card.rating:SetText(p.rating)
+    local li = G.LeagueIndex(ns.me)
+    if li > 0 then W.SetLeagueIcon(card.league, li) else card.league:Hide() end
+    if P.RatedGames() >= D.PLACEMENT_GAMES then
+        local idx = 1
+        for i = 1, #D.RANKS do if p.rating >= D.RANKS[i].min then idx = i end end
+        W.SetRankIcon(card.rank, idx)
+    else
+        card.rank:Hide()
+    end
     for i = 1, #TABS do
         local tab = TABS[i]
         if tab.id == currentTab then

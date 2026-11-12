@@ -190,7 +190,12 @@ function G.Announce(force)
     nextAnnounce = now + 240 + math.random(0, 60)
     local p = P.me
     local status, opp = MyStatus()
-    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction())
+    local char, guild = ns.Assets.PackChar(ns.Assets.MyCharInfo())
+    -- While in a battle, what kind it is (for the Live Battles tab).
+    local cur, battle = G.current, ""
+    if status == "g" and cur then battle = table.concat({ cur.rated and "r" or "c", cur.base, cur.inc, #cur.moves }, ",") end
+    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(),
+        char, guild, battle)
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -200,8 +205,14 @@ C.handlers.PF = function(sender, dist, parts)
     if not P.UpdatePlayer(sender, rating, w, l, d, title, points) then return end
     local faction = parts[11]
     if faction == "Horde" or faction == "Alliance" then P.players[sender].f = faction end
+    local ch = ns.Assets.UnpackChar(parts[12], parts[13])
+    if ch then P.players[sender].ch = ch end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
+    local rated, base, inc, moves = string.match(parts[14] or "", "^([rc]),(%d+),(%d+),(%d+)$")
+    if rated and opp then
+        P.online[sender].battle = { rated = rated == "r", base = tonumber(base), inc = tonumber(inc), moves = tonumber(moves) }
+    end
     ns.Fire("CHESS_LOBBY_CHANGED")
 end
 
@@ -350,7 +361,7 @@ local function Begin(g)
     ns.Fire("CHESS_GAME_STARTED", g)
     ns.Fire("CHESS_GAME_CHANGED", g)
     if g.mode == "ai" and g.pos.turn ~= g.myColor then AIThink(g) end
-    G.Announce()
+    G.Announce(true)
 end
 
 local function OnlineBusy()
@@ -401,13 +412,6 @@ function G.StartAI(level, color)
     }))
 end
 
-function G.StartLocal()
-    if OnlineBusy() then
-        ns.Print("finish your current game first.")
-        return
-    end
-    Begin(NewGame({ mode = "local", white = "White", black = "Black" }))
-end
 
 function G.Resign()
     local g = G.current
@@ -814,7 +818,8 @@ C.handlers.PQ = function(sender, dist)
     for i = 1, #D.BADGES do
         if P.me.badges[D.BADGES[i].id] then list[#list + 1] = i end
     end
-    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","))
+    local char, guild = ns.Assets.PackChar(ns.Assets.MyCharInfo())
+    C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild)
 end
 
 C.handlers.PR = function(sender, dist, parts)
@@ -832,6 +837,8 @@ C.handlers.PR = function(sender, dist, parts)
         if b then feats[#feats + 1] = b.id end
     end
     e.feats = feats
+    local ch = ns.Assets.UnpackChar(parts[5], parts[6])
+    if ch then e.ch = ch end
     e.profileAt = ns.ServerTime()
     ns.Fire("CHESS_PROFILE_INFO", sender)
 end

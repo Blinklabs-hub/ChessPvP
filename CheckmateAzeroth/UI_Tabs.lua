@@ -46,9 +46,8 @@ local STATUS_TEXT = {
 
 local FILTERS = {
     { id = "all", text = "Everyone" },
-    { id = "r", text = "Rated queue" },
-    { id = "c", text = "Casual queue" },
-    { id = "g", text = "In battle" },
+    { id = "seek", text = "Looking for battle" },
+    { id = "i", text = "Ready" },
 }
 
 local function RecordText(rec, prefix)
@@ -56,51 +55,9 @@ local function RecordText(rec, prefix)
     return string.format("%s|cff40ff40%d|r-|cffff5040%d|r-|cffaaaaaa%d|r", prefix, rec.w or rec.cw, rec.l or rec.cl, rec.d or rec.cd)
 end
 
--- Queue panel: rated / casual buttons, time control, counts and search timer.
-local function BuildQueue(page)
-    local q = W.Card(page)
-    q:SetHeight(64)
-    q:SetPoint("TOPLEFT", 0, 0)
-    q:SetPoint("TOPRIGHT", 0, 0)
-    lobby.queue = q
-    local title = W.Title(q, 18, "Quick Match")
-    title:SetPoint("TOPLEFT", 10, -8)
-    lobby.queueInfo = W.Label(q, "GameFontHighlightSmall", "")
-    lobby.queueInfo:SetPoint("TOPLEFT", 10, -32)
-    lobby.queueInfo:SetWidth(260)
-    lobby.queueInfo:SetJustifyV("TOP")
-
-    lobby.tcButton = W.Button(q, "", 130, 24, function()
-        local s = ns.db.settings
-        -- 0 = any time control, then the regular list
-        s.queueTc = ((s.queueTc or 0) + 1) % (#D.TIME_CONTROLS) -- the last entry (no clock) is skipped
-        if G.seek then G.StopSeek() end
-        ns.UI.Refresh()
-    end)
-    W.Tooltip(lobby.tcButton, function(_, tip)
-        tip:SetText("Time control for the queue", 1, 0.82, 0)
-        tip:AddLine("\"Any\" matches whatever the other player picked (two \"Any\" players get Rapid 10+0).", 1, 1, 1, true)
-    end)
-    lobby.casualButton = W.Button(q, "Casual Queue", 130, 28, function()
-        if G.seek and not G.seek.rated then G.StopSeek() else T.JoinQueue(false) end
-        ns.UI.Refresh()
-    end)
-    lobby.ratedButton = W.Button(q, "Rated Queue", 130, 28, function()
-        if G.seek and G.seek.rated then G.StopSeek() else T.JoinQueue(true) end
-        ns.UI.Refresh()
-    end)
-    lobby.ratedButton:SetPoint("RIGHT", -10, 0)
-    lobby.casualButton:SetPoint("RIGHT", lobby.ratedButton, "LEFT", -6, 0)
-    lobby.tcButton:SetPoint("RIGHT", lobby.casualButton, "LEFT", -10, 0)
-    lobby.league = q:CreateTexture(nil, "ARTWORK")
-    lobby.league:SetSize(28, 28)
-    lobby.league:SetPoint("RIGHT", lobby.tcButton, "LEFT", -10, 0)
-    W.Tooltip(lobby.league, function() return false end)
-end
-
+-- Joins the random-opponent queue with the Battle tab's time control (0 = any).
 function T.JoinQueue(rated)
-    local s = ns.db.settings
-    local idx = s.queueTc or 0
+    local idx = ns.db.settings.tc or 4
     if idx == 0 then
         local tc = D.TIME_CONTROLS[4]
         G.StartSeek(tc.base, tc.inc, rated, true)
@@ -112,7 +69,8 @@ end
 
 function T.BuildLobby(page)
     lobby.page = page
-    BuildQueue(page)
+    lobby.title = W.Title(page, 20, "Players Online")
+    lobby.title:SetPoint("TOPLEFT", 4, -4)
 
     lobby.filters = {}
     for i, f in ipairs(FILTERS) do
@@ -121,11 +79,11 @@ function T.BuildLobby(page)
             lobby.list.offset = 0
             ns.UI.Refresh()
         end)
-        b:SetPoint("TOPLEFT", (i - 1) * 116, -72)
+        b:SetPoint("TOPRIGHT", -(#FILTERS - i) * 116 - 4, -2)
         lobby.filters[f.id] = b
     end
     lobby.count = W.Label(page, "GameFontHighlightSmall", "")
-    lobby.count:SetPoint("TOPRIGHT", -4, -77)
+    lobby.count:SetPoint("LEFT", lobby.title, "RIGHT", 10, -2)
 
     lobby.list = W.List(page, 52, function(row)
         W.Gradient(row, { 0.14, 0.11, 0.07, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
@@ -133,9 +91,8 @@ function T.BuildLobby(page)
         local hl = row:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints()
         hl:SetColorTexture(1, 0.85, 0.4, 0.07)
-        row.crest = row:CreateTexture(nil, "ARTWORK")
-        row.crest:SetSize(42, 42)
-        row.crest:SetPoint("LEFT", 5, 0)
+        row.portrait = W.Portrait(row, 44)
+        row.portrait:SetPoint("LEFT", 4, 0)
         row.name = W.Title(row, 16)
         row.name:SetPoint("TOPLEFT", 54, -7)
         row.name:SetWordWrap(false)
@@ -183,11 +140,9 @@ function T.BuildLobby(page)
             self.status:SetWidth(max(60, w - statusX - 190))
         end
     end, function(row, item)
-        local army = item.f
-        local info = army and A.ARMIES[army]
-        local color = info and info.color or { 0.9, 0.9, 0.9 }
-        row.name:SetText("|c" .. W.Hex(color) .. ns.ShortName(item.name) .. "|r")
-        W.SetCrest(row.crest, army)
+        local faction = item.f and A.ARMIES[item.f]
+        row.portrait:SetPlayer(item.name, item.ch, item.f)
+        row.name:SetText(W.ClassName(item.name, item.ch, faction and faction.color) .. "  |cffaaaaaa" .. A.CharLine(item.ch) .. "|r")
         local idx = RankIndex(item.r, item.g)
         if idx then W.SetRankIcon(row.rank, idx) else row.rank:Hide() end
         local rating = item.verified and ("|cffffffff" .. item.r .. "|r") or ("|cff808080~" .. item.r .. "?|r")
@@ -204,7 +159,7 @@ function T.BuildLobby(page)
             if item.status == "d" then row.challenge:Disable() else row.challenge:Enable() end
         end
     end, 4)
-    lobby.list:SetPoint("TOPLEFT", 0, -100)
+    lobby.list:SetPoint("TOPLEFT", 0, -34)
 
     lobby.empty = CreateFrame("Frame", nil, page)
     lobby.empty:SetSize(400, 140)
@@ -222,7 +177,7 @@ function T.BuildLobby(page)
 end
 
 function T.LayoutLobby(w, h)
-    lobby.list:Resize(w, h - 100)
+    lobby.list:Resize(w, h - 34)
 end
 
 function T.RefreshLobby()
@@ -230,7 +185,8 @@ function T.RefreshLobby()
     local rows, counts = {}, { r = 0, c = 0, g = 0 }
     for _, row in ipairs(all) do
         if counts[row.status] then counts[row.status] = counts[row.status] + 1 end
-        if lobby.filter == "all" or row.status == lobby.filter then rows[#rows + 1] = row end
+        local seeking = row.status == "r" or row.status == "c"
+        if lobby.filter == "all" or row.status == lobby.filter or (lobby.filter == "seek" and seeking) then rows[#rows + 1] = row end
     end
     lobby.list:SetData(rows)
     for id, b in pairs(lobby.filters) do
@@ -241,10 +197,8 @@ function T.RefreshLobby()
         local text
         if not C.Joined() then
             text = "Connecting to the chess network..."
-        elseif lobby.filter == "r" or lobby.filter == "c" then
-            text = "Nobody is waiting in this queue right now.\nJoin it above and you will be matched as soon as someone else joins."
-        elseif lobby.filter == "g" then
-            text = "No battles are being fought right now."
+        elseif lobby.filter == "seek" then
+            text = "Nobody is looking for a battle right now.\nUse Find Random Opponent on the Battle tab and you will be matched as soon as someone joins."
         else
             text = "No other Checkmate: Azeroth players are online right now.\nChallenge a friend by name from the Battle tab, or practise against the computer."
         end
@@ -255,24 +209,145 @@ function T.RefreshLobby()
     end
     lobby.count:SetText(#all .. " online")
 
-    -- Queue panel
-    local s = ns.db.settings
-    local idx = s.queueTc or 0
-    lobby.tcButton:SetText(ns.PlayView.QueueTcText())
-    local seek = G.seek
-    lobby.ratedButton:SetText(seek and seek.rated and "Leave queue" or "Rated Queue")
-    lobby.casualButton:SetText(seek and not seek.rated and "Leave queue" or "Casual Queue")
-    local league = G.LeagueIndex(ns.me)
-    W.SetLeagueIcon(lobby.league, league)
-    local leagueText = league == 0 and "|cffaaaaaaUnranked (plays any league)|r"
-        or ("|cffffd100" .. D.LEAGUES[league].name .. " league|r")
-    if seek then
-        local secs = floor(ns.Now() - (seek.since or ns.Now()))
-        lobby.queueInfo:SetText(string.format("Searching the %s queue...  |cffffffff%d:%02d|r\n%s",
-            seek.rated and "rated" or "casual", floor(secs / 60), secs % 60, leagueText))
+end
+
+------------------------------------------------------------------------
+-- Live Battles: every game in progress, ready to watch
+------------------------------------------------------------------------
+local live = {}
+T.live = live
+
+local function PlayerSide(row, side, align)
+    local p = {}
+    p.portrait = W.Portrait(row, 50)
+    p.name = W.Title(row, 16)
+    p.name:SetWordWrap(false)
+    p.title = W.Label(row, "GameFontHighlightSmall")
+    p.title:SetWordWrap(false)
+    p.rating = W.Title(row, 15, nil, { 1, 1, 1 })
+    if align == "LEFT" then
+        p.portrait:SetPoint("LEFT", 8, 0)
+        p.name:SetPoint("TOPLEFT", 64, -12)
+        p.title:SetPoint("TOPLEFT", p.name, "BOTTOMLEFT", 0, -3)
+        p.rating:SetPoint("TOPLEFT", p.title, "BOTTOMLEFT", 0, -3)
     else
-        lobby.queueInfo:SetText(string.format("|cffffd100%d|r waiting rated  ·  |cff80c0ff%d|r waiting casual\n%s",
-            counts.r, counts.c, leagueText))
+        p.portrait:SetPoint("RIGHT", -8, 0)
+        p.name:SetPoint("TOPRIGHT", -64, -12)
+        p.name:SetJustifyH("RIGHT")
+        p.title:SetPoint("TOPRIGHT", p.name, "BOTTOMRIGHT", 0, -3)
+        p.title:SetJustifyH("RIGHT")
+        p.rating:SetPoint("TOPRIGHT", p.title, "BOTTOMRIGHT", 0, -3)
+        p.rating:SetJustifyH("RIGHT")
+    end
+    row[side] = p
+end
+
+local function FillSide(p, name)
+    local e = P.players[name]
+    local info = W.CharInfo(name)
+    local faction = e and e.f
+    local v = ns.Ledger.Get(name)
+    local rating = v and v.r or (e and e.r) or D.START_RATING
+    local games = v and v.games or 0
+    local army = faction and A.ARMIES[faction]
+    p.portrait:SetPlayer(name, info, faction)
+    p.name:SetText(W.ClassName(name, info, army and army.color))
+    p.title:SetText(P.TitleText(e and e.t or "", rating, games) .. "  |cffaaaaaa" .. A.CharLine(info) .. "|r")
+    p.rating:SetText(v and rating or ("|cff808080" .. rating .. "?|r"))
+end
+
+function T.BuildLive(page)
+    live.page = page
+    local title = W.Title(page, 20, "Live Battles")
+    title:SetPoint("TOPLEFT", 4, -4)
+    live.count = W.Label(page, "GameFontHighlightSmall", "")
+    live.count:SetPoint("LEFT", title, "RIGHT", 10, -2)
+    local hint = W.Label(page, "GameFontDisableSmall", "Watch any battle in progress (up to 5 spectators each).")
+    hint:SetPoint("TOPRIGHT", -4, -8)
+
+    live.list = W.List(page, 78, function(row)
+        W.Gradient(row, { 0.15, 0.11, 0.07, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
+        W.Background(row, 0, 0, 0, 0, { 0.55, 0.43, 0.18, 0.8 })
+        PlayerSide(row, "a", "LEFT")
+        PlayerSide(row, "b", "RIGHT")
+        row.vs = W.Title(row, 26, "VS")
+        row.vs:SetPoint("TOP", 0, -8)
+        row.vs:SetJustifyH("CENTER")
+        row.kind = W.Label(row, "GameFontHighlightSmall")
+        row.kind:SetPoint("TOP", row.vs, "BOTTOM", 0, -1)
+        row.kind:SetJustifyH("CENTER")
+        row.watch = W.Button(row, "Watch", 80, 22, function()
+            if row.item then
+                G.Watch(row.item.host)
+                ns.UI.ShowTab("play")
+            end
+        end)
+        row.watch:SetPoint("BOTTOM", 0, 6)
+        function row:OnResize(w)
+            local half = w / 2 - 110
+            for _, p in ipairs({ self.a, self.b }) do
+                p.name:SetWidth(max(60, half))
+                p.title:SetWidth(max(60, half))
+            end
+        end
+    end, function(row, item)
+        FillSide(row.a, item.a)
+        FillSide(row.b, item.b)
+        local bt = item.battle
+        if bt then
+            row.kind:SetText(string.format("%s  ·  %s  ·  move %d", bt.rated and "|cffffd100Rated|r" or "|cff80c0ffCasual|r",
+                ns.PlayView.TimeControlName(bt.base, bt.inc), math.floor((bt.moves or 0) / 2) + 1))
+        else
+            row.kind:SetText("")
+        end
+        if ns.SameName(item.a, ns.me) or ns.SameName(item.b, ns.me) then row.watch:Disable() else row.watch:Enable() end
+    end, 6)
+    live.list:SetPoint("TOPLEFT", 0, -34)
+
+    live.empty = W.Label(page, "GameFontHighlight", "")
+    live.empty:SetPoint("CENTER", 0, -10)
+    live.empty:SetJustifyH("CENTER")
+    live.empty:SetSpacing(4)
+end
+
+function T.LayoutLive(w, h)
+    live.list:Resize(w, h - 34)
+end
+
+function T.RefreshLive()
+    local seen, rows = {}, {}
+    for name, o in pairs(P.online) do
+        if o.status == "g" and o.opp then
+            local a, b = name, o.opp
+            if b < a then a, b = b, a end
+            local key = a .. "|" .. b
+            local r = seen[key]
+            if not r then
+                r = { a = a, b = b, host = name }
+                seen[key] = r
+                rows[#rows + 1] = r
+            end
+            r.battle = r.battle or o.battle
+        end
+    end
+    -- Our own battle is listed too (it cannot be watched by ourselves).
+    local g = G.current
+    if g and g.state == "active" and g.mode == "online" then
+        local a, b = ns.me, g.opp
+        if b < a then a, b = b, a end
+        if not seen[a .. "|" .. b] then
+            rows[#rows + 1] = { a = a, b = b, host = ns.me,
+                battle = { rated = g.rated, base = g.base, inc = g.inc, moves = #g.moves } }
+        end
+    end
+    table.sort(rows, function(x, y) return x.a < y.a end)
+    live.list:SetData(rows)
+    live.count:SetText(#rows .. (#rows == 1 and " battle" or " battles"))
+    if #rows == 0 then
+        live.empty:SetText("No battles are being fought right now.\nWhen players start one, it appears here.")
+        live.empty:Show()
+    else
+        live.empty:Hide()
     end
 end
 

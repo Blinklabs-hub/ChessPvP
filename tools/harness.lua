@@ -128,6 +128,21 @@ function NewClient(name, savedDB, surname)
         return 100000 + #path
     end
     env.UnitFactionGroup = function() return client.faction or "Alliance" end
+    -- Character identity (only the player's own character can be read)
+    env.UnitRace = function(unit)
+        if unit ~= "player" then return nil end
+        local r = client.race or ((client.faction == "Horde") and "Tauren" or "Human")
+        return r, r
+    end
+    env.UnitClass = function(unit)
+        if unit ~= "player" then return nil end
+        return "Warrior", client.class or "WARRIOR"
+    end
+    env.UnitSex = function(unit) return unit == "player" and (client.sex or 2) or nil end
+    env.UnitLevel = function(unit) return unit == "player" and (client.level or 60) or nil end
+    env.GetGuildInfo = function(unit) return unit == "player" and client.guild or nil end
+    env.RAID_CLASS_COLORS = { WARRIOR = { r = 0.78, g = 0.61, b = 0.43 }, MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
+    env.SetPortraitTexture = function(tex, unit) client.portraits = (client.portraits or 0) + 1 end
     -- Lua errors (including ones reported by the animation engine) fail the test run.
     client.errors = {}
     env.geterrorhandler = function() return function(msg) table.insert(client.errors, msg); print("LUA ERROR (" .. name .. "): " .. tostring(msg)) end end

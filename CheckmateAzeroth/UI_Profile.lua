@@ -55,21 +55,8 @@ local function Build()
     close:SetPoint("TOPRIGHT", 2, 2)
 
     -- Header
-    f.crestRing = f:CreateTexture(nil, "ARTWORK", nil, 3)
-    f.crestRing:SetTexture(W.TEX .. "token_ring")
-    f.crestRing:SetSize(78, 78)
-    f.crestRing:SetPoint("TOPLEFT", 14, -14)
-    f.crest = f:CreateTexture(nil, "ARTWORK", nil, 1)
-    f.crest:SetSize(64, 64)
-    f.crest:SetPoint("CENTER", f.crestRing)
-    if f.CreateMaskTexture and f.crest.AddMaskTexture then
-        local mask = f:CreateMaskTexture()
-        if mask then
-            mask:SetAllPoints(f.crest)
-            mask:SetTexture(A.PortraitMask(), "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-            f.crest:AddMaskTexture(mask)
-        end
-    end
+    f.portrait = W.Portrait(f, 80)
+    f.portrait:SetPoint("TOPLEFT", 14, -12)
     f.name = W.Title(f, 22)
     f.name:SetPoint("TOPLEFT", 104, -18)
     f.name:SetWidth(290)
@@ -198,9 +185,9 @@ local function Refresh()
     local info = army and A.ARMIES[army]
 
     -- Header
-    W.SetCrest(f.crest, army)
-    f.crestRing:SetVertexColor(info and info.ring[1] or 0.8, info and info.ring[2] or 0.7, info and info.ring[3] or 0.3)
-    f.name:SetText("|c" .. W.Hex(info and info.color or { 1, 1, 1 }) .. ns.ShortName(name) .. "|r")
+    local ch = W.CharInfo(name)
+    f.portrait:SetPlayer(name, ch, army)
+    f.name:SetText(W.ClassName(name, ch, info and info.color))
     local rating = rated and rated.r or (me and P.me.rating) or (known and known.r) or D.START_RATING
     local games = rated and rated.games or 0
     local titleId = me and P.MyTitleId() or (known and known.t) or ""
@@ -220,7 +207,10 @@ local function Refresh()
         f.league:Hide()
         f.leagueText:SetText("|cffaaaaaaUnranked - plays any league until " .. D.PLACEMENT_GAMES .. " rated battles|r")
     end
-    f.army:SetText(info and ("|c" .. W.Hex(info.color) .. info.title .. "|r") or "|cffaaaaaaFaction unknown|r")
+    local line = A.CharLine(ch)
+    if line == "" then line = info and ("|c" .. W.Hex(info.color) .. info.title .. "|r") or "|cffaaaaaaCharacter unknown|r" end
+    if ch and ch.guild then line = line .. "  |cff40ff40<" .. ch.guild .. ">|r" end
+    f.army:SetText(line)
 
     -- Stats
     if rated then

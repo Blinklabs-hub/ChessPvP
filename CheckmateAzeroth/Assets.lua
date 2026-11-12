@@ -3,6 +3,7 @@
 local ADDON, ns = ...
 
 local A = {}
+local floor = math.floor
 ns.Assets = A
 
 local TEX = "Interface\\AddOns\\" .. ADDON .. "\\Textures\\"
@@ -223,6 +224,93 @@ function A.Portrait(army, t)
         unit.resolved = A.First(unit.icons) or false
     end
     return unit.resolved or nil
+end
+
+------------------------------------------------------------------------
+-- Character identity (race, sex, class, level, guild) - like the armory.
+------------------------------------------------------------------------
+local function Safe(v)
+    if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
+    return v
+end
+
+-- Our own character: { race = "Tauren", sex = 2, class = "WARRIOR", level = 60, guild = "..." }
+function A.MyCharInfo()
+    local info = {}
+    if UnitRace then
+        local _, raceFile = UnitRace("player")
+        info.race = Safe(raceFile)
+    end
+    if UnitSex then info.sex = Safe(UnitSex("player")) end
+    if UnitClass then
+        local _, classFile = UnitClass("player")
+        info.class = Safe(classFile)
+    end
+    if UnitLevel then info.level = Safe(UnitLevel("player")) end
+    if GetGuildInfo then
+        local guild = Safe(GetGuildInfo("player"))
+        if type(guild) == "string" and guild ~= "" then info.guild = guild end
+    end
+    return info
+end
+
+-- Packs identity for a message: "race,sex,class,level" and the guild separately.
+function A.PackChar(info)
+    return table.concat({ info.race or "", info.sex or "", info.class or "", info.level or "" }, ","),
+        (info.guild or ""):gsub("[;,|]", "")
+end
+
+local VALID_RACE = { Human = true, Dwarf = true, NightElf = true, Gnome = true, Orc = true, Scourge = true,
+    Tauren = true, Troll = true, BloodElf = true, Draenei = true, Goblin = true, Worgen = true, Pandaren = true }
+local VALID_CLASS = { WARRIOR = true, PALADIN = true, HUNTER = true, ROGUE = true, PRIEST = true, SHAMAN = true,
+    MAGE = true, WARLOCK = true, DRUID = true, DEATHKNIGHT = true, MONK = true, DEMONHUNTER = true, EVOKER = true }
+
+function A.UnpackChar(packed, guild)
+    if type(packed) ~= "string" then return nil end
+    local race, sex, class, level = string.match(packed, "^([^,]*),([^,]*),([^,]*),([^,]*)$")
+    if not race then return nil end
+    local info = {}
+    if VALID_RACE[race] then info.race = race end
+    sex = tonumber(sex)
+    if sex == 2 or sex == 3 then info.sex = sex end
+    if VALID_CLASS[class] then info.class = class end
+    level = tonumber(level)
+    if level and level >= 1 and level <= 100 then info.level = floor(level) end
+    if type(guild) == "string" and guild ~= "" and #guild <= 40 then info.guild = guild end
+    return info
+end
+
+local RACE_ICON = { Human = "human", Dwarf = "dwarf", NightElf = "nightelf", Gnome = "gnome", Orc = "orc",
+    Scourge = "undead", Tauren = "tauren", Troll = "troll", BloodElf = "bloodelf", Draenei = "draenei" }
+local RACE_NAME = { NightElf = "Night Elf", Scourge = "Undead", BloodElf = "Blood Elf" }
+
+-- Race portrait icon for a character (used when no live portrait is available).
+function A.RaceIcon(info)
+    local r = info and RACE_ICON[info.race]
+    if not r then return nil end
+    local file = Icon("achievement_character_" .. r .. "_" .. ((info.sex == 3) and "female" or "male"))
+    if A.HasFile(file) then return file end
+    return nil
+end
+
+function A.ClassColor(class)
+    local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if c then return { c.r, c.g, c.b } end
+    return nil
+end
+
+-- "Level 60 Tauren Warrior"
+function A.CharLine(info)
+    if not info then return "" end
+    local parts = {}
+    if info.level then parts[#parts + 1] = "Level " .. info.level end
+    if info.race then parts[#parts + 1] = RACE_NAME[info.race] or info.race end
+    if info.class then
+        local name = info.class:sub(1, 1) .. info.class:sub(2):lower()
+        if info.class == "DEATHKNIGHT" then name = "Death Knight" elseif info.class == "DEMONHUNTER" then name = "Demon Hunter" end
+        parts[#parts + 1] = name
+    end
+    return table.concat(parts, " ")
 end
 
 function A.MyFaction()
