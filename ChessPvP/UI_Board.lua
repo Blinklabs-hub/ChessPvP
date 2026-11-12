@@ -114,7 +114,16 @@ function B.CreatePieceView(parent, size)
     v.portrait:SetPoint("TOPLEFT", token, "TOPLEFT", 0, 0)
     v.portrait:SetPoint("BOTTOMRIGHT", token, "BOTTOMRIGHT", 0, 0)
     v.portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- trim the icon's built-in border
-    if v.portrait.SetMask then pcall(v.portrait.SetMask, v.portrait, TEX .. "mask") end
+    -- Round portrait. Texture:SetMask garbles textures on the modern client, so a mask
+    -- texture object is used, with the game's own round portrait mask.
+    if token.CreateMaskTexture and v.portrait.AddMaskTexture then
+        local mask = token:CreateMaskTexture()
+        if mask then
+            mask:SetAllPoints(v.portrait)
+            mask:SetTexture(A.PortraitMask(), "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            v.portrait:AddMaskTexture(mask)
+        end
+    end
     v.rim = token:CreateTexture(nil, "ARTWORK", nil, 3)
     v.rim:SetAllPoints()
     v.rim:SetTexture(TEX .. "token_rim")
@@ -207,7 +216,7 @@ local function Refresh(board)
                 -- Different texture regions per square so the grain does not repeat.
                 local u, v = (file % 4) * 0.25, (rank % 4) * 0.25
                 cell.grain:SetTexCoord(u, u + 0.25, v, v + 0.25)
-                cell.grain:SetAlpha(dark and 0.30 or 0.22)
+                cell.grain:SetAlpha(dark and 0.18 or 0.12)
                 cell.grain:Show()
             else
                 cell.grain:Hide()
@@ -549,7 +558,9 @@ function B.Create(parent, size)
             cell.bg:SetAllPoints()
             cell.grain = cell:CreateTexture(nil, "BACKGROUND", nil, 2)
             cell.grain:SetAllPoints()
-            cell.grain:SetBlendMode("MOD")
+            -- A light, desaturated overlay: adds stone grain without darkening the colours.
+            cell.grain:SetBlendMode("BLEND")
+            if cell.grain.SetDesaturated then cell.grain:SetDesaturated(true) end
             cell.hl = cell:CreateTexture(nil, "BORDER")
             cell.hl:SetAllPoints()
             cell.hl:Hide()

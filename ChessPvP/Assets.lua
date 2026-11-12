@@ -63,6 +63,13 @@ A.ART = {
     },
 }
 
+-- Circular mask used by the game's own unit portraits.
+function A.PortraitMask()
+    local blizzard = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+    if A.HasFile(blizzard) then return blizzard end
+    return TEX .. "mask"
+end
+
 A.FONT_TITLE = "Fonts\\MORPHEUS.TTF"
 A.FONT_BODY = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
