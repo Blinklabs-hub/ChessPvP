@@ -33,53 +33,122 @@ end
 ------------------------------------------------------------------------
 -- Lobby
 ------------------------------------------------------------------------
-local lobby = {}
+local lobby = { filter = "all" }
 T.lobby = lobby
 
 local STATUS_TEXT = {
     i = "|cff40ff40Ready for battle|r",
+    r = "|cffffd100In the rated queue|r",
+    c = "|cff80c0ffIn the casual queue|r",
     s = "|cffffd100Seeking a match|r",
     d = "|cff808080Do not disturb|r",
 }
 
-function T.BuildLobby(page)
-    lobby.page = page
-    lobby.title = W.Title(page, 20, "Battle Lobby")
-    lobby.title:SetPoint("TOPLEFT", 4, -2)
-    lobby.count = W.Label(page, "GameFontHighlightSmall", "")
-    lobby.count:SetPoint("LEFT", lobby.title, "RIGHT", 12, -2)
-    lobby.find = W.Button(page, "Find Match", 130, 24, function()
-        if G.seek then G.StopSeek() else
-            local s = ns.db.settings
-            local tc = D.TIME_CONTROLS[s.tc]
-            G.StartSeek(tc.base, tc.inc, s.rated)
-        end
+local FILTERS = {
+    { id = "all", text = "Everyone" },
+    { id = "r", text = "Rated queue" },
+    { id = "c", text = "Casual queue" },
+    { id = "g", text = "In battle" },
+}
+
+local function RecordText(rec, prefix)
+    if not rec then return "" end
+    return string.format("%s|cff40ff40%d|r-|cffff5040%d|r-|cffaaaaaa%d|r", prefix, rec.w or rec.cw, rec.l or rec.cl, rec.d or rec.cd)
+end
+
+-- Queue panel: rated / casual buttons, time control, counts and search timer.
+local function BuildQueue(page)
+    local q = W.Card(page)
+    q:SetHeight(64)
+    q:SetPoint("TOPLEFT", 0, 0)
+    q:SetPoint("TOPRIGHT", 0, 0)
+    lobby.queue = q
+    local title = W.Title(q, 18, "Quick Match")
+    title:SetPoint("TOPLEFT", 10, -8)
+    lobby.queueInfo = W.Label(q, "GameFontHighlightSmall", "")
+    lobby.queueInfo:SetPoint("TOPLEFT", 10, -32)
+    lobby.queueInfo:SetWidth(260)
+    lobby.queueInfo:SetJustifyV("TOP")
+
+    lobby.tcButton = W.Button(q, "", 130, 24, function()
+        local s = ns.db.settings
+        -- 0 = any time control, then the regular list
+        s.queueTc = ((s.queueTc or 0) + 1) % (#D.TIME_CONTROLS) -- the last entry (no clock) is skipped
+        if G.seek then G.StopSeek() end
         ns.UI.Refresh()
     end)
-    lobby.find:SetPoint("TOPRIGHT", -4, 0)
-    lobby.note = W.Label(page, "GameFontDisableSmall", "")
-    lobby.note:SetPoint("RIGHT", lobby.find, "LEFT", -10, 0)
+    W.Tooltip(lobby.tcButton, function(_, tip)
+        tip:SetText("Time control for the queue", 1, 0.82, 0)
+        tip:AddLine("\"Any\" matches whatever the other player picked (two \"Any\" players get Rapid 10+0).", 1, 1, 1, true)
+    end)
+    lobby.casualButton = W.Button(q, "Casual Queue", 130, 28, function()
+        if G.seek and not G.seek.rated then G.StopSeek() else T.JoinQueue(false) end
+        ns.UI.Refresh()
+    end)
+    lobby.ratedButton = W.Button(q, "Rated Queue", 130, 28, function()
+        if G.seek and G.seek.rated then G.StopSeek() else T.JoinQueue(true) end
+        ns.UI.Refresh()
+    end)
+    lobby.ratedButton:SetPoint("RIGHT", -10, 0)
+    lobby.casualButton:SetPoint("RIGHT", lobby.ratedButton, "LEFT", -6, 0)
+    lobby.tcButton:SetPoint("RIGHT", lobby.casualButton, "LEFT", -10, 0)
+    lobby.league = q:CreateTexture(nil, "ARTWORK")
+    lobby.league:SetSize(28, 28)
+    lobby.league:SetPoint("RIGHT", lobby.tcButton, "LEFT", -10, 0)
+    W.Tooltip(lobby.league, function() return false end)
+end
 
-    lobby.list = W.List(page, 50, function(row)
+function T.JoinQueue(rated)
+    local s = ns.db.settings
+    local idx = s.queueTc or 0
+    if idx == 0 then
+        local tc = D.TIME_CONTROLS[4]
+        G.StartSeek(tc.base, tc.inc, rated, true)
+    else
+        local tc = D.TIME_CONTROLS[idx]
+        G.StartSeek(tc.base, tc.inc, rated, false)
+    end
+end
+
+function T.BuildLobby(page)
+    lobby.page = page
+    BuildQueue(page)
+
+    lobby.filters = {}
+    for i, f in ipairs(FILTERS) do
+        local b = W.Button(page, f.text, 112, 22, function()
+            lobby.filter = f.id
+            lobby.list.offset = 0
+            ns.UI.Refresh()
+        end)
+        b:SetPoint("TOPLEFT", (i - 1) * 116, -72)
+        lobby.filters[f.id] = b
+    end
+    lobby.count = W.Label(page, "GameFontHighlightSmall", "")
+    lobby.count:SetPoint("TOPRIGHT", -4, -77)
+
+    lobby.list = W.List(page, 52, function(row)
         W.Gradient(row, { 0.14, 0.11, 0.07, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
         W.Background(row, 0, 0, 0, 0, { 0.5, 0.4, 0.16, 0.7 })
         local hl = row:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints()
-        hl:SetColorTexture(1, 0.85, 0.4, 0.06)
+        hl:SetColorTexture(1, 0.85, 0.4, 0.07)
         row.crest = row:CreateTexture(nil, "ARTWORK")
-        row.crest:SetSize(40, 40)
-        row.crest:SetPoint("LEFT", 4, 0)
+        row.crest:SetSize(42, 42)
+        row.crest:SetPoint("LEFT", 5, 0)
         row.name = W.Title(row, 16)
-        row.name:SetPoint("TOPLEFT", 50, -7)
+        row.name:SetPoint("TOPLEFT", 54, -7)
         row.name:SetWordWrap(false)
         row.rank = row:CreateTexture(nil, "ARTWORK")
         row.rank:SetSize(16, 16)
-        row.rank:SetPoint("BOTTOMLEFT", 50, 7)
+        row.rank:SetPoint("BOTTOMLEFT", 54, 8)
         row.sub = W.Label(row, "GameFontHighlightSmall")
-        row.sub:SetPoint("BOTTOMLEFT", 70, 9)
+        row.sub:SetPoint("BOTTOMLEFT", 74, 10)
+        row.sub:SetWordWrap(false)
         row.statusIcon = row:CreateTexture(nil, "ARTWORK")
         row.statusIcon:SetSize(14, 14)
         row.status = W.Label(row, "GameFontHighlightSmall")
+        row.status:SetWordWrap(false)
         row.challenge = W.Button(row, "Challenge", 90, 24, function()
             if row.item then
                 G.Invite(row.item.name)
@@ -94,33 +163,37 @@ function T.BuildLobby(page)
             end
         end)
         row.watch:SetPoint("RIGHT", row.challenge, "LEFT", -4, 0)
+        row:SetScript("OnClick", function(self)
+            if self.item then ns.UI.ShowProfile(self.item.name) end
+        end)
         W.Tooltip(row, function(self, tip)
             local item = self.item
             if not item then return false end
             tip:SetText(ns.ShortName(item.name), 1, 0.82, 0)
-            if item.verified then
-                tip:AddLine("Witnessed rating: " .. item.r .. " (" .. item.g .. " games)", 1, 1, 1)
-            else
-                tip:AddLine("No witnessed games yet. Says " .. item.r .. ".", 0.7, 0.7, 0.7, true)
-            end
+            tip:AddLine("Click to see their profile", 0.7, 0.7, 0.7)
         end)
         function row:OnResize(w)
-            self.name:SetWidth(max(80, w * 0.38))
+            local statusX = max(250, w * 0.5)
+            self.name:SetWidth(max(80, statusX - 64))
+            self.sub:SetWidth(max(80, statusX - 84))
             self.statusIcon:ClearAllPoints()
-            self.statusIcon:SetPoint("LEFT", self, "LEFT", max(240, w * 0.45), 0)
+            self.statusIcon:SetPoint("LEFT", self, "LEFT", statusX, 0)
             self.status:ClearAllPoints()
             self.status:SetPoint("LEFT", self.statusIcon, "RIGHT", 4, 0)
-            self.status:SetWidth(max(60, w - max(240, w * 0.45) - 190))
+            self.status:SetWidth(max(60, w - statusX - 190))
         end
     end, function(row, item)
-        local fc = FactionColor(item.f)
-        row.name:SetText("|c" .. W.Hex(fc) .. ns.ShortName(item.name) .. "|r")
-        W.SetCrest(row.crest, item.f)
+        local army = item.army or item.f
+        local info = army and A.ARMIES[army]
+        local color = info and info.color or { 0.9, 0.9, 0.9 }
+        row.name:SetText("|c" .. W.Hex(color) .. ns.ShortName(item.name) .. "|r")
+        W.SetCrest(row.crest, army)
         local idx = RankIndex(item.r, item.g)
         if idx then W.SetRankIcon(row.rank, idx) else row.rank:Hide() end
         local rating = item.verified and ("|cffffffff" .. item.r .. "|r") or ("|cff808080~" .. item.r .. "?|r")
-        row.sub:SetText(P.TitleText(item.t, item.r, item.g) .. "   " .. rating)
-        W.SetStatusIcon(row.statusIcon, item.status)
+        local casual = item.casual and RecordText(item.casual, "   |cff80c0ffcasual|r ") or ""
+        row.sub:SetText(P.TitleText(item.t, item.r, item.g) .. "   " .. rating .. casual)
+        W.SetStatusIcon(row.statusIcon, (item.status == "r" or item.status == "c") and "s" or item.status)
         if item.status == "g" then
             row.status:SetText("|cffff9040In battle vs " .. (item.opp and ns.ShortName(item.opp) or "?") .. "|r")
             row.watch:Show()
@@ -131,16 +204,16 @@ function T.BuildLobby(page)
             if item.status == "d" then row.challenge:Disable() else row.challenge:Enable() end
         end
     end, 4)
-    lobby.list:SetPoint("TOPLEFT", 0, -34)
+    lobby.list:SetPoint("TOPLEFT", 0, -100)
 
     lobby.empty = CreateFrame("Frame", nil, page)
-    lobby.empty:SetSize(400, 160)
-    lobby.empty:SetPoint("CENTER", 0, 10)
+    lobby.empty:SetSize(400, 140)
+    lobby.empty:SetPoint("CENTER", 0, -20)
     local e1 = lobby.empty:CreateTexture(nil, "ARTWORK")
     e1:SetSize(64, 64)
     e1:SetPoint("TOP")
     e1:SetAlpha(0.5)
-    W.SetCrest(e1, A.MyFaction())
+    lobby.emptyCrest = e1
     lobby.emptyText = W.Label(lobby.empty, "GameFontHighlight", "")
     lobby.emptyText:SetPoint("TOP", e1, "BOTTOM", 0, -10)
     lobby.emptyText:SetWidth(400)
@@ -149,25 +222,58 @@ function T.BuildLobby(page)
 end
 
 function T.LayoutLobby(w, h)
-    lobby.list:Resize(w, h - 34)
+    lobby.list:Resize(w, h - 100)
 end
 
 function T.RefreshLobby()
-    local rows = P.OnlineList()
+    local all = P.OnlineList()
+    local rows, counts = {}, { r = 0, c = 0, g = 0 }
+    for _, row in ipairs(all) do
+        if counts[row.status] then counts[row.status] = counts[row.status] + 1 end
+        if lobby.filter == "all" or row.status == lobby.filter then rows[#rows + 1] = row end
+    end
     lobby.list:SetData(rows)
+    for id, b in pairs(lobby.filters) do
+        if id == lobby.filter then b:Disable() else b:Enable() end
+    end
+    W.SetCrest(lobby.emptyCrest, A.MyArmy())
     if #rows == 0 then
-        lobby.emptyText:SetText(C.Joined()
-            and "No other Checkmate: Azeroth players are online right now.\nChallenge a friend by name from the Play tab, or practise against the computer."
-            or "Connecting to the chess network...")
+        local text
+        if not C.Joined() then
+            text = "Connecting to the chess network..."
+        elseif lobby.filter == "r" or lobby.filter == "c" then
+            text = "Nobody is waiting in this queue right now.\nJoin it above and you will be matched as soon as someone else joins."
+        elseif lobby.filter == "g" then
+            text = "No battles are being fought right now."
+        else
+            text = "No other Checkmate: Azeroth players are online right now.\nChallenge a friend by name from the Battle tab, or practise against the computer."
+        end
+        lobby.emptyText:SetText(text)
         lobby.empty:Show()
     else
         lobby.empty:Hide()
     end
-    lobby.count:SetText(#rows .. " player" .. (#rows == 1 and "" or "s") .. " online")
-    lobby.find:SetText(G.seek and "Searching..." or "Find Match")
+    lobby.count:SetText(#all .. " online")
+
+    -- Queue panel
     local s = ns.db.settings
-    local tc = D.TIME_CONTROLS[s.tc]
-    lobby.note:SetText(tc.name .. ", " .. ((s.rated and tc.base > 0) and "rated" or "casual"))
+    local idx = s.queueTc or 0
+    lobby.tcButton:SetText(idx == 0 and "Any time control" or D.TIME_CONTROLS[idx].name)
+    local seek = G.seek
+    lobby.ratedButton:SetText(seek and seek.rated and "Leave queue" or "Rated Queue")
+    lobby.casualButton:SetText(seek and not seek.rated and "Leave queue" or "Casual Queue")
+    local league = G.LeagueIndex(ns.me)
+    W.SetLeagueIcon(lobby.league, league)
+    local leagueText = league == 0 and "|cffaaaaaaUnranked (plays any league)|r"
+        or ("|cffffd100" .. D.LEAGUES[league].name .. " league|r")
+    if seek then
+        local secs = floor(ns.Now() - (seek.since or ns.Now()))
+        lobby.queueInfo:SetText(string.format("Searching the %s queue...  |cffffffff%d:%02d|r\n%s",
+            seek.rated and "rated" or "casual", floor(secs / 60), secs % 60, leagueText))
+    else
+        lobby.queueInfo:SetText(string.format("|cffffd100%d|r waiting rated  ·  |cff80c0ff%d|r waiting casual\n%s",
+            counts.r, counts.c, leagueText))
+    end
 end
 
 ------------------------------------------------------------------------
@@ -207,6 +313,10 @@ local function BuildPodium(parent, place)
     f.sub:SetJustifyH("CENTER")
     f.rating = W.Title(f, 18, nil, mc)
     f.rating:SetPoint("BOTTOM", 0, 8)
+    f:EnableMouse(true)
+    f:SetScript("OnMouseUp", function(self)
+        if self.name_ then ns.UI.ShowProfile(self.name_) end
+    end)
     return f
 end
 
@@ -265,10 +375,14 @@ function T.BuildLadder(page)
         row.warn = row:CreateTexture(nil, "OVERLAY")
         row.warn:SetSize(16, 16)
         row.warn:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
+        row:SetScript("OnClick", function(self)
+            if self.item then ns.UI.ShowProfile(self.item.name) end
+        end)
         W.Tooltip(row, function(self, tip)
             local it = self.item
             if not it then return false end
             tip:SetText(ns.ShortName(it.name), 1, 0.82, 0)
+            tip:AddLine("Click to see their profile", 0.7, 0.7, 0.7)
             tip:AddLine(string.format("Rating %d (best %d)", it.r, it.peak), 1, 1, 1)
             tip:AddLine(string.format("%d won, %d lost, %d drawn", it.w, it.l, it.d), 1, 1, 1)
             tip:AddLine("Different opponents beaten: " .. it.beaten, 0.8, 0.8, 0.8)
@@ -296,8 +410,8 @@ function T.BuildLadder(page)
         row.num:SetText(mc and ("|c" .. W.Hex(mc) .. index .. "|r") or index)
         local idx = RankIndex(it.r, it.games)
         if idx then W.SetRankIcon(row.rank, idx) else row.rank:Hide() end
-        W.SetCrest(row.crest, it.f)
-        row.name:SetText("|c" .. W.Hex(FactionColor(it.f)) .. ns.ShortName(it.name) .. "|r")
+        W.SetCrest(row.crest, it.army or it.f)
+        row.name:SetText("|c" .. W.Hex(FactionColor(it.army or it.f)) .. ns.ShortName(it.name) .. "|r")
         row.title:SetText(P.TitleText(it.t, it.r, it.games))
         row.rating:SetText(it.r)
         row.record:SetText(string.format("|cff40ff40%d|r / |cffff5040%d|r / |cffaaaaaa%d|r", it.w, it.l, it.d))
@@ -360,6 +474,8 @@ function T.RefreshLadder()
     if v then
         line = line .. string.format("    |cff40ff40%d|r won  |cffff5040%d|r lost  |cffaaaaaa%d|r drawn    %d foes beaten", v.w, v.l, v.d, v.beaten)
     end
+    local li = G.LeagueIndex(ns.me)
+    line = line .. "    " .. (li == 0 and "|cffaaaaaaUnranked|r" or ("|cffffd100" .. D.LEAGUES[li].name .. " league|r"))
     if myRank then
         line = line .. string.format("    Rank |cffffd100#%d|r of %d", myRank, #rows)
     else
@@ -370,12 +486,13 @@ function T.RefreshLadder()
     for i = 1, 3 do
         local f, it = ladder.podium[i], rows[i]
         if it and ladder.podiumH > 0 then
-            f.name:SetText("|c" .. W.Hex(FactionColor(it.f)) .. ns.ShortName(it.name) .. "|r")
+            f.name_ = it.name
+            f.name:SetText("|c" .. W.Hex(FactionColor(it.army or it.f)) .. ns.ShortName(it.name) .. "|r")
             f.sub:SetText(P.TitleText(it.t, it.r, it.games))
             f.rating:SetText(it.r)
-            W.SetCrest(f.crest, it.f)
+            W.SetCrest(f.crest, it.army or it.f)
             local ri = RankIndex(it.r, it.games)
-            if not (ri and W.SetRankIcon(f.rank, ri)) then W.SetCrest(f.rank, it.f) end
+            if not (ri and W.SetRankIcon(f.rank, ri)) then W.SetCrest(f.rank, it.army or it.f) end
             f:Show()
         else
             f:Hide()
@@ -387,12 +504,13 @@ end
 ------------------------------------------------------------------------
 -- Collection
 ------------------------------------------------------------------------
-local coll = { section = "boards" }
+local coll = { section = "armies" }
 T.coll = coll
 
 local SECTIONS = {
     { id = "boards", name = "Battlefields", icon = "Interface\\Icons\\inv_misc_map_01" },
-    { id = "pieces", name = "Armies", icon = "Interface\\Icons\\inv_bannerpvp_02" },
+    { id = "armies", name = "Armies", icon = "Interface\\Icons\\inv_bannerpvp_02" },
+    { id = "pieces", name = "Styles", icon = "Interface\\Icons\\inv_misc_book_09" },
     { id = "titles", name = "Titles", icon = "Interface\\PvPRankBadges\\PvPRank06" },
     { id = "badges", name = "Feats", icon = "Interface\\Icons\\achievement_pvp_a_04" },
 }
@@ -607,7 +725,69 @@ local function UpdateBadgeTile(tile, e)
     end
 end
 
+local function BuildArmyTile(tile)
+    TileFrame(tile, 190, 176)
+    tile.views = {}
+    local spots = { { 0, -50, 70, 6 }, { -56, -62, 46, 5 }, { 56, -62, 46, 1 } } -- x, y, size, piece
+    for i, sp in ipairs(spots) do
+        local v = Board.CreatePieceView(tile, sp[3])
+        v:SetPoint("CENTER", tile, "TOP", sp[1], sp[2])
+        v:SetFrameLevel(tile:GetFrameLevel() + (i == 1 and 4 or 2))
+        tile.views[i] = v
+        v.spot = sp
+    end
+    tile.name = W.Title(tile, 15)
+    tile.name:SetPoint("TOP", 0, -100)
+    tile.name:SetJustifyH("CENTER")
+    tile.name:SetWidth(182)
+    tile.units = W.Label(tile, "GameFontDisableSmall")
+    tile.units:SetPoint("TOP", tile.name, "BOTTOM", 0, -2)
+    tile.units:SetWidth(182)
+    tile.units:SetJustifyH("CENTER")
+    tile.state = W.Label(tile, "GameFontHighlightSmall")
+    tile.state:SetPoint("BOTTOM", 0, 8)
+    tile.state:SetWidth(182)
+    tile.state:SetJustifyH("CENTER")
+    tile:SetScript("OnClick", function(self)
+        if self.item and self.item.unlocked then
+            ns.Sound("click")
+            P.SetArmy(self.item.id)
+            ns.Sound("cry" .. self.item.id)
+        end
+    end)
+    W.Tooltip(tile, function(self, tip)
+        local e = self.item
+        if not e then return false end
+        local army = A.ARMIES[e.id]
+        tip:SetText(army.title, army.color[1], army.color[2], army.color[3])
+        local names = { "Pawn", "Knight", "Bishop", "Rook", "Queen", "King" }
+        for k = 6, 1, -1 do tip:AddDoubleLine(names[k], army.units[k].name, 0.7, 0.7, 0.7, 1, 1, 1) end
+        tip:AddLine(" ")
+        tip:AddLine("Your opponent sees this army too.", 0.8, 0.8, 0.8, true)
+    end)
+end
+
+local function UpdateArmyTile(tile, e)
+    local army = A.ARMIES[e.id]
+    local fake = { armies = { [1] = e.id, [-1] = e.id } }
+    for _, v in ipairs(tile.views) do
+        v:SetPiece(v.spot[4], fake, D.PIECES_BY_ID.warcraft)
+        v:SetAlpha(e.unlocked and 1 or 0.4)
+    end
+    tile.name:SetText("|c" .. W.Hex(e.unlocked and army.color or { 0.5, 0.5, 0.5 }) .. army.title .. "|r")
+    tile.units:SetText(army.units[6].name .. "  ·  " .. army.units[5].name)
+    if e.selected then
+        tile.state:SetText("|cff40ff40You lead this army|r")
+        tile.sel:Show()
+    else
+        tile.sel:Hide()
+        tile.state:SetText(e.unlocked and "|cffaaaaaaClick to lead this army|r" or ("|cffff6040" .. e.req .. "|r"))
+    end
+    if e.unlocked then tile.lock:Hide() else tile.lock:Show() end
+end
+
 local GRID_SPEC = {
+    armies = { 190, 176, BuildArmyTile, UpdateArmyTile },
     boards = { 140, 150, BuildBoardTile, UpdateBoardTile },
     pieces = { 140, 150, BuildPieceTile, UpdatePieceTile },
     titles = { 220, 48, BuildTitleTile, UpdateTitleTile },
@@ -686,8 +866,15 @@ function T.RefreshCollection()
             local ok, req = P.IsUnlocked(t)
             data[i] = { item = t, unlocked = ok, req = req, selected = (P.Theme() == t) }
         end
+    elseif section == "armies" then
+        coll.header:SetText("Armies of Azeroth")
+        local mine = A.MyArmy()
+        for _, id in ipairs(A.ARMY_ORDER) do
+            local ok, req = P.ArmyUnlocked(id)
+            data[#data + 1] = { id = id, unlocked = ok, req = req, selected = mine == id }
+        end
     elseif section == "pieces" then
-        coll.header:SetText("Armies & piece sets")
+        coll.header:SetText("Piece styles")
         for i = 1, #D.PIECES do
             local t = D.PIECES[i]
             local ok, req = P.IsUnlocked(t)

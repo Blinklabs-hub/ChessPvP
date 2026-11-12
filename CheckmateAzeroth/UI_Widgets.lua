@@ -195,16 +195,33 @@ function W.SetIcon(tex, path)
     tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 end
 
--- Faction crest (PvP icon) into a texture; hides it when unknown.
-function W.SetCrest(tex, faction)
-    local file = faction and A.ART.crest[faction]
-    if file and A.HasFile(file) then
+-- Army crest into a texture: the PvP emblem for Alliance/Horde, otherwise the army
+-- leader's portrait. Hides the texture when nothing is known.
+function W.SetCrest(tex, army)
+    local file, isPortrait = nil, false
+    if army then file, isPortrait = A.Crest(army) end
+    if file then
         tex:SetTexture(file)
-        tex:SetTexCoord(0, 0.62, 0, 0.62)
+        if isPortrait then tex:SetTexCoord(0.08, 0.92, 0.08, 0.92) else tex:SetTexCoord(0, 0.62, 0, 0.62) end
         tex:Show()
     else
         tex:Hide()
     end
+end
+
+-- League emblem (PvP rank insignia) into a texture.
+function W.SetLeagueIcon(tex, leagueIndex)
+    local L = ns.Data.LEAGUES[leagueIndex or 0]
+    if not L then tex:Hide(); return false end
+    local file = string.format("Interface\\PvPRankBadges\\PvPRank%02d", L.badge)
+    if A.HasFile(file) then
+        tex:SetTexture(file)
+        tex:SetTexCoord(0, 1, 0, 1)
+        tex:Show()
+        return true
+    end
+    tex:Hide()
+    return false
 end
 
 -- PvP rank insignia for a rank index (1..9) of Data.RANKS.

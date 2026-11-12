@@ -31,6 +31,23 @@ D.RANKS = {
     { id = "r9", min = 2200, name = "Legend", color = "ffe6cc80" },
 }
 
+-- Leagues: rated battles are only possible within one league of each other.
+-- badge: PvP rank insignia number used as the league emblem.
+D.LEAGUES = {
+    { name = "Recruit", min = 0, badge = 2, desc = "Below 1200" },
+    { name = "Veteran", min = 1200, badge = 6, desc = "1200 - 1499" },
+    { name = "Champion", min = 1500, badge = 10, desc = "1500 - 1799" },
+    { name = "Warlord", min = 1800, badge = 14, desc = "1800 and above" },
+}
+
+function D.LeagueFor(rating)
+    local idx = 1
+    for i = 1, #D.LEAGUES do
+        if rating >= D.LEAGUES[i].min then idx = i end
+    end
+    return idx
+end
+
 function D.RankFor(rating)
     local best = D.RANKS[1]
     for i = 1, #D.RANKS do

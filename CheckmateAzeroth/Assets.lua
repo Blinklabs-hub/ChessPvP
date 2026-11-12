@@ -82,36 +82,150 @@ end
 -- Armies. Index = piece type (1 pawn, 2 knight, 3 bishop, 4 rook, 5 queen, 6 king).
 -- icons: candidate portraits, first existing one is used.
 ------------------------------------------------------------------------
+A.ARMY_ORDER = { "Alliance", "Horde", "Kaldorei", "Ironforge", "Scourge", "Legion", "Blackrock", "OldGods", "Keepers" }
+
+-- Every icon name below was checked against the game's file list (exact spelling:
+-- "achievement_leader_ thrall" and "achievement_boss_archimonde " really contain spaces).
+-- side: which PvP victory fanfare plays when this army wins. rival: the army the other
+-- player gets if both chose the same one.
 A.ARMIES = {
     Alliance = {
-        name = "Alliance",
-        color = { 0.25, 0.55, 1.00 },
-        ring = { 0.95, 0.80, 0.35 }, -- gold
-        ringDark = { 0.12, 0.22, 0.55 },
+        name = "Alliance", title = "The Alliance", side = "Alliance", rival = "Horde",
+        color = { 0.25, 0.55, 1.00 }, ring = { 0.95, 0.80, 0.35 }, ringDark = { 0.12, 0.22, 0.55 },
         units = {
             { name = "Footman", icons = { Icon("achievement_character_human_male") } },
             { name = "Knight", icons = { Icon("ability_mount_charger"), Icon("ability_mount_ridinghorse") } },
-            { name = "Prophet Velen", short = "Priest", icons = { Icon("achievement_leader_prophet_velen"), Icon("spell_holy_holybolt") } },
-            { name = "Siege Engine", icons = { Icon("ability_vehicle_siegeenginecannon"), Icon("inv_misc_tournaments_banner_human"), Icon("inv_guild_standard_alliance_a") } },
+            { name = "Prophet Velen", icons = { Icon("achievement_leader_prophet_velen"), Icon("spell_holy_holybolt") } },
+            { name = "Siege Engine", icons = { Icon("ability_vehicle_siegeenginecannon"), Icon("inv_misc_tournaments_banner_human") } },
             { name = "Tyrande", icons = { Icon("achievement_leader_tyrande_whisperwind"), Icon("achievement_character_nightelf_female") } },
             { name = "King Varian", icons = { Icon("achievement_leader_king_varian_wrynn"), Icon("inv_misc_head_human_01") } },
         },
+        death = { 540722, 540838 }, cry = { 540696, 540717 },
     },
     Horde = {
-        name = "Horde",
-        color = { 0.90, 0.18, 0.15 },
-        ring = { 0.70, 0.12, 0.08 }, -- blood red
-        ringDark = { 0.25, 0.05, 0.03 },
+        name = "Horde", title = "The Horde", side = "Horde", rival = "Alliance",
+        color = { 0.90, 0.18, 0.15 }, ring = { 0.70, 0.12, 0.08 }, ringDark = { 0.25, 0.05, 0.03 },
         units = {
             { name = "Grunt", icons = { Icon("achievement_character_orc_male") } },
             { name = "Wolf Rider", icons = { Icon("ability_mount_blackdirewolf"), Icon("ability_mount_whitedirewolf") } },
-            { name = "Cairne", short = "Chieftain", icons = { Icon("achievement_leader_cairne bloodhoof"), Icon("achievement_character_tauren_male") } },
-            { name = "Demolisher", icons = { Icon("ability_vehicle_demolisherflamecatapult"), Icon("inv_misc_tournaments_banner_orc"), Icon("inv_guild_standard_horde_a") } },
+            { name = "Cairne", icons = { Icon("achievement_leader_cairne bloodhoof"), Icon("achievement_character_tauren_male") } },
+            { name = "Demolisher", icons = { Icon("ability_vehicle_demolisherflamecatapult"), Icon("inv_misc_tournaments_banner_orc") } },
             { name = "Sylvanas", icons = { Icon("achievement_leader_sylvanas"), Icon("achievement_character_undead_female") } },
-            { name = "Warchief Thrall", icons = { Icon("achievement_leader_ thrall"), Icon("achievement_leader_thrall"), Icon("inv_misc_head_orc_01") } },
+            { name = "Warchief Thrall", icons = { Icon("achievement_leader_ thrall"), Icon("inv_misc_head_orc_01") } },
         },
+        death = { 541234, 541308 }, cry = { 541389, 541391, 541400 },
+    },
+    Kaldorei = {
+        name = "Kaldorei", title = "The Kaldorei", side = "Alliance", rival = "Legion",
+        color = { 0.70, 0.50, 1.00 }, ring = { 0.62, 0.48, 0.92 }, ringDark = { 0.12, 0.06, 0.22 },
+        units = {
+            { name = "Sentinel", icons = { Icon("achievement_character_nightelf_female") } },
+            { name = "Nightsaber Rider", icons = { Icon("ability_mount_whitetiger") } },
+            { name = "Druid of the Grove", icons = { Icon("spell_nature_forceofnature"), Icon("ability_druid_forceofnature") } },
+            { name = "Ancient Guardian", icons = { Icon("achievement_reputation_guardiansofcenarius") } },
+            { name = "Illidan", icons = { Icon("achievement_boss_illidan") } },
+            { name = "Tyrande", icons = { Icon("achievement_leader_tyrande_whisperwind") } },
+        },
+        death = { 540868, 540954 }, cry = { 541023, 541025, 541026 },
+    },
+    Ironforge = {
+        name = "Ironforge", title = "Ironforge", side = "Alliance", rival = "Blackrock",
+        color = { 0.95, 0.68, 0.35 }, ring = { 0.78, 0.56, 0.30 }, ringDark = { 0.20, 0.12, 0.05 },
+        units = {
+            { name = "Mountaineer", icons = { Icon("achievement_character_dwarf_male") } },
+            { name = "Ram Rider", icons = { Icon("ability_mount_mountainram") } },
+            { name = "Gnome Tinker", icons = { Icon("achievement_character_gnome_male") } },
+            { name = "Clockwork Golem", icons = { Icon("inv_misc_head_clockworkgnome_01") } },
+            { name = "Queen Moira", icons = { Icon("achievement_character_dwarf_female") } },
+            { name = "King Magni", icons = { Icon("achievement_leader_king_magni_bronzebeard") } },
+        },
+        death = { 539885, 539958 }, cry = { 540085, 540088, 540491 },
+    },
+    Scourge = {
+        name = "Scourge", title = "The Scourge", side = "Horde", rival = "Keepers",
+        color = { 0.45, 0.90, 0.85 }, ring = { 0.40, 0.78, 0.90 }, ringDark = { 0.03, 0.12, 0.16 },
+        units = {
+            { name = "Ghoul", icons = { Icon("inv_misc_head_scourge_01"), Icon("ability_ghoulfrenzy") } },
+            { name = "Death Knight", icons = { Icon("spell_deathknight_summondeathcharger") } },
+            { name = "Kel'Thuzad", icons = { Icon("achievement_boss_kelthuzad_01") } },
+            { name = "Abomination", icons = { Icon("achievement_boss_patchwerk") } },
+            { name = "Sindragosa", icons = { Icon("achievement_boss_sindragosa") } },
+            { name = "The Lich King", icons = { Icon("achievement_boss_lichking") } },
+        },
+        death = { 549806, 542603, 542596 }, cry = { 542738, 542762 },
+    },
+    Legion = {
+        name = "Burning Legion", title = "The Burning Legion", side = "Horde", rival = "Kaldorei",
+        color = { 0.50, 1.00, 0.25 }, ring = { 0.38, 0.82, 0.12 }, ringDark = { 0.05, 0.16, 0.02 },
+        units = {
+            { name = "Imp", icons = { Icon("spell_shadow_summonimp") } },
+            { name = "Felhunter", icons = { Icon("spell_shadow_summonfelhunter") } },
+            { name = "Prince Malchezaar", icons = { Icon("achievement_boss_prince_malchezaar") } },
+            { name = "Infernal", icons = { Icon("spell_shadow_summoninfernal") } },
+            { name = "Kil'jaeden", icons = { Icon("achievement_boss_kiljaedan") } },
+            { name = "Archimonde", icons = { Icon("achievement_boss_archimonde "), Icon("achievement_boss_hellfire_archimonde") } },
+        },
+        death = { 552535, 544141 }, cry = { 552542, 544138 },
+    },
+    Blackrock = {
+        name = "Blackrock", title = "Blackrock Mountain", side = "Horde", rival = "Ironforge",
+        color = { 1.00, 0.45, 0.12 }, ring = { 0.30, 0.28, 0.30 }, ringDark = { 0.35, 0.08, 0.02 },
+        units = {
+            { name = "Blackrock Orc", icons = { Icon("inv_misc_head_orc2_brn"), Icon("inv_misc_head_orc1_brn") } },
+            { name = "Black Drake", icons = { Icon("inv_misc_head_dragon_black") } },
+            { name = "General Drakkisath", icons = { Icon("achievement_boss_generaldrakkisath") } },
+            { name = "Emperor Thaurissan", icons = { Icon("achievement_boss_emperordagranthaurissan") } },
+            { name = "Onyxia", icons = { Icon("achievement_boss_onyxia") } },
+            { name = "Nefarian", icons = { Icon("achievement_boss_nefarion") } },
+        },
+        death = { 547392, 547380, 547387 }, cry = { 547393, 547431 },
+    },
+    OldGods = {
+        name = "Old Gods", title = "The Old Gods", side = "Horde", rival = "Keepers",
+        color = { 0.72, 0.30, 0.90 }, ring = { 0.45, 0.12, 0.55 }, ringDark = { 0.08, 0.00, 0.12 },
+        units = {
+            { name = "Faceless One", icons = { Icon("achievement_boss_heraldvolazj") } },
+            { name = "Hakkar", icons = { Icon("achievement_boss_hakkar") } },
+            { name = "General Vezax", icons = { Icon("achievement_boss_generalvezax_01") } },
+            { name = "Ragnaros", icons = { Icon("achievement_boss_ragnaros") } },
+            { name = "C'Thun", icons = { Icon("achievement_boss_cthun") } },
+            { name = "Yogg-Saron", icons = { Icon("achievement_boss_yoggsaron_01") } },
+        },
+        death = { 546622, 564846, 558802 }, cry = { 546633, 564829 },
+    },
+    Keepers = {
+        name = "Titan Keepers", title = "The Keepers of Ulduar", side = "Alliance", rival = "OldGods",
+        color = { 0.65, 0.88, 1.00 }, ring = { 0.82, 0.86, 0.95 }, ringDark = { 0.10, 0.16, 0.28 },
+        units = {
+            { name = "Iron Construct", icons = { Icon("achievement_boss_xt002deconstructor_01") } },
+            { name = "Mimiron", icons = { Icon("achievement_boss_mimiron_01") } },
+            { name = "Hodir", icons = { Icon("achievement_boss_hodir_01") } },
+            { name = "Flame Leviathan", icons = { Icon("achievement_boss_theflameleviathan_01"), Icon("achievement_boss_kologarn_01") } },
+            { name = "Freya", icons = { Icon("achievement_boss_freya_01") } },
+            { name = "Thorim", icons = { Icon("achievement_boss_thorim"), Icon("achievement_boss_algalon_01") } },
+        },
+        death = { 552626, 552630, 1446824 }, cry = { 552642 },
     },
 }
+
+-- Unlock requirements per army (stat, amount) - see Profile.Stat.
+A.ARMY_REQ = {
+    Kaldorei = { "games", 3 },
+    Ironforge = { "games", 3 },
+    Scourge = { "wins", 5 },
+    Legion = { "wins", 10 },
+    Blackrock = { "points", 60 },
+    Keepers = { "peak", 1500 },
+    OldGods = { "streak", 5 },
+}
+
+-- Sound entries for every army (death cries and battle cries).
+function A.RegisterArmySounds()
+    for id, army in pairs(A.ARMIES) do
+        A.SOUNDS["death" .. id] = { files = army.death, random = true }
+        A.SOUNDS["cry" .. id] = { files = army.cry, random = true }
+    end
+end
 
 -- Portrait for a piece type of an army, or nil when the client lacks the art.
 function A.Portrait(army, t)
@@ -122,28 +236,61 @@ function A.Portrait(army, t)
     return unit.resolved or nil
 end
 
--- The local player's faction leads their own colour; the opponent gets the other army.
 function A.MyFaction()
     local f = UnitFactionGroup and UnitFactionGroup("player")
     if f == "Horde" then return "Horde" end
     return "Alliance"
 end
 
-local function Other(f) return f == "Horde" and "Alliance" or "Horde" end
+function A.IsArmy(id)
+    return type(id) == "string" and A.ARMIES[id] ~= nil
+end
+
+-- The army this player has chosen to lead (falls back to their faction).
+function A.MyArmy()
+    local p = ns.Profile and ns.Profile.me
+    local id = p and p.army
+    if A.IsArmy(id) and ns.Profile.ArmyUnlocked(id) then return id end
+    return A.MyFaction()
+end
+
+function A.Rival(id)
+    local army = A.ARMIES[id]
+    return army and army.rival or "Horde"
+end
+
+-- The two armies of a game: my choice and theirs; on a clash Black takes the rival.
+function A.ResolveArmies(whiteArmy, blackArmy)
+    if not A.IsArmy(whiteArmy) then whiteArmy = "Alliance" end
+    if not A.IsArmy(blackArmy) then blackArmy = A.Rival(whiteArmy) end
+    if blackArmy == whiteArmy then blackArmy = A.Rival(whiteArmy) end
+    return { [1] = whiteArmy, [-1] = blackArmy }
+end
 
 -- Army for a chess colour (1 white, -1 black) in a game (nil = no game yet).
 function A.ArmyFor(color, g)
-    local mine = A.MyFaction()
-    local myColor = g and g.myColor
-    if not myColor then
-        -- Pass & play, spectating, idle board: white leads the player's faction.
-        return color == 1 and mine or Other(mine)
-    end
-    return color == myColor and mine or Other(mine)
+    if g and g.armies and g.armies[color] then return g.armies[color] end
+    local mine = A.MyArmy()
+    local myColor = (g and g.myColor) or 1
+    return color == myColor and mine or A.Rival(mine)
 end
 
 function A.UnitName(army, t)
     return A.ARMIES[army].units[t].name
+end
+
+-- Crest for an army: the faction emblem for Alliance/Horde, else the leader's portrait.
+-- Returns path, isPortrait.
+function A.Crest(army)
+    if army == "Alliance" or army == "Horde" then
+        local file = A.ART.crest[army]
+        if A.HasFile(file) then return file, false end
+    end
+    if A.IsArmy(army) then
+        local p = A.Portrait(army, 6)
+        if p then return p, true end
+    end
+    return nil
 end
 
 ------------------------------------------------------------------------
@@ -158,12 +305,6 @@ A.SOUNDS = {
     select = { kits = { 836, "IG_ABILITY_PAGE_TURN" } },
     -- one-handed sword hitting flesh
     capture = { files = { 567880, 567881, 567883 }, random = true, kits = { "IG_ABILITY_ICON_DROP" } },
-    -- death cries of the fallen piece's army
-    deathAlliance = { files = { 540722, 540838 }, random = true },
-    deathHorde = { files = { 541234, 541308 }, random = true },
-    -- battle cries when a game starts
-    cryAlliance = { files = { 540696, 540717 }, random = true },
-    cryHorde = { files = { 541389, 541391, 541400 }, random = true },
     check = { kits = { 8959, "RAID_WARNING" } },
     promote = { kits = { 888, 1440 }, files = { 567431 } },
     castle = { files = { 567863, 567864 }, random = true, kits = { 838 } }, -- shield block
@@ -176,6 +317,8 @@ A.SOUNDS = {
     unlock = { kits = { 31578, "UI_EPICLOOT_TOAST" } },
     click = { kits = { 856, "IG_MAINMENU_OPTION_CHECKBOX_ON" } },
 }
+
+A.RegisterArmySounds()
 
 local function Played(ok, willPlay)
     -- Older clients return nothing; treat that as success.

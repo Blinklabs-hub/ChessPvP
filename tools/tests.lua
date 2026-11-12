@@ -499,7 +499,8 @@ if want("visual") then
         check(Played(b, 540696) or Played(b, 540717), "Alliance player hears a human battle cry")
         local A = a.ns.Assets
         eq(A.ArmyFor(1, a.ns.Game.current), "Horde", "Horde player's white army is the Horde")
-        eq(A.ArmyFor(1, b.ns.Game.current), "Alliance", "same pieces are the Alliance on the Alliance player's screen")
+        eq(A.ArmyFor(1, b.ns.Game.current), "Horde", "both screens agree: White is Canga's Horde")
+        eq(A.ArmyFor(-1, a.ns.Game.current), "Alliance", "and Black is Keepingcalm's Alliance on Canga's screen")
 
         -- A game with captures, en passant, castling, check, promotion and mate.
         local moves = {
@@ -730,6 +731,133 @@ if want("ui") then
     check(not UI.Debug().collapsed, "panels shown again when no battle is running")
     eq(#c.errors, 0, "no Lua errors in the UI")
     RemoveClient(c)
+end
+
+------------------------------------------------------------------------
+if want("social") then
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    local w = NewClient("Wit", nil, "Ness")
+    a.faction, b.faction = "Horde", "Alliance"
+    Advance(20)
+    local CA, JK = "Canga Prime", "Just Keepingcalm"
+
+    section("social: armies")
+    local A = a.ns.Assets
+    a.ns.Profile.SetArmy("Scourge")
+    eq(A.MyArmy(), "Horde", "a locked army cannot be chosen")
+    a.ns.Profile.me.w = 5 -- unlocks the Scourge (5 wins)
+    a.ns.Profile.SetArmy("Scourge")
+    eq(A.MyArmy(), "Scourge", "unlocked army chosen")
+    b.ns.Profile.me.w = 10
+    b.ns.Profile.SetArmy("Legion")
+    a.ns.db.settings.color = "w"
+    a.ns.Game.Invite(JK, { rated = false }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    local ga, gb = a.ns.Game.current, b.ns.Game.current
+    eq(A.ArmyFor(1, ga), "Scourge", "Canga sees his Scourge as White")
+    eq(A.ArmyFor(-1, ga), "Legion", "Canga sees Keepingcalm's Legion as Black")
+    eq(b.ns.Assets.ArmyFor(1, gb), "Scourge", "Keepingcalm sees the Scourge too")
+    eq(b.ns.Assets.ArmyFor(-1, gb), "Legion", "and his own Legion")
+    -- spectator receives both armies
+    w.ns.Game.Watch(CA); Advance(3)
+    eq(w.ns.Assets.ArmyFor(1, w.ns.Game.current), "Scourge", "spectator sees the Scourge")
+    eq(w.ns.Assets.ArmyFor(-1, w.ns.Game.current), "Legion", "spectator sees the Legion")
+    -- casual game: fool's mate, Keepingcalm (Black) wins
+    a.ns.Game.Move("f2f3"); Advance(1)
+    b.ns.Game.Move("e7e5"); Advance(1)
+    a.ns.Game.Move("g2g4"); Advance(1)
+    b.ns.Game.Move("d8h4"); Advance(8)
+    section("social: casual results are witnessed, ratings untouched")
+    local cas = w.ns.Ledger.Casual(JK)
+    check(cas and cas.cw == 1, "witness records Keepingcalm's casual win")
+    check(w.ns.Ledger.Casual(CA) and w.ns.Ledger.Casual(CA).cl == 1, "and Canga's casual loss")
+    eq(w.ns.Ledger.Rating(JK), 1200, "casual games do not change ratings")
+    eq(w.ns.Ledger.Get(JK), nil, "casual-only players are not on the rated ladder")
+    local h = a.ns.Ledger.HeadToHead(CA, JK)
+    eq(h.l, 1, "head-to-head from Canga's side: 1 loss")
+
+    section("social: same army on both sides")
+    b.ns.Profile.me.w = 5
+    b.ns.Profile.SetArmy("Scourge")
+    a.ns.Game.Invite(JK, { rated = false }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    eq(A.ArmyFor(-1, a.ns.Game.current), A.Rival("Scourge"), "Black gets the rival army on a clash")
+    a.ns.Game.Resign(); Advance(2)
+
+    section("social: AI games use my army against its rival")
+    a.ns.Game.StartAI(1, 1); Advance(1)
+    eq(A.ArmyFor(1, a.ns.Game.current), "Scourge", "my army in practice")
+    eq(A.ArmyFor(-1, a.ns.Game.current), "Keepers", "the Scourge's rival opposes it")
+    a.ns.Game.Resign(); Advance(1)
+
+    section("social: leagues")
+    local function SetRating(cl, name, r, games)
+        cl.ns.Ledger.players[name] = { r = r, games = games, w = games, l = 0, d = 0, peak = r, beaten = 1, disputed = 0, cw = 0, cl = 0, cd = 0, recent = {} }
+    end
+    for _, cl in ipairs({ a, b }) do
+        SetRating(cl, CA, 1900, 10) -- Warlord
+        SetRating(cl, JK, 1250, 10) -- Veteran
+    end
+    check(not a.ns.Game.LeagueOK(JK), "Warlord and Veteran are too far apart")
+    a.chat = {}
+    a.ns.Game.Invite(JK, { rated = true }); Advance(1)
+    local inv = b.ns.Game.LatestInvite()
+    check(inv and not inv.rated, "the rated challenge was turned into a casual one")
+    local told = false
+    for _, m in ipairs(a.chat) do if m:find("casual challenge instead") then told = true end end
+    check(told, "challenger told why")
+    b.ns.Game.AnswerLatest(false); Advance(1)
+    SetRating(a, JK, 1600, 10); SetRating(b, JK, 1600, 10) -- Champion: adjacent to Warlord
+    check(a.ns.Game.LeagueOK(JK), "adjacent leagues may play rated")
+    SetRating(a, JK, 1600, 2); SetRating(b, JK, 1600, 2)
+    check(a.ns.Game.LeagueOK(JK), "provisional players may play anyone")
+
+    section("social: queues")
+    for _, cl in ipairs({ a, b }) do cl.ns.Ledger.players = {} end
+    -- casual: "any" pairs with a specific time control and adopts it
+    a.ns.Game.StartSeek(600, 0, false, true)
+    b.ns.Game.StartSeek(300, 0, false, false)
+    Advance(30)
+    ga, gb = a.ns.Game.current, b.ns.Game.current
+    check(ga.state == "active" and ga.id == gb.id, "casual queue matched 'any' with 5+0")
+    eq(ga.base, 300, "the specific time control was used")
+    check(not ga.rated, "casual queue gives a casual battle")
+    a.ns.Game.Resign(); Advance(2)
+    -- rated queue never pairs with the casual queue
+    a.ns.Game.StartSeek(600, 0, true, true)
+    b.ns.Game.StartSeek(600, 0, false, true)
+    Advance(30)
+    check(a.ns.Game.current.state ~= "active", "rated and casual queues stay apart")
+    b.ns.Game.StopSeek()
+    b.ns.Game.StartSeek(600, 0, true, true)
+    Advance(30)
+    ga = a.ns.Game.current
+    check(ga.state == "active" and ga.rated and ga.base == 600, "two rated 'any' players get rated 10+0")
+    a.ns.Game.Resign(); Advance(2)
+
+    section("social: lobby filters and profiles")
+    a.ns.UI.ShowTab("lobby")
+    for _, f in ipairs({ "all", "r", "c", "g" }) do
+        a.ns.Tabs.lobby.filter = f
+        a.ns.UI.Refresh()
+    end
+    check(true, "lobby filters render")
+    a.ns.UI.ShowProfile(JK)
+    Advance(3)
+    local card = a.ns.UI.profileCard
+    check(card and card:IsShown(), "profile card opens")
+    check(a.ns.Profile.players[JK].feats ~= nil, "their feats arrived")
+    eq(a.ns.Profile.players[JK].army, "Scourge", "their chosen army arrived")
+    a.ns.UI.ShowProfile(CA)
+    check(true, "own profile renders")
+    a.ns.UI.ShowTab("collection")
+    a.ns.Tabs.coll.section = "armies"
+    a.ns.UI.Layout(); a.ns.UI.Refresh()
+    check(#a.ns.Tabs.coll.grids.armies.data == 9, "nine armies listed")
+    for _, cl in ipairs({ a, b, w }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
 end
 
 ------------------------------------------------------------------------

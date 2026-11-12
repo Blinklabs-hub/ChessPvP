@@ -386,7 +386,7 @@ local function RefreshInvite()
     end
     invitePopup.id = inv.id
     local e = P.players[inv.from]
-    local faction = e and e.f
+    local faction = (A.IsArmy(inv.army) and inv.army) or (e and (e.army or e.f))
     W.SetCrest(invitePopup.crest, faction)
     local v = ns.Ledger.Get(inv.from)
     local games = v and v.games or 0
@@ -558,11 +558,11 @@ ns.On("CHESS_GAME_STARTED", function(g)
         if currentTab == "play" then UI.SetCollapsed(true) else collapsed = true end
     end
     ns.Sound("start")
-    ns.Sound("cry" .. A.MyFaction())
+    ns.Sound("cry" .. A.ArmyFor(g.myColor or 1, g))
     if BoardVisible() and play.board then
-        local army = A.ArmyFor(g.myColor or 1, g)
-        local foe = army == "Horde" and "Alliance" or "Horde"
-        play.board:FloatText(nil, army .. " vs " .. foe, 1, 0.82, 0, true)
+        local mine = A.ARMIES[A.ArmyFor(g.myColor or 1, g)].name
+        local foe = A.ARMIES[A.ArmyFor(-(g.myColor or 1), g)].name
+        play.board:FloatText(nil, mine .. " vs " .. foe, 1, 0.82, 0, true)
     end
 end)
 
@@ -576,13 +576,13 @@ end)
 
 ns.On("CHESS_GAME_OVER", function(g)
     if g.outcome == "win" then
-        ns.Sound("win" .. A.MyFaction())
+        ns.Sound("win" .. A.ARMIES[A.ArmyFor(g.myColor or 1, g)].side)
     elseif g.outcome == "loss" then
         ns.Sound("lose")
     elseif g.result == "1/2" then
         ns.Sound("draw")
     elseif g.result == "1-0" or g.result == "0-1" then
-        ns.Sound("win" .. A.ArmyFor(g.result == "1-0" and 1 or -1, g))
+        ns.Sound("win" .. A.ARMIES[A.ArmyFor(g.result == "1-0" and 1 or -1, g)].side)
     end
     if g.mode == "online" and g.outcome then
         local text = (g.outcome == "win" and "you won") or (g.outcome == "loss" and "you lost") or "the game was drawn"

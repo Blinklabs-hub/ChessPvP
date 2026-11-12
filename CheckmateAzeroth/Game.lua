@@ -43,6 +43,7 @@ local function NewGame(o)
         spectators = {}, spectatorCount = 0,
         lastPiece = {}, knightPromo = {},
     }
+    if o.wa or o.ba then g.armies = ns.Assets.ResolveArmies(o.wa, o.ba) end
     g.timed = g.base > 0
     g.clock = { [1] = g.base, [-1] = g.base }
     g.turnT = ns.Now()
@@ -76,6 +77,7 @@ local function Persist(g)
     p.active = {
         id = g.id, mode = g.mode, white = g.white, black = g.black,
         wr = g.wr, br = g.br, wt = g.wt, bt = g.bt,
+        wa = g.armies and g.armies[1], ba = g.armies and g.armies[-1],
         myColor = g.myColor, opp = g.opp, rated = g.rated, base = g.base, inc = g.inc,
         aiLevel = g.aiLevel, moves = moves, seq = g.seq,
         clockW = g.clock[1], clockB = g.clock[-1], turnS = g.turnS,
@@ -168,7 +170,7 @@ local announceQueued = false
 local function MyStatus()
     local g = G.current
     if g and g.state == "active" and g.mode == "online" then return "g", g.opp end
-    if G.seek then return "s", "" end
+    if G.seek then return G.seek.rated and "r" or "c", "" end
     if ns.db.settings.dnd then return "d", "" end
     return "i", ""
 end
@@ -190,7 +192,7 @@ function G.Announce(force)
     nextAnnounce = now + 240 + math.random(0, 60)
     local p = P.me
     local status, opp = MyStatus()
-    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction())
+    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction(), ns.Assets.MyArmy())
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -200,6 +202,7 @@ C.handlers.PF = function(sender, dist, parts)
     if not P.UpdatePlayer(sender, rating, w, l, d, title, points) then return end
     local faction = parts[11]
     if faction == "Horde" or faction == "Alliance" then P.players[sender].f = faction end
+    if ns.Assets.IsArmy(parts[12]) then P.players[sender].army = parts[12] end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
     ns.Fire("CHESS_LOBBY_CHANGED")
@@ -272,8 +275,8 @@ local function Finish(g, result, reason)
     g.outcome = outcome
 
     -- Rated result statement for the witnessed ladder (see Ledger.lua).
-    if g.mode == "online" and g.rated and result ~= "*" then
-        g.ratingBefore = ns.Ledger.Rating(ns.me)
+    if g.mode == "online" and result ~= "*" then
+        if g.rated then g.ratingBefore = ns.Ledger.Rating(ns.me) end
         ns.Ledger.StateOwn(g, result)
     end
 
@@ -346,7 +349,7 @@ local function Begin(g)
     G.current = g
     G.watchPending = nil
     Persist(g)
-    if g.mode == "online" and g.rated then ns.Ledger.StateOwn(g, nil) end
+    if g.mode == "online" then ns.Ledger.StateOwn(g, nil) end
     ns.Fire("CHESS_GAME_STARTED", g)
     ns.Fire("CHESS_GAME_CHANGED", g)
     if g.mode == "ai" and g.pos.turn ~= g.myColor then AIThink(g) end
@@ -398,6 +401,8 @@ function G.StartAI(level, color)
     Begin(NewGame({
         mode = "ai", aiLevel = level, myColor = color,
         white = (color == 1) and me or botName, black = (color == 1) and botName or me,
+        wa = (color == 1) and ns.Assets.MyArmy() or ns.Assets.Rival(ns.Assets.MyArmy()),
+        ba = (color == 1) and ns.Assets.Rival(ns.Assets.MyArmy()) or ns.Assets.MyArmy(),
     }))
 end
 
@@ -406,7 +411,8 @@ function G.StartLocal()
         ns.Print("finish your current game first.")
         return
     end
-    Begin(NewGame({ mode = "local", white = "White", black = "Black" }))
+    Begin(NewGame({ mode = "local", white = "White", black = "Black",
+        wa = ns.Assets.MyArmy(), ba = ns.Assets.Rival(ns.Assets.MyArmy()) }))
 end
 
 function G.Resign()
@@ -505,6 +511,11 @@ function G.Invite(name, opts)
     local rated = opts.rated
     if rated == nil then rated = s.rated ~= false end
     if base == 0 then rated = false end -- rated games always use a clock
+    if rated and not opts.q and not G.LeagueOK(name) then
+        ns.Print(string.format("%s plays in the %s league - rated battles are only possible within one league of yours. Sending a casual challenge instead.",
+            ns.ShortName(name), G.LeagueName(name)))
+        rated = false
+    end
     local color = opts.color or s.color or "r"
     local myColor = (color == "w") and 1 or (color == "b") and -1 or ((math.random(1, 2) == 1) and 1 or -1)
     local id = ns.NewId()
@@ -513,7 +524,7 @@ function G.Invite(name, opts)
         expires = ns.Now() + INVITE_TIMEOUT, q = opts.q,
     }
     C.Whisper(name, "IV", id, base, inc, rated and 1 or 0, (myColor == 1) and "w" or "b",
-        P.me.rating, ns.PROTO, opts.q and 1 or 0, P.MyTitleId())
+        P.me.rating, ns.PROTO, opts.q and 1 or 0, P.MyTitleId(), ns.Assets.MyArmy())
     if not opts.q then
         ns.Print("challenge sent to " .. ns.ShortName(name) .. ".")
     end
@@ -550,10 +561,11 @@ local function AcceptInvite(inv)
         white = (myColor == 1) and ns.me or inv.from, black = (myColor == 1) and inv.from or ns.me,
         wr = (myColor == 1) and p.rating or inv.rating, br = (myColor == 1) and inv.rating or p.rating,
         wt = (myColor == 1) and P.MyTitleId() or inv.title, bt = (myColor == 1) and inv.title or P.MyTitleId(),
+        wa = (myColor == 1) and ns.Assets.MyArmy() or inv.army, ba = (myColor == 1) and inv.army or ns.Assets.MyArmy(),
     })
-    C.Whisper(inv.from, "AC", inv.id, p.rating, P.MyTitleId())
+    C.Whisper(inv.from, "AC", inv.id, p.rating, P.MyTitleId(), ns.Assets.MyArmy())
     -- Resent until the challenger confirms (GA), in case the message is lost.
-    g.acPending = { next = ns.Now() + 3, tries = 0, text = ns.Join("AC", inv.id, p.rating, P.MyTitleId()) }
+    g.acPending = { next = ns.Now() + 3, tries = 0, text = ns.Join("AC", inv.id, p.rating, P.MyTitleId(), ns.Assets.MyArmy()) }
     -- Any other pending challenges are declined.
     for _, other in pairs(G.incoming) do
         C.Whisper(other.from, "DC", other.id, "busy")
@@ -610,16 +622,20 @@ C.handlers.IV = function(sender, dist, parts)
     if base == 0 then rated = false end
     local inv = {
         id = gid, from = sender, base = base, inc = inc, rated = rated,
-        theirColor = color, rating = floor(rating), title = parts[10] or "",
+        theirColor = color, rating = floor(rating), title = parts[10] or "", army = parts[11],
         expires = ns.Now() + INVITE_TIMEOUT,
     }
     if q then
         local s = G.seek
-        if s and s.base == base and s.inc == inc and s.rated == rated then
+        if s and G.SeekCompatible(s, sender, base, inc, rated, false) then
             AcceptInvite(inv)
         else
             C.Whisper(sender, "DC", gid, "noseek")
         end
+        return
+    end
+    if rated and not G.LeagueOK(sender) then
+        C.Whisper(sender, "DC", gid, "league")
         return
     end
     if ns.db.settings.dnd then
@@ -650,6 +666,7 @@ C.handlers.AC = function(sender, dist, parts)
     if rating < 100 or rating > 3500 then rating = D.START_RATING end
     rating = floor(rating)
     local title = parts[4] or ""
+    local theirArmy = parts[5]
     G.outgoing = nil
     G.seek = nil
     local p = P.me
@@ -660,6 +677,7 @@ C.handlers.AC = function(sender, dist, parts)
         white = (myColor == 1) and ns.me or sender, black = (myColor == 1) and sender or ns.me,
         wr = (myColor == 1) and p.rating or rating, br = (myColor == 1) and rating or p.rating,
         wt = (myColor == 1) and P.MyTitleId() or title, bt = (myColor == 1) and title or P.MyTitleId(),
+        wa = (myColor == 1) and ns.Assets.MyArmy() or theirArmy, ba = (myColor == 1) and theirArmy or ns.Assets.MyArmy(),
     })
     for _, other in pairs(G.incoming) do
         C.Whisper(other.from, "DC", other.id, "busy")
@@ -682,6 +700,7 @@ local DECLINE_TEXT = {
     busy = "is already in a game.",
     dnd = "is not accepting challenges right now.",
     version = "is using a different version of Checkmate: Azeroth.",
+    league = "is too far from your league for a rated battle. Try a casual one.",
 }
 
 C.handlers.DC = function(sender, dist, parts)
@@ -717,7 +736,8 @@ end)
 ------------------------------------------------------------------------
 -- Matchmaking
 ------------------------------------------------------------------------
-function G.StartSeek(base, inc, rated)
+-- Joins the rated or casual queue. any = true accepts any time control.
+function G.StartSeek(base, inc, rated, any)
     if OnlineBusy() then
         ns.Print("finish your current game first.")
         return
@@ -726,8 +746,8 @@ function G.StartSeek(base, inc, rated)
         ns.Print("still connecting to the chess network - try again in a few seconds.")
         return
     end
-    if base == 0 then rated = false end
-    G.seek = { base = base, inc = inc, rated = rated and true or false, next = 0 }
+    if base == 0 and not any then rated = false end
+    G.seek = { base = base, inc = inc, rated = rated and true or false, any = any and true or false, next = 0, since = ns.Now() }
     G.Announce()
     ns.Fire("CHESS_INVITE_CHANGED")
 end
@@ -739,16 +759,90 @@ function G.StopSeek()
     ns.Fire("CHESS_INVITE_CHANGED")
 end
 
+------------------------------------------------------------------------
+-- Leagues (rated battles only within one league; provisional players play anyone)
+------------------------------------------------------------------------
+-- League index of a player from the witnessed ledger, or 0 while provisional.
+function G.LeagueIndex(name)
+    local v = ns.Ledger.Get(name)
+    if not v or v.games < D.PLACEMENT_GAMES then return 0 end
+    return D.LeagueFor(v.r)
+end
+
+function G.LeagueName(name)
+    local i = G.LeagueIndex(name)
+    return i == 0 and "Unranked" or D.LEAGUES[i].name
+end
+
+function G.LeagueOK(name)
+    local a, b = G.LeagueIndex(ns.me), G.LeagueIndex(name)
+    return a == 0 or b == 0 or math.abs(a - b) <= 1
+end
+
+-- Can my queue entry s be paired with an opponent's (base, inc, rated, any)?
+-- Returns ok, base, inc (the time control to use).
+function G.SeekCompatible(s, sender, base, inc, rated, theirAny)
+    if s.rated ~= rated then return false end
+    if rated and not G.LeagueOK(sender) then return false end
+    if not s.any and not theirAny then
+        if s.base ~= base or s.inc ~= inc then return false end
+        return true, base, inc
+    end
+    if not s.any then return true, s.base, s.inc end
+    if not theirAny then return true, base, inc end
+    local tc = D.TIME_CONTROLS[4] -- both said "any": Rapid 10+0
+    return true, tc.base, tc.inc
+end
+
 C.handlers.SK = function(sender, dist, parts)
     if dist ~= "CHANNEL" then return end
     local s = G.seek
     if not s or G.outgoing or OnlineBusy() then return end
-    local base, inc, rated = tonumber(parts[2]), tonumber(parts[3]), parts[4] == "1"
-    if base ~= s.base or inc ~= s.inc or rated ~= s.rated then return end
+    local base, inc, rated, any = tonumber(parts[2]), tonumber(parts[3]), parts[4] == "1", parts[5] == "1"
+    if not base or not inc then return end
+    local ok, b, i = G.SeekCompatible(s, sender, base, inc, rated, any)
+    if not ok then return end
     -- Both sides see each other's request; the alphabetically first name sends the challenge.
     if ns.me < sender then
-        G.Invite(sender, { base = s.base, inc = s.inc, rated = s.rated, color = "r", q = true })
+        G.Invite(sender, { base = b, inc = i, rated = s.rated, color = "r", q = true })
     end
+end
+
+------------------------------------------------------------------------
+-- Profiles: ask a player for the things only they know (army, feats, title).
+--   PQ                         -> PR;army;title;feat indexes (comma separated)
+------------------------------------------------------------------------
+function G.RequestProfile(name)
+    if ns.SameName(name, ns.me) then return end
+    C.Whisper(name, "PQ")
+end
+
+C.handlers.PQ = function(sender, dist)
+    if dist ~= "WHISPER" then return end
+    local list = {}
+    for i = 1, #D.BADGES do
+        if P.me.badges[D.BADGES[i].id] then list[#list + 1] = i end
+    end
+    C.Whisper(sender, "PR", ns.Assets.MyArmy(), P.MyTitleId(), table.concat(list, ","))
+end
+
+C.handlers.PR = function(sender, dist, parts)
+    if dist ~= "WHISPER" then return end
+    local e = P.players[sender]
+    if not e then
+        e = { r = D.START_RATING, w = 0, l = 0, d = 0, t = "", seen = ns.ServerTime() }
+        P.players[sender] = e
+    end
+    if ns.Assets.IsArmy(parts[2]) then e.army = parts[2] end
+    if parts[3] and #parts[3] <= 24 then e.t = parts[3] end
+    local feats = {}
+    for idx in string.gmatch(parts[4] or "", "%d+") do
+        local b = D.BADGES[tonumber(idx)]
+        if b then feats[#feats + 1] = b.id end
+    end
+    e.feats = feats
+    e.profileAt = ns.ServerTime()
+    ns.Fire("CHESS_PROFILE_INFO", sender)
 end
 
 ------------------------------------------------------------------------
@@ -1048,7 +1142,7 @@ C.handlers.SP = function(sender, dist)
         g.spectatorCount = g.spectatorCount + 1
     end
     C.Whisper(sender, "SS", g.id, g.white, g.black, g.wr or 0, g.br or 0, g.base, g.inc, g.rated and 1 or 0,
-        floor(max(0, G.Remaining(g, 1)) * 10), floor(max(0, G.Remaining(g, -1)) * 10), g.wt or "", g.bt or "")
+        floor(max(0, G.Remaining(g, 1)) * 10), floor(max(0, G.Remaining(g, -1)) * 10), g.wt or "", g.bt or "", g.armies and g.armies[1] or "", g.armies and g.armies[-1] or "")
     SendMoveList(sender, g, 1)
 end
 
@@ -1081,7 +1175,7 @@ C.handlers.SS = function(sender, dist, parts)
     local g = NewGame({
         id = gid, mode = "spectate", source = sender, white = white, black = black,
         wr = tonumber(parts[5]), br = tonumber(parts[6]), base = base, inc = inc, rated = parts[9] == "1",
-        wt = parts[12], bt = parts[13],
+        wt = parts[12], bt = parts[13], wa = parts[14], ba = parts[15],
     })
     g.clock[1] = (tonumber(parts[10]) or 0) / 10
     g.clock[-1] = (tonumber(parts[11]) or 0) / 10
@@ -1194,7 +1288,7 @@ ns.On("CHESS_TICK", function()
     local s = G.seek
     if s and now >= s.next and C.Joined() then
         s.next = now + 12
-        C.Broadcast("SK", s.base, s.inc, s.rated and 1 or 0)
+        C.Broadcast("SK", s.base, s.inc, s.rated and 1 or 0, s.any and 1 or 0)
     end
 
     if C.Joined() and now >= nextAnnounce and nextAnnounce > 0 then

@@ -46,7 +46,7 @@ end
 
 -- Records a statement by `sender` about game `id`. res is a result or nil (started).
 -- Returns true when something changed.
-function L.AddStatement(sender, id, white, black, ts, res)
+function L.AddStatement(sender, id, white, black, ts, res, casual)
     if not db then return false end
     if type(id) ~= "string" or not string.match(id, "^%w+$") or #id > 12 then return false end
     if type(white) ~= "string" or type(black) ~= "string" or white == black then return false end
@@ -58,9 +58,9 @@ function L.AddStatement(sender, id, white, black, ts, res)
     local g = db.games[id]
     if not g then
         if CountStatements(sender) >= MAX_PER_PLAYER then return false end
-        g = { w = white, b = black, st = {} }
+        g = { w = white, b = black, st = {}, casual = casual and true or nil }
         db.games[id] = g
-    elseif g.w ~= white or g.b ~= black then
+    elseif g.w ~= white or g.b ~= black or (g.casual or false) ~= (casual and true or false) then
         return false -- the first description of a game id wins
     end
     local st = g.st[sender]
@@ -93,7 +93,8 @@ end
 local function Get(players, name)
     local p = players[name]
     if not p then
-        p = { r = START, w = 0, l = 0, d = 0, games = 0, peak = START, beaten = 0, opps = {}, disputed = 0 }
+        p = { r = START, w = 0, l = 0, d = 0, games = 0, peak = START, beaten = 0, opps = {}, disputed = 0,
+            cw = 0, cl = 0, cd = 0, recent = {} }
         players[name] = p
     end
     return p
@@ -151,6 +152,15 @@ function L.Recompute()
         if disputed then
             Get(players, g.w).disputed = Get(players, g.w).disputed + 1
             Get(players, g.b).disputed = Get(players, g.b).disputed + 1
+        elseif res and g.casual then
+            -- Casual: witnessed win/loss/draw record, no rating, no daily cap.
+            local pw, pb = Get(players, g.w), Get(players, g.b)
+            local sw = (res == "1-0" and 1) or (res == "1/2" and 0.5) or 0
+            if sw == 1 then pw.cw, pb.cl = pw.cw + 1, pb.cl + 1
+            elseif sw == 0 then pb.cw, pw.cl = pb.cw + 1, pw.cl + 1
+            else pw.cd, pb.cd = pw.cd + 1, pb.cd + 1 end
+            table.insert(pw.recent, { opp = g.b, s = sw, rated = false, ts = e.ts })
+            table.insert(pb.recent, { opp = g.w, s = 1 - sw, rated = false, ts = e.ts })
         elseif res then
             local a, b = g.w, g.b
             if b < a then a, b = b, a end
@@ -174,6 +184,8 @@ function L.Recompute()
                 else
                     pw.d, pb.d = pw.d + 1, pb.d + 1
                 end
+                table.insert(pw.recent, { opp = g.b, s = sw, rated = true, ts = e.ts, d = floor(dw + 0.5) })
+                table.insert(pb.recent, { opp = g.w, s = 1 - sw, rated = true, ts = e.ts, d = floor(db_ + 0.5) })
                 pw.peak = math.max(pw.peak, floor(pw.r + 0.5))
                 pb.peak = math.max(pb.peak, floor(pb.r + 0.5))
             end
@@ -182,6 +194,10 @@ function L.Recompute()
     for _, p in pairs(players) do
         p.r = floor(p.r + 0.5)
         p.opps = nil
+        -- Newest first, last 10 only.
+        local recent = {}
+        for i = #p.recent, math.max(1, #p.recent - 9), -1 do recent[#recent + 1] = p.recent[i] end
+        p.recent = recent
     end
     L.players = players
     ns.Fire("CHESS_LEDGER_CHANGED")
@@ -213,6 +229,37 @@ function L.Get(name)
     return nil
 end
 
+-- Casual record, or nil if no witnessed casual games.
+function L.Casual(name)
+    local p = L.players[name]
+    if p and (p.cw + p.cl + p.cd) > 0 then return p end
+    return nil
+end
+
+-- Any witnessed record (rated or casual).
+function L.Any(name)
+    return L.players[name]
+end
+
+-- Head-to-head between a and b, from a's point of view: { w, l, d }.
+function L.HeadToHead(a, b)
+    local r = { w = 0, l = 0, d = 0 }
+    if not db then return r end
+    local now = ns.ServerTime()
+    for _, g in pairs(db.games) do
+        if (g.w == a and g.b == b) or (g.w == b and g.b == a) then
+            local res = Outcome(g, now)
+            if res then
+                local aWhite = g.w == a
+                if res == "1/2" then r.d = r.d + 1
+                elseif (res == "1-0") == aWhite then r.w = r.w + 1
+                else r.l = r.l + 1 end
+            end
+        end
+    end
+    return r
+end
+
 function L.Rating(name)
     local p = L.players[name]
     return p and p.r or START
@@ -225,7 +272,7 @@ end
 local function Record(id, g, name)
     local st = g.st[name]
     if not st then return nil end
-    return table.concat({ id, g.w, g.b, st.ts, st.res or "-" }, ",")
+    return table.concat({ id, g.w, g.b, st.ts, st.res or "-", g.casual and "c" or "r" }, ",")
 end
 
 -- Broadcasts our own statements for the given game ids (packed, 255-byte limit).
@@ -263,18 +310,18 @@ end
 
 -- Called by Game when a rated online game starts or ends.
 function L.StateOwn(g, res)
-    if not db or not g.rated or g.mode ~= "online" then return end
+    if not db or g.mode ~= "online" then return end
     g.ledgerTs = g.ledgerTs or ns.ServerTime()
-    L.AddStatement(ns.me, g.id, g.white, g.black, g.ledgerTs, res)
+    L.AddStatement(ns.me, g.id, g.white, g.black, g.ledgerTs, res, not g.rated)
     Share({ g.id })
 end
 
 ns.Comm.handlers.GB = function(sender, dist, parts)
     for i = 2, #parts do
         local f = ns.Split(parts[i], ",")
-        if #f == 5 then
+        if #f == 5 or #f == 6 then
             local res = f[5] ~= "-" and f[5] or nil
-            L.AddStatement(sender, f[1], f[2], f[3], f[4], res)
+            L.AddStatement(sender, f[1], f[2], f[3], f[4], res, f[6] == "c")
         end
     end
 end
