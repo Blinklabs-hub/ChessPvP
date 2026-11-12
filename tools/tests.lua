@@ -333,6 +333,7 @@ if want("forever") then
     check(a.ns.Profile.online["Just Other"] ~= nil, "lobby lists 'Just Other' separately")
 
     local function Duel(label, challenge)
+        Advance(8) -- let the previous game's messages drain (about 1 message per second)
         challenge()
         Advance(1)
         check(b.ns.Game.LatestInvite() ~= nil, label .. ": challenge arrives")
@@ -445,13 +446,13 @@ if want("forever") then
         ["Canga-TestRealm"] = { rating = 1210, peak = 1210, w = 1, l = 0, d = 0, games = 1 },
     }, realms = { Prime = { players = {} }, TestRealm = { players = { ["Just-TestRealm"] = { r = 1200, w = 0, l = 0, d = 0, seen = 0 } } } } }
     local m = NewClient("Canga", old, "Prime")
-    eq(m.ns.Profile.me.rating, 1337, "the profile with most games is kept")
+    eq(m.ns.Profile.me.w, 9, "the profile with most games is kept")
     eq(m.env.ChessPvPDB.chars["Canga-Prime"], nil, "1.0.0 key removed")
     eq(m.env.ChessPvPDB.chars["Canga-TestRealm"], nil, "1.0.1 key removed")
     eq(m.ns.Profile.GetPlayer("Just-TestRealm"), nil, "old ladder cache cleared")
     RemoveClient(m)
     local again = NewClient("Canga", m.env.ChessPvPDB, "Prime")
-    eq(again.ns.Profile.me.rating, 1337, "migration only runs once")
+    eq(again.ns.Profile.me.w, 9, "migration only runs once")
     RemoveClient(again)
     net.forever = false
 end
@@ -571,6 +572,107 @@ if want("visual") then
     end
     eq(#c.errors, 0, "no errors with animations off")
     RemoveClient(c)
+end
+
+------------------------------------------------------------------------
+if want("ledger") then
+    -- Carol only watches. Her ladder must reflect what really happened.
+    section("ledger: honest rated game")
+    local a = NewClient("Alice")
+    local b = NewClient("Bob")
+    local c = NewClient("Carol")
+    Advance(20)
+    local AL, BO = "Alice-TestRealm", "Bob-TestRealm"
+    local function Rating(cl, name) return cl.ns.Ledger.Rating(name) end
+    local function PlayMate(white, black)
+        white.ns.Game.Move("f2f3"); Advance(1)
+        black.ns.Game.Move("e7e5"); Advance(1)
+        white.ns.Game.Move("g2g4"); Advance(1)
+        black.ns.Game.Move("d8h4"); Advance(3)
+    end
+    a.ns.db.settings.color = "w"
+    a.ns.Game.Invite("Bob"); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    PlayMate(a, b) -- fool's mate: Black (Bob) wins
+    Advance(10)
+    eq(Rating(c, BO), 1220, "witness: winner +20")
+    eq(Rating(c, AL), 1180, "witness: loser -20")
+    eq(Rating(a, AL), 1180, "loser's own client agrees")
+    eq(b.ns.Profile.me.rating, 1220, "winner's profile rating comes from the ledger")
+    eq(b.ns.Game.current.delta, 20, "banner shows the confirmed rating change")
+
+    section("ledger: editing your own rating does nothing")
+    local p = a.ns.Profile.me
+    p.rating, p.w, p.peak = 2400, 300, 2400 -- edited saved variables
+    a.ns.Game.Announce(true); Advance(20)
+    eq(Rating(c, AL), 1180, "witness ignores the edited rating")
+    local top = c.ns.Profile.Board()[1]
+    eq(top.name, BO, "ladder still led by the real winner")
+    Advance(5)
+    eq(a.ns.Profile.me.rating, 1180, "the cheater's own client puts the ledger rating back")
+
+    local GB = c.ns.Comm.handlers.GB
+    local now = math.floor(1700000000 + T)
+    local function Say(sender, id, w, bl, res, ts)
+        GB(sender, "CHANNEL", { "GB", table.concat({ id, w, bl, ts or now, res or "-" }, ",") })
+    end
+
+    section("ledger: invented games and other people's games")
+    for i = 1, 5 do Say(AL, "FAKE" .. i, AL, BO, "1-0") end -- Alice claims 5 wins Bob never played
+    Say(AL, "OTHER1", BO, "Carol-TestRealm", "0-1") -- a statement about a game she was not in
+    Advance(2)
+    eq(Rating(c, AL), 1180, "games without the opponent's statement never count")
+    eq(c.ns.Ledger.Get("Carol-TestRealm"), nil, "statements about other people's games are ignored")
+
+    section("ledger: disputed result")
+    Say(AL, "DISP1", AL, BO); Say(BO, "DISP1", AL, BO)
+    Say(AL, "DISP1", AL, BO, "1-0"); Say(BO, "DISP1", AL, BO, "0-1")
+    Say(AL, "DISP1", AL, BO, "0-1") -- changing your story later is ignored too
+    Advance(2)
+    eq(Rating(c, AL), 1180, "disputed game does not count")
+    eq(c.ns.Ledger.Get(AL).disputed, 1, "Alice marked as disputing")
+    eq(c.ns.Ledger.Get(BO).disputed, 1, "Bob marked as disputing")
+
+    section("ledger: rage quit")
+    Say(AL, "QUIT1", AL, BO); Say(BO, "QUIT1", AL, BO) -- both started it
+    Say(BO, "QUIT1", AL, BO, "0-1") -- Bob won; Alice never states the result
+    Advance(70)
+    eq(Rating(c, AL), 1180, "one-sided result waits for the opponent")
+    Advance(1800)
+    check(Rating(c, AL) < 1180, "after 30 minutes of silence the loss counts (" .. Rating(c, AL) .. ")")
+    check(Rating(c, BO) > 1220, "and the win counts")
+
+    section("ledger: farming one opponent")
+    local before = Rating(c, BO)
+    local day = now - 86400 * 3 -- a day with no other Alice-Bob games
+    for i = 1, 5 do
+        local id = "FARM" .. i
+        Say(AL, id, AL, BO, nil, day + i); Say(BO, id, AL, BO, nil, day + i)
+        Say(AL, id, AL, BO, "0-1", day + i); Say(BO, id, AL, BO, "0-1", day + i)
+    end
+    Advance(2)
+    local gained = Rating(c, BO) - before
+    local farm = c.ns.Ledger.Get(BO)
+    check(gained > 0 and gained < 45, "only 2 games per pair per day count (gained " .. gained .. ")")
+    eq(farm.beaten, 1, "ladder shows Bob has only beaten 1 different player")
+
+    section("ledger: a late joiner rebuilds the same ladder")
+    local d = NewClient("Dave")
+    Advance(60)
+    -- (The hand-made statements above only went to Carol; the real game is re-shared by its players.)
+    eq(Rating(d, BO), 1220, "Dave learns Bob's real win from the re-shared statements")
+    eq(Rating(d, BO), Rating(a, BO), "Dave's ladder matches the players' own")
+    eq(Rating(d, AL), Rating(b, AL), "Dave's ladder matches for Alice too")
+
+    section("ledger: unrated games never touch the ladder")
+    local games = c.ns.Ledger.Get(AL).games
+    a.ns.Game.Resign(); b.ns.Game.Resign(); Advance(2)
+    a.ns.Game.Invite("Bob", { rated = false }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    PlayMate(a, b); Advance(10)
+    eq(c.ns.Ledger.Get(AL).games, games, "casual game not on the ladder")
+
+    for _, cl in ipairs({ a, b, c, d }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors") ; RemoveClient(cl) end
 end
 
 ------------------------------------------------------------------------

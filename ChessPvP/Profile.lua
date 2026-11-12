@@ -60,8 +60,12 @@ local function InitProfile()
     end
 end
 
+-- Counted rated games: from the ledger for ourselves, else what was announced.
 function P.RatedGames(p)
-    p = p or P.me
+    if p == nil or p == P.me then
+        local e = ns.Ledger.Get(ns.me)
+        return e and e.games or 0
+    end
     return p.w + p.l + p.d
 end
 
@@ -217,11 +221,8 @@ function P.RecordGame(s)
             p.rivalCount = p.rivalCount + 1
         end
         if s.rated then
-            local score = (s.outcome == "win" and 1) or (s.outcome == "draw" and 0.5) or 0
-            local new = P.Elo(p.rating, s.oppRating or D.START_RATING, score, P.RatedGames(p))
-            delta = new - p.rating
-            p.rating = new
-            if new > p.peak then p.peak = new end
+            -- The rating itself comes from the witnessed ledger (Ledger.lua); these local
+            -- counts only drive badges and unlocks.
             if s.outcome == "win" then
                 p.w = p.w + 1
                 p.streak = p.streak + 1
@@ -300,16 +301,19 @@ function P.GetPlayer(name)
     return P.players and P.players[name]
 end
 
--- Sorted leaderboard rows, including the local player.
+-- Ladder rows from the witnessed ledger, best first.
+--   name, r, w, l, d, games, beaten, disputed, peak, t (title id), f (faction), me
 function P.Board()
     local rows = {}
-    local me = P.me
-    if P.RatedGames(me) > 0 then
-        rows[#rows + 1] = { name = ns.me, r = me.rating, w = me.w, l = me.l, d = me.d, t = P.MyTitleId(), pts = P.Points(me), me = true }
-    end
-    for name, e in pairs(P.players) do
-        if name ~= ns.me and (e.w + e.l + e.d) > 0 then
-            rows[#rows + 1] = { name = name, r = e.r, w = e.w, l = e.l, d = e.d, t = e.t, pts = e.pts or 0 }
+    for name, e in pairs(ns.Ledger.players) do
+        if e.games > 0 then
+            local known = P.players[name]
+            local t = name == ns.me and P.MyTitleId() or (known and known.t) or ""
+            rows[#rows + 1] = {
+                name = name, r = e.r, w = e.w, l = e.l, d = e.d, games = e.games, beaten = e.beaten,
+                disputed = e.disputed, peak = e.peak, t = t, me = name == ns.me,
+                f = name == ns.me and ns.Assets.MyFaction() or (known and known.f),
+            }
         end
     end
     table.sort(rows, function(a, b)
@@ -336,10 +340,13 @@ function P.OnlineList()
             P.online[name] = nil
         else
             local e = P.players[name]
+            local v = ns.Ledger.Get(name)
             rows[#rows + 1] = {
                 name = name, status = o.status, opp = o.opp,
-                r = e and e.r or D.START_RATING, t = e and e.t or "",
-                g = e and (e.w + e.l + e.d) or 0,
+                -- Witnessed rating when known; otherwise what they claim, marked unverified.
+                r = v and v.r or (e and e.r) or D.START_RATING, verified = v ~= nil,
+                t = e and e.t or "", f = e and e.f,
+                g = v and v.games or 0,
             }
         end
     end
@@ -378,3 +385,12 @@ ns.ResolveSingleName = function(word)
 end
 
 ns.On("CHESS_READY", InitProfile)
+
+-- Our rating is whatever the ledger says.
+ns.On("CHESS_LEDGER_CHANGED", function()
+    if not P.me then return end
+    local e = ns.Ledger.Get(ns.me)
+    P.me.rating = e and e.r or D.START_RATING
+    P.me.peak = e and e.peak or D.START_RATING
+    ns.Fire("PROFILE_CHANGED")
+end)

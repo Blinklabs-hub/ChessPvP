@@ -74,20 +74,21 @@ local function Pump()
 end
 
 -- Queues a raw message. dist is "WHISPER" (target = full player name) or "CHANNEL".
-function C.SendRaw(dist, target, text)
+-- Game whispers go first; channel chatter and bulk messages (bulk = true) wait behind them.
+function C.SendRaw(dist, target, text, bulk)
     if #text > 255 then
         ns.Print("internal error: message too long (" .. #text .. ")")
         return
     end
-    local item = { dist = dist, target = target, text = text }
-    if dist == "CHANNEL" then
+    local item = { dist = dist, target = target, text = text, bulk = bulk }
+    if dist == "CHANNEL" or bulk then
         if #queue > 40 then return end -- never let ladder chatter pile up
         queue[#queue + 1] = item
     else
         -- Game whispers go ahead of any queued channel (lobby/ladder) messages.
         local at = #queue + 1
         for i = 1, #queue do
-            if queue[i].dist == "CHANNEL" then
+            if queue[i].dist == "CHANNEL" or queue[i].bulk then
                 at = i
                 break
             end

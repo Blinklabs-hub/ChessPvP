@@ -190,7 +190,7 @@ function G.Announce(force)
     nextAnnounce = now + 240 + math.random(0, 60)
     local p = P.me
     local status, opp = MyStatus()
-    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "")
+    C.Broadcast("PF", ns.PROTO, p.rating, p.w, p.l, p.d, P.MyTitleId(), P.Points(p), status, opp or "", ns.Assets.MyFaction())
 end
 
 C.handlers.PF = function(sender, dist, parts)
@@ -198,6 +198,8 @@ C.handlers.PF = function(sender, dist, parts)
     local rating, w, l, d = tonumber(parts[3]), tonumber(parts[4]), tonumber(parts[5]), tonumber(parts[6])
     local title, points, status, opp = parts[7] or "", tonumber(parts[8]) or 0, parts[9] or "i", parts[10]
     if not P.UpdatePlayer(sender, rating, w, l, d, title, points) then return end
+    local faction = parts[11]
+    if faction == "Horde" or faction == "Alliance" then P.players[sender].f = faction end
     if opp == "" then opp = nil end
     P.SetOnline(sender, status, opp)
     ns.Fire("CHESS_LOBBY_CHANGED")
@@ -269,10 +271,16 @@ local function Finish(g, result, reason)
     end
     g.outcome = outcome
 
+    -- Rated result statement for the witnessed ladder (see Ledger.lua).
+    if g.mode == "online" and g.rated and result ~= "*" then
+        g.ratingBefore = ns.Ledger.Rating(ns.me)
+        ns.Ledger.StateOwn(g, result)
+    end
+
     if outcome and (g.mode == "online" or g.mode == "ai") then
         local n = #g.moves
         local myMoves = (g.myColor == 1) and floor((n + 1) / 2) or floor(n / 2)
-        g.delta = P.RecordGame({
+        P.RecordGame({
             mode = g.mode, outcome = outcome, reason = reason, rated = g.rated,
             opp = g.opp, oppRating = (g.myColor == 1) and g.br or g.wr,
             myMoves = myMoves, matePiece = g.lastPiece[g.myColor], knightPromo = g.knightPromo[g.myColor],
@@ -338,6 +346,7 @@ local function Begin(g)
     G.current = g
     G.watchPending = nil
     Persist(g)
+    if g.mode == "online" and g.rated then ns.Ledger.StateOwn(g, nil) end
     ns.Fire("CHESS_GAME_STARTED", g)
     ns.Fire("CHESS_GAME_CHANGED", g)
     if g.mode == "ai" and g.pos.turn ~= g.myColor then AIThink(g) end
@@ -1190,6 +1199,14 @@ ns.On("CHESS_TICK", function()
 
     if C.Joined() and now >= nextAnnounce and nextAnnounce > 0 then
         G.Announce(true)
+    end
+end)
+
+ns.On("CHESS_LEDGER_CHANGED", function()
+    local g = G.current
+    if g and g.state == "over" and g.rated and g.ratingBefore and not g.delta and ns.Ledger.Counted(g.id) then
+        g.delta = ns.Ledger.Rating(ns.me) - g.ratingBefore
+        ns.Fire("CHESS_GAME_CHANGED", g)
     end
 end)
 
