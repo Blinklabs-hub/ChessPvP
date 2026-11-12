@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "1.3.0"
+ns.VERSION = "1.3.1"
 ns.PROTO = 2 -- network protocol version; bump when messages change incompatibly
 CheckmateAzeroth = ns -- exposed for debugging and the addon compartment
 
@@ -292,6 +292,7 @@ local function Help()
     ns.Print("  /chess challenge <name> - challenge a player (or your target)")
     ns.Print("  /chess accept | decline - answer the latest challenge")
     ns.Print("  /chess resign - resign the current game")
+    ns.Print("  /chess dnd | online - decline or accept challenges")
     ns.Print("  /chess reset - move the window back to the middle of the screen")
     ns.Print("  /chess debug - show name and connection details (for bug reports)")
 end
@@ -321,6 +322,10 @@ SlashCmdList["CHECKMATEAZEROTH"] = function(msg)
         ns.Game.AnswerLatest(false)
     elseif cmd == "resign" then
         ns.Game.Resign()
+    elseif cmd == "dnd" then
+        ns.UI.SetDND(true)
+    elseif cmd == "online" then
+        ns.UI.SetDND(false)
     elseif cmd == "reset" then
         ns.UI.ResetPosition()
     elseif cmd == "debug" then
@@ -359,6 +364,11 @@ SlashCmdList["CHECKMATEAZEROTH"] = function(msg)
     end
 end
 
-function CheckmateAzeroth_OnAddonCompartmentClick()
-    ns.UI.Toggle()
+-- Addon compartment (minimap addon menu): left-click opens, right-click sets your status.
+function CheckmateAzeroth_OnAddonCompartmentClick(_, button)
+    if button == "RightButton" then
+        ns.UI.ShowStatusMenu(nil)
+    else
+        ns.UI.Toggle()
+    end
 end

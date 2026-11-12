@@ -955,6 +955,59 @@ if want("discovery") then
 end
 
 ------------------------------------------------------------------------
+if want("status") then
+    section("status: online / do not disturb from the launcher")
+    net.forever = true
+    local a = NewClient("Canga", nil, "Prime")
+    local b = NewClient("Just", nil, "Keepingcalm")
+    Advance(25)
+    local UI = a.ns.UI
+    eq(UI.Status(), "online", "online by default")
+    -- right-click the launcher opens the status menu
+    local launcher
+    for _, f in ipairs(a.frames) do if f.status and f.statusBg then launcher = f end end
+    check(launcher ~= nil, "launcher has a status dot")
+    launcher.__scripts.OnClick(launcher, "RightButton")
+    check(UI.statusMenu and UI.statusMenu:IsShown(), "right-click opens the status menu")
+    UI.statusMenu.options[2]:Click() -- Do Not Disturb
+    eq(UI.Status(), "dnd", "Do Not Disturb chosen")
+    check(not UI.statusMenu:IsShown(), "menu closes after choosing")
+    Advance(5)
+    eq(b.ns.Profile.online["Canga Prime"].status, "d", "the other player sees Do Not Disturb in the lobby")
+    b.chat = {}
+    b.ns.Game.Invite("Canga Prime", { rated = false }); Advance(2)
+    local declined = false
+    for _, m in ipairs(b.chat) do if m:find("not accepting challenges") then declined = true end end
+    check(declined, "challenges are declined while on Do Not Disturb")
+    check(a.ns.Game.LatestInvite() == nil, "no popup while on Do Not Disturb")
+    launcher.__scripts.OnClick(launcher, "RightButton")
+    UI.statusMenu.options[1]:Click() -- Online
+    eq(UI.Status(), "online", "back online")
+    Advance(5)
+    eq(b.ns.Profile.online["Canga Prime"].status, "i", "the other player sees you online again")
+    b.ns.Game.Invite("Canga Prime", { rated = false }); Advance(2)
+    check(a.ns.Game.LatestInvite() ~= nil, "challenges arrive again")
+    a.ns.Game.AnswerLatest(false); Advance(1)
+    -- slash commands and the addon menu
+    a.env.SlashCmdList["CHECKMATEAZEROTH"]("dnd")
+    eq(UI.Status(), "dnd", "/checkmate dnd")
+    a.env.SlashCmdList["CHECKMATEAZEROTH"]("online")
+    eq(UI.Status(), "online", "/checkmate online")
+    a.env.CheckmateAzeroth_OnAddonCompartmentClick("CheckmateAzeroth", "RightButton")
+    check(UI.statusMenu:IsShown(), "right-click on the addon menu icon opens the status menu too")
+    -- the dot follows queue and battle states
+    a.ns.Game.StartSeek(600, 0, false, true)
+    eq(UI.Status(), "seeking", "looking for a battle while queued")
+    a.ns.Game.StopSeek()
+    a.ns.Game.Invite("Just Keepingcalm", { rated = false }); Advance(1)
+    b.ns.Game.AnswerLatest(true); Advance(2)
+    eq(UI.Status(), "battle", "in battle")
+    a.ns.Game.Resign(); Advance(2)
+    for _, cl in ipairs({ a, b }) do eq(#cl.errors, 0, cl.name .. ": no Lua errors"); RemoveClient(cl) end
+    net.forever = false
+end
+
+------------------------------------------------------------------------
 if want("cheat") then
     section("validation")
     local c = NewClient("Val")

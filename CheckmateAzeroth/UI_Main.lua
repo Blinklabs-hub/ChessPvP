@@ -204,6 +204,11 @@ local function Build()
     main.me = card
     card.portrait = W.Portrait(card, 46)
     card.portrait:SetPoint("LEFT", 0, 0)
+    card.statusDot = card:CreateTexture(nil, "OVERLAY")
+    card.statusDot:SetSize(12, 12)
+    card.statusDot:SetPoint("BOTTOMRIGHT", card.portrait, "BOTTOMRIGHT", 0, 1)
+    card.statusDot:SetTexture(W.TEX .. "dot")
+    card:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     card.name = W.Title(card, 16)
     card.name:SetPoint("TOPLEFT", 52, -5)
     card.name:SetWordWrap(false)
@@ -222,10 +227,14 @@ local function Build()
     local hl = card:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints()
     hl:SetColorTexture(1, 0.85, 0.4, 0.07)
-    card:SetScript("OnClick", function() UI.ShowProfile(ns.me) end)
+    card:SetScript("OnClick", function(self, button)
+        if button == "RightButton" then UI.ShowStatusMenu(self) else UI.ShowProfile(ns.me) end
+    end)
     W.Tooltip(card, function(_, tip)
         tip:SetText("Your profile", 1, 0.82, 0)
+        tip:AddLine(UI.StatusText())
         tip:AddLine("Click to see your records, battles and feats.", 1, 1, 1)
+        tip:AddLine("Right-click to set your status.", 0.7, 0.7, 0.7)
     end)
 
     local close = CreateFrame("Button", nil, main, "UIPanelCloseButton")
@@ -304,6 +313,7 @@ function UI.Refresh()
     card.name:SetText(W.ClassName(ns.me, info) .. "  |cffaaaaaa" .. P.TitleText(P.MyTitleId(), p.rating, P.RatedGames()) .. "|r")
     card.line:SetText(A.CharLine(info) .. (info.guild and ("  |cff40ff40<" .. info.guild .. ">|r") or ""))
     card.rating:SetText(p.rating)
+    card.statusDot:SetVertexColor(unpack(UI.StatusColor()))
     local li = G.LeagueIndex(ns.me)
     if li > 0 then W.SetLeagueIcon(card.league, li) else card.league:Hide() end
     if P.RatedGames() >= D.PLACEMENT_GAMES then
@@ -506,6 +516,127 @@ end
 ------------------------------------------------------------------------
 local launcher
 
+------------------------------------------------------------------------
+-- Your status: online (accepting challenges), do not disturb, looking for a battle, in battle
+------------------------------------------------------------------------
+local STATUS = {
+    online = { text = "Online - accepting challenges", color = { 0.25, 1.00, 0.25 } },
+    dnd = { text = "Do Not Disturb - challenges are declined", color = { 1.00, 0.20, 0.15 } },
+    seeking = { text = "Looking for a battle", color = { 1.00, 0.82, 0.00 } },
+    battle = { text = "In battle", color = { 1.00, 0.55, 0.15 } },
+}
+
+function UI.Status()
+    local g = G.current
+    if g and g.state == "active" and g.mode == "online" then return "battle" end
+    if G.seek then return "seeking" end
+    if ns.db and ns.db.settings.dnd then return "dnd" end
+    return "online"
+end
+
+function UI.StatusColor()
+    return STATUS[UI.Status()].color
+end
+
+function UI.StatusText()
+    local st = STATUS[UI.Status()]
+    return "|c" .. W.Hex(st.color) .. st.text .. "|r"
+end
+
+-- Online / Do Not Disturb (other players see it in the Lobby within seconds).
+function UI.SetDND(on)
+    ns.db.settings.dnd = on and true or false
+    ns.Print(on and "Do Not Disturb: challenges are declined automatically." or "Online: you are accepting challenges again.")
+    G.Announce(true)
+    UI.UpdateStatus()
+    UI.Refresh()
+end
+
+local menu
+local function BuildMenu()
+    local f = CreateFrame("Frame", "CheckmateAzerothStatusMenu", UIParent)
+    f:SetSize(240, 96)
+    f:SetFrameStrata("DIALOG")
+    f:SetClampedToScreen(true)
+    f:EnableMouse(true)
+    W.Background(f, 0.05, 0.04, 0.04, 0.97)
+    W.Tile(f, "dialogBg", 0.95)
+    W.Chrome(f, "goldBorder", 4, 20)
+    table.insert(UISpecialFrames, "CheckmateAzerothStatusMenu")
+    local title = W.Title(f, 15, "Your status")
+    title:SetPoint("TOPLEFT", 10, -8)
+    f.options = {}
+    local function Option(i, key, onClick)
+        local b = CreateFrame("Button", nil, f)
+        b:SetSize(224, 24)
+        b:SetPoint("TOPLEFT", 8, -28 - (i - 1) * 26)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 0.85, 0.4, 0.12)
+        b.sel = b:CreateTexture(nil, "BACKGROUND")
+        b.sel:SetAllPoints()
+        b.sel:SetColorTexture(1, 0.82, 0, 0.15)
+        b.dot = b:CreateTexture(nil, "ARTWORK")
+        b.dot:SetSize(12, 12)
+        b.dot:SetPoint("LEFT", 4, 0)
+        b.dot:SetTexture(W.TEX .. "dot")
+        local c = STATUS[key].color
+        b.dot:SetVertexColor(c[1], c[2], c[3])
+        b.text = W.Label(b, "GameFontHighlight", key == "online" and "Online (accept challenges)" or "Do Not Disturb")
+        b.text:SetPoint("LEFT", 22, 0)
+        b:SetScript("OnClick", function()
+            ns.Sound("click")
+            onClick()
+            f:Hide()
+        end)
+        b.key = key
+        f.options[i] = b
+    end
+    Option(1, "online", function() UI.SetDND(false) end)
+    Option(2, "dnd", function() UI.SetDND(true) end)
+    f.open = W.Button(f, "Open Checkmate", 110, 20, function()
+        f:Hide()
+        UI.Show()
+    end)
+    f.open:SetPoint("BOTTOMRIGHT", -8, 6)
+    f:SetHeight(112)
+    -- Close when the mouse leaves for a moment.
+    local away = 0
+    f:SetScript("OnUpdate", function(self, elapsed)
+        if self:IsMouseOver() or (launcher and launcher:IsMouseOver()) then
+            away = 0
+        else
+            away = away + elapsed
+            if away > 1.5 then self:Hide() end
+        end
+    end)
+    f:Hide()
+    return f
+end
+
+function UI.ShowStatusMenu(anchor)
+    menu = menu or BuildMenu()
+    UI.statusMenu = menu
+    local dnd = ns.db.settings.dnd
+    for _, b in ipairs(menu.options) do
+        if (b.key == "dnd") == (dnd and true or false) then b.sel:Show() else b.sel:Hide() end
+    end
+    menu:ClearAllPoints()
+    if anchor then
+        menu:SetPoint("BOTTOMLEFT", anchor, "TOPRIGHT", 0, 0)
+    else
+        menu:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
+    menu:Show()
+end
+
+-- The coloured status dot on the launcher.
+function UI.UpdateStatus()
+    if not launcher then return end
+    local c = STATUS[UI.Status()].color
+    launcher.status:SetVertexColor(c[1], c[2], c[3])
+end
+
 function UI.UpdateLauncher()
     if not ns.db then return end
     local s = ns.db.settings
@@ -538,10 +669,31 @@ function UI.UpdateLauncher()
         b.alert:SetTexture(W.TEX .. "dot")
         b.alert:SetVertexColor(1, 0.2, 0.1, 1)
         b.alert:Hide()
-        b:SetScript("OnClick", function() UI.Toggle() end)
+        -- Status dot (bottom right): online / do not disturb / looking / in battle.
+        b.statusBg = b:CreateTexture(nil, "OVERLAY", nil, 1)
+        b.statusBg:SetSize(15, 15)
+        b.statusBg:SetPoint("BOTTOMRIGHT", 3, -3)
+        b.statusBg:SetTexture(W.TEX .. "dot")
+        b.statusBg:SetVertexColor(0, 0, 0, 1)
+        b.status = b:CreateTexture(nil, "OVERLAY", nil, 2)
+        b.status:SetSize(11, 11)
+        b.status:SetPoint("CENTER", b.statusBg)
+        b.status:SetTexture(W.TEX .. "dot")
+        b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        b:SetScript("OnClick", function(self, button)
+            if button == "RightButton" then
+                ns.Sound("click")
+                UI.ShowStatusMenu(self)
+            else
+                UI.Toggle()
+            end
+        end)
         W.Tooltip(b, function(_, tip)
             tip:SetText("Checkmate: Azeroth", 1, 0.82, 0)
-            tip:AddLine("Click to open. Drag to move.", 1, 1, 1)
+            tip:AddLine(UI.StatusText())
+            tip:AddLine(" ")
+            tip:AddLine("Left-click to open. Right-click to set your status.", 1, 1, 1)
+            tip:AddLine("Drag to move.", 0.7, 0.7, 0.7)
         end)
         if s.launcherPos then
             b:SetPoint(s.launcherPos[1], UIParent, s.launcherPos[2], s.launcherPos[3], s.launcherPos[4])
@@ -551,6 +703,7 @@ function UI.UpdateLauncher()
         launcher = b
     end
     launcher:Show()
+    UI.UpdateStatus()
 end
 
 -- Red dot on the launcher when it is our move and the window is closed.
@@ -581,6 +734,7 @@ end)
 ns.On("CHESS_GAME_CHANGED", function()
     UI.Refresh()
     UI.UpdateAlert()
+    UI.UpdateStatus()
 end)
 
 ns.On("CHESS_GAME_STARTED", function(g)
@@ -651,6 +805,7 @@ end)
 ns.On("CHESS_INVITE_CHANGED", function()
     RefreshInvite()
     UI.Refresh()
+    UI.UpdateStatus()
 end)
 
 ns.On("PROFILE_CHANGED", function() UI.Refresh() end)
