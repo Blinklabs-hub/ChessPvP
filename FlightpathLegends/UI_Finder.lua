@@ -1,6 +1,6 @@
 -- Flightpath Legends - the finder: a Group Finder style window for everything except playing.
--- Side tabs: Find a Game (pick the games you would play, queue, challenge, practise),
--- Browse (each game's players and live games), Legends (leaderboards and collections), Settings.
+-- Side tabs: Find a Game (pick the games you would play, queue, challenge, practise), one tab
+-- per game (its Lobby, Live Games, Leaderboard, Titles & Feats), and Settings.
 local _, ns = ...
 
 local FD = {}
@@ -16,7 +16,13 @@ local PADF = 14
 local frame
 local built = false
 local current = "games" -- the page id being shown
-local section = "find" -- find | browse | legends | settings
+local section = "find" -- find | game | settings
+local SUBS = {
+    { kind = "lobby", text = "Lobby" },
+    { kind = "live", text = "Live Games" },
+    { kind = "board", text = "Leaderboard" },
+    { kind = "coll", text = "Titles & Feats" },
+}
 local pages = {} -- [id] = { frame, refresh, layout, built }
 FD.pages = pages
 
@@ -30,8 +36,7 @@ local function SectionOf(id)
     if id == "games" then return "find" end
     if id == "settings" then return "settings" end
     local kind = UI().KIND[id]
-    if kind == "lobby" or kind == "live" then return "browse" end
-    if kind == "board" or kind == "coll" then return "legends" end
+    if kind and kind ~= "play" then return "game" end
     return nil
 end
 FD.SectionOf = SectionOf
@@ -179,23 +184,23 @@ local function Build()
         em.ring:SetVertexColor(1, 0.8, 0.3)
     end
 
-    -- side tabs (outside the right edge)
+    -- side tabs (outside the right edge): Find a Game, each game, Settings
     frame.tabs = {}
-    local defs = {
-        { id = "find", icon = "Interface\\Icons\\inv_misc_eye_01", tip = "Find a Game", page = function() return "games" end },
-        { id = "browse", icon = "Interface\\Icons\\inv_misc_spyglass_02", tip = "Browse players and live games",
-            page = function() return FD.browseKind == "live" and UI().TAB_FOR[Game()].live or UI().TAB_FOR[Game()].lobby end },
-        { id = "legends", icon = "Interface\\Icons\\inv_misc_trophy_argent", tip = "Legends: leaderboards, titles and feats",
-            page = function() return FD.legendsKind == "coll" and UI().TAB_FOR[Game()].coll or UI().TAB_FOR[Game()].board end },
-        { id = "settings", icon = "Interface\\Icons\\trade_engineering", tip = "Settings", page = function() return "settings" end },
-    }
+    local defs = { { id = "find", icon = "Interface\\Icons\\inv_misc_eye_01", tip = "Find a Game", page = function() return "games" end } }
+    for _, key in ipairs(D.GAME_ORDER) do
+        defs[#defs + 1] = { id = key, icon = D.GameIcon(key), tip = D.GAMES[key].name,
+            page = function() return UI().TAB_FOR[key][FD.gameKind or "lobby"] end }
+    end
+    defs[#defs + 1] = { id = "settings", icon = "Interface\\Icons\\trade_engineering", tip = "Settings", page = function() return "settings" end }
     for i, d in ipairs(defs) do
         local tab = SideTab(frame, d.icon, d.tip, function() FD.Show(d.page()) end)
-        tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, -(36 + (i - 1) * 50))
+        -- a little gap after Find a Game and before Settings
+        local gap = (i > 1 and 10 or 0) + (i == #defs and 10 or 0)
+        tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, -(36 + (i - 1) * 46 + gap))
         frame.tabs[d.id] = tab
     end
 
-    -- the page area and the controls of Browse and Legends
+    -- the page area, and a game's page buttons along the top
     local body = CreateFrame("Frame", nil, frame)
     body:SetPoint("TOPLEFT", PADF, -(TOP + 4))
     body:SetPoint("BOTTOMRIGHT", -PADF, PADF)
@@ -205,30 +210,20 @@ local function Build()
     bar2:SetPoint("TOPLEFT")
     bar2:SetPoint("TOPRIGHT")
     frame.controls = bar2
-    local function GameItems()
-        local out = {}
-        for _, key in ipairs(D.GAME_ORDER) do out[#out + 1] = { value = key, text = D.GAMES[key].name, icon = D.GameIcon(key) } end
-        return out
+    frame.sub = {}
+    local prev
+    for _, sd in ipairs(SUBS) do
+        local b = W.Button(bar2, sd.text, 112, 26, function()
+            FD.gameKind = sd.kind
+            FD.Show(UI().TAB_FOR[Game()][sd.kind])
+        end)
+        if prev then b:SetPoint("LEFT", prev, "RIGHT", 4, 0) else b:SetPoint("LEFT", 0, 0) end
+        prev = b
+        frame.sub[sd.kind] = b
     end
-    frame.gameDrop = W.Dropdown(bar2, 190, GameItems, function(key)
-        local kind = UI().KIND[current]
-        UI().SetGame(key)
-        if kind then FD.Show(UI().TAB_FOR[key][kind]) end
-    end)
-    frame.gameDrop:SetPoint("LEFT", 0, 0)
-    frame.kindDrop = W.Dropdown(bar2, 170, function()
-        if section == "browse" then
-            return { { value = "lobby", text = "Players" }, { value = "live", text = "Live Games" } }
-        end
-        return { { value = "board", text = "Leaderboard" }, { value = "coll", text = "Titles and Feats" } }
-    end, function(kind)
-        if section == "browse" then FD.browseKind = kind else FD.legendsKind = kind end
-        FD.Show(UI().TAB_FOR[Game()][kind])
-    end)
-    frame.kindDrop:SetPoint("LEFT", frame.gameDrop, "RIGHT", 8, 0)
     frame.refresh = CreateFrame("Button", nil, bar2)
     frame.refresh:SetSize(26, 26)
-    frame.refresh:SetPoint("LEFT", frame.kindDrop, "RIGHT", 8, 0)
+    frame.refresh:SetPoint("LEFT", prev, "RIGHT", 10, 0)
     if A.HasFile("Interface\\Buttons\\UI-RefreshButton") then
         frame.refresh:SetNormalTexture("Interface\\Buttons\\UI-RefreshButton")
     else
@@ -240,7 +235,7 @@ local function Build()
         FD.Refresh()
     end)
     W.Tooltip(frame.refresh, function(_, t) t:SetText("Refresh", 1, 0.82, 0) end)
-    frame.profileBtn = W.Button(bar2, "My Profile", 110, 24, function() UI().ShowProfile(ns.me) end)
+    frame.profileBtn = W.Button(bar2, "My Profile", 100, 24, function() UI().ShowProfile(ns.me) end)
     frame.profileBtn:SetPoint("RIGHT", 0, 0)
 
     local host = CreateFrame("Frame", nil, body)
@@ -288,7 +283,7 @@ end
 function FD.Layout()
     if not built then return end
     local w, h = frame.w - PADF * 2, frame.h - TOP - 4 - PADF
-    local withControls = section == "browse" or section == "legends"
+    local withControls = section == "game"
     frame.host:ClearAllPoints()
     frame.host:SetPoint("TOPLEFT", frame.body, "TOPLEFT", 0, withControls and -36 or 0)
     frame.host:SetPoint("BOTTOMRIGHT", frame.body, "BOTTOMRIGHT", 0, 0)
@@ -307,9 +302,7 @@ function FD.Show(id)
     if game then ns.db.settings.game = game end
     current = id
     section = SectionOf(id) or "find"
-    local kind = UI().KIND[id]
-    if section == "browse" then FD.browseKind = kind end
-    if section == "legends" then FD.legendsKind = kind end
+    if section == "game" then FD.gameKind = UI().KIND[id] end
     local p = pages[id]
     if not p.built then
         p.built = true
@@ -331,16 +324,16 @@ end
 
 function FD.Refresh()
     if not built or not frame:IsShown() or not P.me then return end
-    for id, tab in pairs(frame.tabs) do tab:SetOn(id == section) end
-    frame.title:SetText(section == "find" and "Find a Game" or section == "browse" and "Browse" or section == "legends" and "Legends" or "Settings")
     local game = Game()
-    frame.gameDrop:SetValue(D.GAMES[game].name, D.GameIcon(game))
-    if section == "browse" then
-        frame.kindDrop:SetValue(FD.browseKind == "live" and "Live Games" or "Players")
-        frame.profileBtn:Hide()
-    elseif section == "legends" then
-        frame.kindDrop:SetValue(FD.legendsKind == "coll" and "Titles and Feats" or "Leaderboard")
-        frame.profileBtn:Show()
+    for id, tab in pairs(frame.tabs) do
+        tab:SetOn(id == section or (section == "game" and id == game))
+    end
+    frame.title:SetText(section == "find" and "Find a Game" or section == "game" and D.GAMES[game].name or "Settings")
+    if section == "game" then
+        for kind, b in pairs(frame.sub) do
+            if kind == FD.gameKind then b:Disable() else b:Enable() end
+        end
+        if game == "chess" then frame.sub.board:SetText("Ladder") else frame.sub.board:SetText("Leaderboard") end
     end
     for id, p in pairs(pages) do
         if id == current then p.frame:Show() else p.frame:Hide() end
