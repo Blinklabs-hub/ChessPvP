@@ -838,13 +838,14 @@ if want("social") then
     check(ga.state == "active" and ga.rated and ga.base == 600, "two rated 'any' players get rated 10+0")
     a.ns.Game.Resign(); Advance(2)
 
-    section("social: lobby filters and profiles")
+    section("social: lobby order and profiles")
     a.ns.UI.ShowTab("lobby")
-    for _, f in ipairs({ "all", "r", "c", "g" }) do
-        a.ns.Tabs.lobby.filter = f
-        a.ns.UI.Refresh()
-    end
-    check(true, "lobby filters render")
+    a.ns.Game.StartSeek(600, 0, false, true)
+    Advance(20)
+    b.ns.UI.ShowTab("lobby")
+    local first = b.ns.Tabs.lobby.list.data[1]
+    eq(first and first.name, CA, "players looking for a battle are listed first")
+    a.ns.Game.StopSeek()
     a.ns.UI.ShowProfile(JK)
     Advance(3)
     local card = a.ns.UI.profileCard

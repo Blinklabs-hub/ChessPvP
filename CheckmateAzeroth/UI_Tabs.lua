@@ -44,11 +44,8 @@ local STATUS_TEXT = {
     d = "|cff808080Do not disturb|r",
 }
 
-local FILTERS = {
-    { id = "all", text = "Everyone" },
-    { id = "seek", text = "Looking for battle" },
-    { id = "i", text = "Ready" },
-}
+-- Lobby order: looking for a battle first, then ready, then busy.
+local STATUS_ORDER = { r = 1, c = 1, s = 1, i = 2, g = 3, d = 4 }
 
 local function RecordText(rec, prefix)
     if not rec then return "" end
@@ -72,16 +69,6 @@ function T.BuildLobby(page)
     lobby.title = W.Title(page, 20, "Players Online")
     lobby.title:SetPoint("TOPLEFT", 4, -4)
 
-    lobby.filters = {}
-    for i, f in ipairs(FILTERS) do
-        local b = W.Button(page, f.text, 112, 22, function()
-            lobby.filter = f.id
-            lobby.list.offset = 0
-            ns.UI.Refresh()
-        end)
-        b:SetPoint("TOPRIGHT", -(#FILTERS - i) * 116 - 4, -2)
-        lobby.filters[f.id] = b
-    end
     lobby.count = W.Label(page, "GameFontHighlightSmall", "")
     lobby.count:SetPoint("LEFT", lobby.title, "RIGHT", 10, -2)
 
@@ -182,23 +169,20 @@ end
 
 function T.RefreshLobby()
     local all = P.OnlineList()
-    local rows, counts = {}, { r = 0, c = 0, g = 0 }
-    for _, row in ipairs(all) do
-        if counts[row.status] then counts[row.status] = counts[row.status] + 1 end
-        local seeking = row.status == "r" or row.status == "c"
-        if lobby.filter == "all" or row.status == lobby.filter or (lobby.filter == "seek" and seeking) then rows[#rows + 1] = row end
-    end
+    local rows = {}
+    for _, row in ipairs(all) do rows[#rows + 1] = row end
+    table.sort(rows, function(a, b)
+        local oa, ob = STATUS_ORDER[a.status] or 2, STATUS_ORDER[b.status] or 2
+        if oa ~= ob then return oa < ob end
+        if a.r ~= b.r then return a.r > b.r end
+        return a.name < b.name
+    end)
     lobby.list:SetData(rows)
-    for id, b in pairs(lobby.filters) do
-        if id == lobby.filter then b:Disable() else b:Enable() end
-    end
     W.SetCrest(lobby.emptyCrest, A.MyFaction())
     if #rows == 0 then
         local text
         if not C.Joined() then
             text = "Connecting to the chess network..."
-        elseif lobby.filter == "seek" then
-            text = "Nobody is looking for a battle right now.\nUse Find Random Opponent on the Battle tab and you will be matched as soon as someone joins."
         else
             text = "No other Checkmate: Azeroth players are online right now.\nChallenge a friend by name from the Battle tab, or practise against the computer."
         end
