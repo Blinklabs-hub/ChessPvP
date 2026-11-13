@@ -1443,6 +1443,14 @@ function T.BuildSettings(page)
     local reset = W.Button(ui, "Reset window size and position", 240, 24, function() ns.UI.ResetPosition() end)
     reset:SetPoint("TOPLEFT", 14, -62)
 
+    local support = Section(page, "Support the addon", 0, -342, 380, 84)
+    local note = W.Label(support, "GameFontHighlightSmall", "Free forever. If it made a flight path fly by, a coffee keeps the next game coming.")
+    note:SetPoint("TOPLEFT", 12, -30)
+    note:SetWidth(356)
+    local tip = W.Button(support, "Buy me a coffee", 160, 24, function() ns.UI.ShowDonate() end)
+    tip:SetPoint("BOTTOMLEFT", 10, 10)
+    settings.support = support
+
     local about = Section(page, "About Flightpath Legends " .. ns.VERSION, 392, 0, 300, 332)
     settings.about = about
     local text = W.Label(about, "GameFontHighlightSmall",
@@ -1457,7 +1465,7 @@ function T.BuildSettings(page)
         .. "is replayed against them afterwards.\n\n"
         .. "|cffffd100Witnessed results:|r every battle is confirmed by both players and each player's addon "
         .. "rebuilds the records from those confirmations. Disagreements do not count.\n\n"
-        .. "|cffffd100Commands|r\n/fpl  -  open or close\n/chess  /  /battleship\n/fpl accept  /  decline\n/fpl dnd  /  online\n/fpl reset  /  debug")
+        .. "|cffffd100Commands|r\n/fpl  -  open or close\n/chess  /battleship  /four  /vault  /army\n/fpl accept  /  decline\n/fpl dnd  /  online\n/fpl reset  /  debug")
     text:SetPoint("TOPLEFT", 12, -32)
     text:SetPoint("BOTTOMRIGHT", -12, 10)
     text:SetJustifyV("TOP")
@@ -1470,10 +1478,10 @@ function T.LayoutSettings(w, h)
     about:ClearAllPoints()
     if w >= 700 then
         about:SetPoint("TOPLEFT", 392, 0)
-        about:SetSize(min(400, w - 392), min(332, h))
+        about:SetSize(min(400, w - 392), min(426, h))
     else
-        about:SetPoint("TOPLEFT", 0, -342)
-        about:SetSize(min(380, w), max(120, h - 342))
+        about:SetPoint("TOPLEFT", 0, -436)
+        about:SetSize(min(380, w), max(120, h - 436))
     end
 end
 

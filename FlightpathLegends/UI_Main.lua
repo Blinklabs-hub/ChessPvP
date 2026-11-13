@@ -408,6 +408,77 @@ function UI.OpenFinder()
     FD.Show()
 end
 
+------------------------------------------------------------------------
+-- The tavern tip jar: a thank-you note and the donation link (addons cannot open web pages,
+-- so the link is shown selected, ready to copy).
+------------------------------------------------------------------------
+UI.DONATE_URL = "https://buymeacoffee.com/zeppil"
+local donateFrame
+function UI.ShowDonate()
+    if not donateFrame then
+        local f = CreateFrame("Frame", "FlightpathLegendsDonate", UIParent)
+        f:SetSize(440, 360)
+        f:SetPoint("CENTER", 0, 40)
+        f:SetFrameStrata("DIALOG")
+        f:SetToplevel(true)
+        f:EnableMouse(true)
+        f:SetMovable(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+        W.Background(f, 0.05, 0.04, 0.04, 0.97)
+        W.Tile(f, "dialogBg", 0.95)
+        W.Chrome(f, "goldBorder", 5, 24)
+        local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        close:SetPoint("TOPRIGHT", 2, 2)
+        f.icon = f:CreateTexture(nil, "ARTWORK")
+        f.icon:SetSize(44, 44)
+        f.icon:SetPoint("TOPLEFT", 18, -16)
+        W.SetIcon(f.icon, "Interface\\Icons\\inv_drink_04")
+        f.title = W.Title(f, 22, "The Tavern Tip Jar")
+        f.title:SetPoint("LEFT", f.icon, "RIGHT", 12, 4)
+        f.sub = W.Label(f, "GameFontDisableSmall", "From one Azeroth nerd to another")
+        f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -2)
+        f.text = W.Label(f, "GameFontHighlight",
+            "Well met, traveller!\n\n"
+            .. "I built Flightpath Legends one gryphon ride at a time - somewhere between corpse runs, "
+            .. "waiting for a tank, and staring at the same patch of Barrens for the hundredth time.\n\n"
+            .. "It is free and it will stay free. Every title and feat is earned, never bought.\n\n"
+            .. "But if it has saved you from one more boring flight, you can toss a coin in the jar. "
+            .. "It keeps the coffee brewing and the next game coming.\n\n"
+            .. "|cffffd100No gold sellers were harmed in the making of this addon.|r")
+        f.text:SetPoint("TOPLEFT", 20, -74)
+        f.text:SetWidth(400)
+        f.text:SetJustifyV("TOP")
+        f.text:SetSpacing(2)
+        local box = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+        box:SetSize(300, 24)
+        box:SetPoint("BOTTOMLEFT", 26, 54)
+        box:SetAutoFocus(false)
+        box:SetText(UI.DONATE_URL)
+        -- the link cannot be edited: typing puts it back
+        box:SetScript("OnTextChanged", function(self, user)
+            if user then self:SetText(UI.DONATE_URL); self:HighlightText() end
+        end)
+        box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        f.box = box
+        f.hint = W.Label(f, "GameFontDisableSmall", "Press Ctrl+C to copy, then paste it into your browser.")
+        f.hint:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -4, -4)
+        local copy = W.Button(f, "Select", 80, 24, function() box:SetFocus(); box:HighlightText() end)
+        copy:SetPoint("LEFT", box, "RIGHT", 8, 0)
+        f.thanks = W.Label(f, "GameFontNormal", "For the Horde! For the Alliance! For the coffee!")
+        f.thanks:SetPoint("BOTTOM", 0, 14)
+        table.insert(UISpecialFrames, "FlightpathLegendsDonate")
+        donateFrame = f
+        UI.donateFrame = f
+    end
+    donateFrame:Show()
+    donateFrame.box:SetText(UI.DONATE_URL)
+    donateFrame.box:SetFocus()
+    donateFrame.box:HighlightText()
+end
+
 function UI.IsVisibleTab(id)
     if IsPlayTab(id) then return built and main:IsShown() and currentTab == id end
     return FD.IsVisible(id)

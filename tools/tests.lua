@@ -2384,6 +2384,13 @@ if want("nav") then
     UI.helpFrame:Hide()
     local nav = nil
 
+    section("the tavern tip jar")
+    UI.ShowTab("chesshub")
+    FD.frame.mug:Click()
+    check(UI.donateFrame and UI.donateFrame:IsShown(), "the mug in the finder opens the tip jar")
+    eq(UI.donateFrame.box:GetText(), "https://buymeacoffee.com/zeppil", "with the link ready to copy")
+    UI.donateFrame:Hide()
+
     section("hidden army ui: deploying and moving")
     local HA, v = a.ns.Army, a.ns.ArmyView.view
     local s = HA.StartAI(1)
