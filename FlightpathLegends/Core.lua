@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "2.4.0"
+ns.VERSION = "2.4.1"
 ns.PROTO = 6 -- network protocol version; bump when messages change incompatibly
 FlightpathLegends = ns -- exposed for debugging and the addon compartment
 
@@ -46,7 +46,7 @@ end
 function ns.Print(msg)
     local frame = DEFAULT_CHAT_FRAME
     if frame and frame.AddMessage then
-        frame:AddMessage("|cffffd100Checkmate:|r " .. tostring(msg))
+        frame:AddMessage("|cffffd100Flightpath Legends:|r " .. tostring(msg))
     end
 end
 

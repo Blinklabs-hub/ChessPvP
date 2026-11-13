@@ -2,7 +2,7 @@
 ## Title: |cffffd100Flightpath|r Legends
 ## Notes: Board games with other players while you fly: Chess, Battleship, Four in a Row, Vault Breaker and Hidden Army, with leagues, records, titles and Warcraft artwork.
 ## Author: Muke
-## Version: 2.4.0
+## Version: 2.4.1
 ## SavedVariables: FlightpathLegendsDB, CheckmateAzerothDB, ChessPvPDB
 ## IconTexture: Interface\Icons\ability_mount_gryphon_01
 ## AddonCompartmentFunc: FlightpathLegends_OnAddonCompartmentClick

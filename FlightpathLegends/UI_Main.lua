@@ -285,6 +285,8 @@ local function Build()
         UI.ShowHelp(TAB_BY_ID[currentTab] and TAB_BY_ID[currentTab].game or Game())
     end)
     main.helpButton:SetPoint("RIGHT", main.finderButton, "LEFT", -12, 0)
+    -- a long title (game and opponent) stops short of the buttons
+    main.title:SetPoint("RIGHT", main.helpButton, "LEFT", -12, 0)
 
     main.pages = {}
     for i = 1, #TABS do
@@ -832,7 +834,7 @@ local function BuildMenu()
     end
     Option(1, "online", function() UI.SetDND(false) end)
     Option(2, "dnd", function() UI.SetDND(true) end)
-    f.open = W.Button(f, "Open Checkmate", 110, 20, function()
+    f.open = W.Button(f, "Open Flightpath Legends", 170, 20, function()
         f:Hide()
         UI.Show()
     end)
