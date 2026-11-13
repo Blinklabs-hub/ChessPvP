@@ -7,7 +7,7 @@ Board games to play with other players while you're on a flight path or auto-run
 - **Four in a Row:** gold and silver coins dropped into a wooden tavern board. Results are wins, losses and draws, and there are three computer opponents (Novice, Adept, Master).
 - **Vault Breaker:** lock a gnomish vault with four gems and crack your opponent's first. Both players guess at the same time each round; gold and silver pins show how close you are. Codes are sealed so nobody can give false pins.
 - **Hidden Army:** hide the ranks of your 16 units, then march. Ranks are revealed only when units fight; take the enemy Banner to win. Setups are sealed and every move is replayed against them afterwards.
-- **A Group Finder style window** for everything except playing: tick the games you'd play and find an opponent for any of them, browse players and live games, see the leaderboards, titles and feats.
+- **A Group Finder style window** with a tab for each game: find an opponent (you can queue for several games at once), challenge a player, practise against the computer, and see that game's lobby, live games, leaderboard, titles and feats.
 - **Each game plays in its own window**, with just the game. A How to play guide is one click away.
 - **Each game has its own** lobby, live games to watch, leaderboard, collection, feats and titles. Only Settings is shared.
 - **Fair play:** every result is witnessed by both players, so nobody can fake their record.
