@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "2.4.1"
+ns.VERSION = "2.5.0"
 ns.DOWNLOAD_URL = "https://www.curseforge.com/wow/addons/flightpath-legends"
 ns.PROTO = 6 -- network protocol version; bump when messages change incompatibly
 FlightpathLegends = ns -- exposed for debugging and the addon compartment
