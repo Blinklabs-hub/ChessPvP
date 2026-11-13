@@ -158,6 +158,8 @@ function NewClient(name, savedDB, surname)
     env.bit = BitLib
     client.sounds, client.warnings, client.flashes = {}, {}, 0
     env.PlaySound = function(id) table.insert(client.sounds, id) end
+    client.whispers = {}
+    env.SendChatMessage = function(msg, chatType, lang, target) table.insert(client.whispers, { msg = msg, type = chatType, target = target }) end
     env.RaidWarningFrame = {}
     env.RaidNotice_AddMessage = function(_, text) table.insert(client.warnings, text) end
     env.FlashClientIcon = function() client.flashes = client.flashes + 1 end

@@ -3,6 +3,7 @@ local ADDON, ns = ...
 
 ns.ADDON = ADDON
 ns.VERSION = "2.4.1"
+ns.DOWNLOAD_URL = "https://www.curseforge.com/wow/addons/flightpath-legends"
 ns.PROTO = 6 -- network protocol version; bump when messages change incompatibly
 FlightpathLegends = ns -- exposed for debugging and the addon compartment
 
@@ -293,6 +294,7 @@ local function Help()
     ns.Print("  /fpl challenge <name> - challenge a player (or your target)")
     ns.Print("  /fpl accept | decline - answer the latest challenge")
     ns.Print("  /fpl resign - resign the current game")
+    ns.Print("  /fpl share <name> - send a friend the download link")
     ns.Print("  /fpl dnd | online - decline or accept challenges")
     ns.Print("  /fpl reset - move the window back to the middle of the screen")
     ns.Print("  /fpl debug - show name and connection details (for bug reports)")
@@ -348,6 +350,12 @@ SlashCmdList["FLIGHTPATHLEGENDS"] = function(msg)
         else
             ns.Game.Invite(target, { game = ns.Game.GameKey(ns.db.settings.game) })
         end
+    elseif cmd == "share" then
+        local target = rest
+        if target == "" and UnitExists("target") and UnitIsPlayer("target") then
+            target = ns.UnitPlayerName("target") or ""
+        end
+        ns.Game.ShareWith(target)
     elseif cmd == "accept" then
         ns.Game.AnswerLatest(true)
     elseif cmd == "decline" then

@@ -552,8 +552,22 @@ local function BuildHub(key, page)
     c.box = nameBox
     c.button = W.Button(c, "Challenge", 110, 24, SendChallenge)
     c.button:SetPoint("LEFT", nameBox, "RIGHT", 8, 0)
+    c.share = W.Button(c, "Share", 80, 24, function()
+        local name = nameBox:GetText() or ""
+        if name == "" and UnitExists("target") and UnitIsPlayer("target") then
+            name = ns.UnitPlayerName("target") or ""
+        end
+        nameBox:ClearFocus()
+        G.ShareWith(name)
+    end)
+    c.share:SetPoint("LEFT", c.button, "RIGHT", 6, 0)
+    W.Tooltip(c.share, function(_, t)
+        t:SetText("Share Flightpath Legends", 1, 0.82, 0)
+        t:AddLine("Friend does not have the addon yet? This whispers them the download link.", 1, 1, 1, true)
+        t:AddLine("If they already have it, nothing is sent.", 0.7, 0.7, 0.7, true)
+    end)
     c.note = W.Label(c, "GameFontDisableSmall", "")
-    c.note:SetPoint("LEFT", c.button, "RIGHT", 10, 0)
+    c.note:SetPoint("LEFT", c.share, "RIGHT", 10, 0)
     c.note:SetPoint("RIGHT", -10, 0)
     h.challenge = c
 
@@ -667,7 +681,7 @@ local function RefreshHub(key)
         c.note:SetText("|cffffd100Waiting for " .. ns.ShortName(G.outgoing.to) .. "...|r")
     else
         c.button:SetText("Challenge")
-        c.note:SetText("Type a name, or leave it empty to challenge your target.")
+        c.note:SetText("Type a name, or leave it empty to use your target.")
     end
     -- practice
     local levels, lk = AILevels(key)

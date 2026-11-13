@@ -2384,6 +2384,33 @@ if want("nav") then
     UI.helpFrame:Hide()
     local nav = nil
 
+    section("sharing the addon with a friend")
+    local b2 = NewClient("Just", nil, "Keepingcalm")
+    Advance(25)
+    local G2 = a.ns.Game
+    local friend = b2.ns.me
+    local before = #a.whispers
+    G2.ShareWith(friend)
+    Advance(6)
+    eq(#a.whispers, before, "a friend who already has the addon is not sent the link")
+    a.ns.Profile.online[friend] = nil
+    G2.ShareWith(friend)
+    Advance(6)
+    eq(#a.whispers, before, "their addon answers, so still nothing is sent")
+    RemoveClient(b2)
+    G2.ShareWith("Nobody Withoutit")
+    Advance(6)
+    eq(#a.whispers, before + 1, "a player without the addon gets one whisper")
+    local w = a.whispers[#a.whispers]
+    eq(w and w.type, "WHISPER", "as a normal whisper")
+    check(w and w.msg:find("curseforge.com/wow/addons/flightpath%-legends") ~= nil, "with the download link")
+    check(w and #w.msg <= 255, "short enough for chat")
+    G2.ShareWith("Nobody Withoutit")
+    Advance(6)
+    eq(#a.whispers, before + 1, "not again straight away")
+    UI.ShowTab("c4hub")
+    check(FD.hubs.c4.challenge.share ~= nil, "each Play page has a Share button")
+
     section("the tavern tip jar")
     UI.ShowTab("chesshub")
     FD.frame.mug:Click()

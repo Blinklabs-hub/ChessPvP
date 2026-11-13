@@ -942,8 +942,61 @@ C.handlers.PQ = function(sender, dist)
     C.Whisper(sender, "PR", ns.Assets.MyFaction(), P.MyTitleId(), table.concat(list, ","), char, guild, P.MyTitleId("bs"), P.MyTitleId("c4"), P.MyTitleId("vb"), P.MyTitleId("ha"))
 end
 
+------------------------------------------------------------------------
+-- Sharing the addon: ask the player's addon first (a profile request); if nothing answers,
+-- whisper them the download link as a normal chat message. Only on a click, and at most
+-- once per player every 10 minutes.
+------------------------------------------------------------------------
+G.SHARE_TEXT = "Hey! Want to play Chess, Battleship and more while we fly? Get Flightpath Legends on CurseForge: %s then type /fpl and challenge me!"
+local shareAsked, shareSent = {}, {}
+
+local function SendShare(name)
+    local now = ns.Now()
+    if shareSent[name] and now - shareSent[name] < 600 then
+        ns.Print("you already sent " .. ns.ShortName(name) .. " the link a moment ago.")
+        return
+    end
+    shareSent[name] = now
+    local text = string.format(G.SHARE_TEXT, ns.DOWNLOAD_URL)
+    local ok = SendChatMessage and pcall(SendChatMessage, text, "WHISPER", nil, ns.WhisperTarget(name))
+    if ok then
+        ns.Print("sent " .. ns.ShortName(name) .. " the download link. Challenge them once they have it!")
+    else
+        ns.Print("could not whisper " .. ns.ShortName(name) .. ". Send them this link: " .. ns.DOWNLOAD_URL)
+    end
+    ns.Fire("CHESS_SHARED", name)
+end
+
+-- Shares the addon with a player (by name).
+function G.ShareWith(name)
+    name = ns.FullName(name)
+    if not name or name == "" then
+        ns.Print("type a character name, or target a player first.")
+        return
+    end
+    if SameName(name, ns.me) then return end
+    if P.online[name] then
+        ns.Print(ns.ShortName(name) .. " already has Flightpath Legends - challenge them instead!")
+        return
+    end
+    -- ask their addon; no answer in a few seconds means they do not have it
+    shareAsked[name] = ns.Now()
+    C.Whisper(name, "PQ")
+    ns.Print("checking whether " .. ns.ShortName(name) .. " has Flightpath Legends...")
+    ns.After(4, function()
+        if shareAsked[name] then
+            shareAsked[name] = nil
+            SendShare(name)
+        end
+    end)
+end
+
 C.handlers.PR = function(sender, dist, parts)
     if dist ~= "WHISPER" then return end
+    if shareAsked[sender] then
+        shareAsked[sender] = nil
+        ns.Print(ns.ShortName(sender) .. " already has Flightpath Legends - challenge them instead!")
+    end
     local e = P.players[sender]
     if not e then
         e = { r = D.START_RATING, w = 0, l = 0, d = 0, t = "", seen = ns.ServerTime() }
@@ -1400,7 +1453,7 @@ ns.On("CHESS_TICK", function()
     if o and now > o.expires then
         G.outgoing = nil
         if not o.q then
-            ns.Print("no answer from " .. ns.ShortName(o.to) .. " (they may not have Flightpath Legends installed).")
+            ns.Print("no answer from " .. ns.ShortName(o.to) .. ". They may not have Flightpath Legends: type /fpl share " .. ns.ShortName(o.to) .. " to send them the link.")
         end
         ns.Fire("CHESS_INVITE_CHANGED")
     end
