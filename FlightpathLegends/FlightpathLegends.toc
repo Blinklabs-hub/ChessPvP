@@ -4,7 +4,7 @@
 ## Author: Muke
 ## Version: 2.4.0
 ## SavedVariables: FlightpathLegendsDB, CheckmateAzerothDB, ChessPvPDB
-## IconTexture: Interface\AddOns\FlightpathLegends\Textures\logo.tga
+## IconTexture: Interface\Icons\ability_mount_gryphon_01
 ## AddonCompartmentFunc: FlightpathLegends_OnAddonCompartmentClick
 ## Category-enUS: Games
 
