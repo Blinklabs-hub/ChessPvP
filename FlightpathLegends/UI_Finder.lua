@@ -153,8 +153,8 @@ local function Build()
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
     local mug = CreateFrame("Button", nil, frame)
-    mug:SetSize(22, 22)
-    mug:SetPoint("RIGHT", close, "LEFT", -6, 0)
+    mug:SetSize(20, 20)
+    mug:SetPoint("CENTER", frame, "TOPRIGHT", -44, -(TOP - 6) / 2 - 4)
     mug.icon = mug:CreateTexture(nil, "ARTWORK")
     mug.icon:SetAllPoints()
     W.SetIcon(mug.icon, "Interface\\Icons\\inv_drink_04")
@@ -173,31 +173,14 @@ local function Build()
     em:SetSize(66, 66)
     em:SetPoint("TOPLEFT", -16, 16)
     em:SetFrameLevel(frame:GetFrameLevel() + 20)
-    em.bg = em:CreateTexture(nil, "BACKGROUND")
-    em.bg:SetTexture(W.TEX .. "dot")
-    em.bg:SetPoint("CENTER")
-    em.bg:SetSize(54, 54)
-    em.bg:SetVertexColor(0, 0, 0, 1)
+    -- the logo is round with its own gold ring
+    em.shadow = em:CreateTexture(nil, "BACKGROUND")
+    em.shadow:SetTexture(W.TEX .. "shadow")
+    em.shadow:SetPoint("CENTER", 2, -3)
+    em.shadow:SetSize(76, 76)
     em.logo = em:CreateTexture(nil, "ARTWORK")
-    em.logo:SetPoint("CENTER")
-    em.logo:SetSize(50, 50)
+    em.logo:SetAllPoints()
     em.logo:SetTexture(W.TEX .. "logo")
-    if em.CreateMaskTexture and em.logo.AddMaskTexture then
-        local m = em:CreateMaskTexture()
-        if m then
-            m:SetAllPoints(em.logo)
-            m:SetTexture(A.PortraitMask(), "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-            em.logo:AddMaskTexture(m)
-        end
-    end
-    em.ring = em:CreateTexture(nil, "OVERLAY")
-    em.ring:SetAllPoints()
-    if A.HasFile("Interface\\Common\\GoldRing") then
-        em.ring:SetTexture("Interface\\Common\\GoldRing")
-    else
-        em.ring:SetTexture(W.TEX .. "token_ring")
-        em.ring:SetVertexColor(1, 0.8, 0.3)
-    end
 
     -- side tabs (outside the right edge): Find a Game, each game, Settings
     frame.tabs = {}
@@ -427,7 +410,7 @@ local function BuildHub(key, page)
     -- the game
     local head = CreateFrame("Frame", nil, page)
     head:SetHeight(84)
-    head:SetPoint("TOPLEFT", 40, 0)
+    head:SetPoint("TOPLEFT", 0, 0)
     head:SetPoint("TOPRIGHT", 0, 0)
     W.Gradient(head, { 0.16, 0.12, 0.07, 0.95 }, { 0.07, 0.05, 0.04, 0.95 })
     W.Background(head, 0, 0, 0, 0, { 0.55, 0.43, 0.18, 0.9 })

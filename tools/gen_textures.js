@@ -329,34 +329,7 @@ writeTGA(path.join(OUT, "c4_slot.tga"), 128, 128, field(128, (u, v) => {
   return [shade, shade, shade, 1];
 }));
 
-// ---------------------------------------------------------------- logo (knight on a gold-rimmed tile)
-{
-  const S = SIZE, rgba = Buffer.alloc(S * S * 4);
-  const { fill, line } = layers.N;
-  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-    const i = y * S + x;
-    // rounded-square background
-    const cx = Math.abs(x + 0.5 - S / 2), cy = Math.abs(y + 0.5 - S / 2);
-    const R = 18, half = S / 2 - 2;
-    const qx = Math.max(cx - (half - R), 0), qy = Math.max(cy - (half - R), 0);
-    const dist = Math.sqrt(qx * qx + qy * qy) - R + Math.max(Math.min(cx - (half - R), 0), Math.min(cy - (half - R), 0)) * 0;
-    const inside = Math.max(0, Math.min(1, 0.5 - dist));
-    const rim = Math.max(0, Math.min(1, 0.5 - Math.abs(dist + 4) + 3)) * inside;
-    let r = 30, g = 22, b = 14; // dark wood
-    const checker = ((Math.floor(x / (S / 4)) + Math.floor(y / (S / 4))) % 2) ? 1.25 : 1;
-    r *= checker; g *= checker; b *= checker;
-    // gold rim
-    r = r * (1 - rim) + 235 * rim; g = g * (1 - rim) + 185 * rim; b = b * (1 - rim) + 60 * rim;
-    // knight: gold fill, dark outline
-    const f = fill[i], l = line[i];
-    r = r * (1 - f) + 250 * f; g = g * (1 - f) + 205 * f; b = b * (1 - f) + 80 * f;
-    r = r * (1 - l) + 25 * l; g = g * (1 - l) + 15 * l; b = b * (1 - l) + 5 * l;
-    rgba[i * 4] = r; rgba[i * 4 + 1] = g; rgba[i * 4 + 2] = b;
-    rgba[i * 4 + 3] = Math.round(inside * 255);
-  }
-  writeTGA(path.join(OUT, "logo.tga"), S, S, rgba);
-  if (PREVIEW) writePNG(path.join(PREVIEW, "logo.png"), S, S, rgba);
-}
+// The logo (Textures/logo.tga) is the painted artwork from docs/logo.png, not generated here.
 
 // ---------------------------------------------------------------- board preview
 if (PREVIEW) {

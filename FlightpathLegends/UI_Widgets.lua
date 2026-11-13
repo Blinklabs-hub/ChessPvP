@@ -304,9 +304,9 @@ function W.Check(parent, text, get, set)
     return cb
 end
 
-function W.Tooltip(frame, fn)
+function W.Tooltip(frame, fn, anchor)
     frame:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetOwner(self, anchor or "ANCHOR_RIGHT")
         if fn(self, GameTooltip) ~= false then GameTooltip:Show() end
     end)
     frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
